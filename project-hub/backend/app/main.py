@@ -1,9 +1,24 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import os
 
 from app.api.router import api_router
 from app.core.config import settings
-# We omit database initialization per instructions
+from app.core.database import Base, engine
+
+# Import all models to ensure they are registered on Base.metadata
+from app.models.project import Project
+from app.models.asset import ProjectAsset
+from app.models.task import ProjectTask
+from app.models.logs import CommitLog, DeployLog
+
+# Create persistent upload folders and database tables
+os.makedirs(os.path.join(settings.UPLOAD_DIR, "images"), exist_ok=True)
+os.makedirs(os.path.join(settings.UPLOAD_DIR, "videos"), exist_ok=True)
+os.makedirs(os.path.join(settings.UPLOAD_DIR, "audio"), exist_ok=True)
+os.makedirs(os.path.join(settings.UPLOAD_DIR, "documents"), exist_ok=True)
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -24,4 +39,4 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 def root():
-    return {"message": "Welcome to Project Hub API"}
+    return {"message": "Welcome to Dominuslabs API"}

@@ -1,1 +1,17 @@
-project-hub/backend/app/__pycache__
+# Python caches & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+project-hub/backend/venv/
+**/__pycache__/
+
+# SQLite database & local uploads
+project-hub/backend/uploads/
+*.db
+*.sqlite3
+
+# Node modules & frontend caches
+project-hub/frontend/node_modules/
+project-hub/frontend/dist/
+.eslintcache
+.vite/

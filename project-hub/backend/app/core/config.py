@@ -4,25 +4,25 @@ from typing import List, Union
 from pydantic import AnyHttpUrl, validator
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Project Hub"
+    PROJECT_NAME: str = "Dominuslabs"
     API_V1_STR: str = "/api/v1"
 
     # CORS
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
+    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"]
 
-    @validator("BACKEND_CORS_ORIGINS", pre=True)
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
-            return v
-        raise ValueError(v)
-
-    # Database (No DB creation per instructions, using a placeholder string)
-    SQLALCHEMY_DATABASE_URI: str = "sqlite:///:memory:"
+    # Authentication
+    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin")
+    SECRET_KEY: str = os.getenv("JWT_SECRET", "dominuslabs-super-secret-key-2026")
 
     # Uploads
-    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "..", "uploads"))
+    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads"))
+
+    # Database (SQLite file stored in persistent uploads directory)
+    @property
+    def SQLALCHEMY_DATABASE_URI(self) -> str:
+        os.makedirs(self.UPLOAD_DIR, exist_ok=True)
+        return f"sqlite:///{os.path.join(self.UPLOAD_DIR, 'dominuslabs.db')}"
 
     class Config:
         case_sensitive = True
