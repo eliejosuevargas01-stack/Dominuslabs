@@ -13,6 +13,17 @@ from app.repositories.asset_repo import asset_repo
 from app.repositories.log_repo import log_repo
 from app.services.project_service import project_service
 from app.core.auth import get_current_user
+from pydantic import BaseModel
+
+class PublicProjectDetail(BaseModel):
+    project: Project
+    tasks: List[ProjectTask]
+    commits: List[CommitLog]
+    deploys: List[DeployLog]
+    progress: float
+
+    class Config:
+        from_attributes = True
 
 router = APIRouter()
 
@@ -38,7 +49,7 @@ def update_project(project_id: int, project_in: ProjectUpdate, db: Session = Dep
         raise HTTPException(status_code=404, detail="Project not found")
     return project_repo.update(db, db_obj=project, obj_in=project_in)
 
-@router.get("/public/{public_token}", response_model=Dict[str, Any])
+@router.get("/public/{public_token}", response_model=PublicProjectDetail)
 def read_public_project(public_token: str, db: Session = Depends(get_db)):
     """Public access route - no authentication required"""
     project = project_repo.get_by_public_token(db, token=public_token)
