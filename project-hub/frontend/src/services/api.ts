@@ -1,4 +1,20 @@
-const API_BASE = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8001/api/v1`;
+const getDynamicApiUrl = () => {
+  const hostname = window.location.hostname;
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return `${window.location.protocol}//${hostname}:8001/api/v1`;
+  }
+  // If we are accessing via ngrok, the proxy handles '/api' on the same port
+  if (hostname.endsWith(".ngrok-free.dev") || hostname.endsWith(".ngrok.io")) {
+    return `${window.location.protocol}//${hostname}/api/v1`;
+  }
+  // Production dynamic subdomain: frontend domain.com -> backend api.domain.com
+  if (hostname.startsWith("api.")) {
+    return `${window.location.protocol}//${hostname}/api/v1`;
+  }
+  return `${window.location.protocol}//api.${hostname}/api/v1`;
+};
+
+const API_BASE = import.meta.env.VITE_API_URL || getDynamicApiUrl();
 
 function getHeaders(contentType: string | null = "application/json") {
   const headers: Record<string, string> = {};
