@@ -28,7 +28,8 @@ import {
   Loader2, 
   Download,
   X,
-  Lock
+  Lock,
+  Sparkles
 } from 'lucide-react';
 
 const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -359,6 +360,24 @@ export default function AdminProjectView() {
                   onClick={(e) => (e.target as HTMLInputElement).select()}
                   className="w-full text-xs bg-white/70 border border-amber-200/60 rounded-lg px-2.5 py-1.5 focus:outline-none text-slate-600 cursor-pointer font-mono mt-1"
                 />
+              </div>
+            </div>
+
+            {/* Webhook Github card */}
+            <div className="p-4 bg-violet-50/70 border border-violet-100 rounded-2xl flex items-center gap-3">
+              <Sparkles className="w-5 h-5 text-violet-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-bold text-violet-800 uppercase tracking-wider">Webhook de Integração GitHub (Exclusivo do Projeto)</p>
+                <input
+                  type="text"
+                  readOnly
+                  value={`${API_BASE_URL}/webhooks/github/${project.public_token}`}
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                  className="w-full text-xs bg-white/70 border border-violet-200/60 rounded-lg px-2.5 py-1.5 focus:outline-none text-slate-600 cursor-pointer font-mono mt-1"
+                />
+                <p className="text-[10px] text-slate-400 mt-1.5">
+                  Configure este webhook no repositório do GitHub (como <span className="font-bold">application/json</span>) para registrar commits e automatizar tarefas.
+                </p>
               </div>
             </div>
 

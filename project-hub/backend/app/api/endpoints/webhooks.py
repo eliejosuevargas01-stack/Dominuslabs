@@ -7,6 +7,73 @@ from app.services.webhook_service import webhook_service
 
 router = APIRouter()
 
+@router.post("/github/{public_token}")
+async def github_webhook_by_token(public_token: str, request: Request, db: Session = Depends(get_db)):
+    # 1. Look up the project securely using the unique public_token
+    from app.models.project import Project
+    project = db.query(Project).filter(Project.public_token == public_token).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    payload = await request.json()
+
+    # 2. Native GitHub push payload format
+    if "commits" in payload:
+        commits = payload.get("commits", [])
+        processed_count = 0
+        for c in commits:
+            commit_hash = c.get("id")
+            message = c.get("message")
+            author = c.get("author", {}).get("name", "Unknown")
+            date_str = c.get("timestamp")
+
+            if not (commit_hash and message):
+                continue
+
+            try:
+                if date_str and date_str.endswith("Z"):
+                    date_str = date_str.replace("Z", "+00:00")
+                commit_date = datetime.fromisoformat(date_str) if date_str else datetime.utcnow()
+            except Exception:
+                commit_date = datetime.utcnow()
+
+            webhook_service.process_github_webhook(
+                db=db,
+                project_id=project.id,
+                commit_hash=commit_hash,
+                message=message,
+                author=author,
+                commit_date=commit_date
+            )
+            processed_count += 1
+            
+        return {"status": "success", "processed_commits": processed_count}
+
+    # 3. Custom mock payload format fallback
+    commit_hash = payload.get("commit_hash")
+    message = payload.get("commit_message")
+    author = payload.get("author")
+    date_str = payload.get("date")
+
+    if not all([commit_hash, message, author, date_str]):
+        return {"status": "ignored", "reason": "missing fields"}
+
+    try:
+        commit_date = datetime.fromisoformat(date_str)
+    except ValueError:
+        commit_date = datetime.utcnow()
+
+    webhook_service.process_github_webhook(
+        db=db,
+        project_id=project.id,
+        commit_hash=commit_hash,
+        message=message,
+        author=author,
+        commit_date=commit_date
+    )
+
+    return {"status": "success"}
+
 @router.post("/github")
 async def github_webhook(request: Request, db: Session = Depends(get_db)):
     # Supports both standard GitHub push webhook payloads and the custom mock payload
