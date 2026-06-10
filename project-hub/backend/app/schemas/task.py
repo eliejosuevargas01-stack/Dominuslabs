@@ -20,6 +20,7 @@ class ProjectTask(ProjectTaskBase):
     id: int
     project_id: int
     completed_at: Optional[datetime] = None
+    completed_by_github: bool = False
 
     class Config:
         from_attributes = True

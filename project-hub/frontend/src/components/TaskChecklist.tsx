@@ -7,6 +7,7 @@ interface Task {
   name: string;
   description?: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'DONE';
+  completed_by_github?: boolean;
 }
 
 interface TaskChecklistProps {
@@ -45,7 +46,7 @@ export default function TaskChecklist({ projectId, admin, onTasksUpdated }: Task
   }, [projectId]);
 
   const toggleTask = async (task: Task) => {
-    if (!admin) return;
+    if (!admin || task.completed_by_github) return;
     const newStatus = task.status === 'DONE' ? 'PENDING' : 'DONE';
     try {
       // Optimistic UI update
@@ -100,21 +101,23 @@ export default function TaskChecklist({ projectId, admin, onTasksUpdated }: Task
         <ul className="space-y-2.5">
           {tasks.map(task => {
             const isDone = task.status === 'DONE';
+            const isGithubDone = !!task.completed_by_github;
             return (
               <li
                 key={task.id}
-                onClick={() => toggleTask(task)}
+                onClick={() => !isGithubDone && toggleTask(task)}
                 className={`flex items-start gap-3 p-3 rounded-xl border transition-all duration-200 select-none ${
-                  admin ? 'cursor-pointer hover:bg-violet-50/50' : ''
+                  admin && !isGithubDone ? 'cursor-pointer hover:bg-violet-50/50' : 'cursor-not-allowed'
                 } ${
                   isDone
                     ? 'bg-slate-50/80 border-slate-200/50 text-slate-400'
                     : 'bg-white border-violet-100/50 text-slate-700 shadow-sm'
                 }`}
+                title={isGithubDone ? "Esta tarefa foi concluída via commit no GitHub e não pode ser alterada." : ""}
               >
                 <div className="mt-0.5">
                   {isDone ? (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-500 fill-emerald-50" />
+                    <CheckCircle2 className={`w-5 h-5 ${isGithubDone ? 'text-violet-500 fill-violet-50' : 'text-emerald-500 fill-emerald-50'}`} />
                   ) : (
                     <Circle className={`w-5 h-5 ${admin ? 'text-violet-300 hover:text-violet-600' : 'text-slate-300'}`} />
                   )}
@@ -123,6 +126,11 @@ export default function TaskChecklist({ projectId, admin, onTasksUpdated }: Task
                   <span className={`text-sm font-medium break-words ${isDone ? 'line-through' : ''}`}>
                     {task.name}
                   </span>
+                  {isGithubDone && (
+                    <span className="block text-[10px] font-bold text-violet-600 mt-0.5 animate-pulse">
+                      ✓ Concluído via GitHub
+                    </span>
+                  )}
                 </div>
               </li>
             );

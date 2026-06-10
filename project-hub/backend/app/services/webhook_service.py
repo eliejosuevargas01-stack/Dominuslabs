@@ -34,6 +34,7 @@ class WebhookService:
             if clean_task == clean_msg or clean_task in clean_msg:
                 task.status = TaskStatus.DONE
                 task.completed_at = datetime.utcnow()
+                task.completed_by_github = True
                 db.add(task)
         
         db.commit()
