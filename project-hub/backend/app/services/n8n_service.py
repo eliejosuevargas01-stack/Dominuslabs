@@ -114,6 +114,71 @@ MOCK_ACTIVITIES = {
     ]
 }
 
+def map_n8n_lead(lead: dict) -> dict:
+    # Get ID as string
+    lead_id = str(lead.get("id", lead.get("_id", "")))
+    
+    # Map Portuguese/Custom keys to Pydantic Lead Schema
+    company_name = lead.get("nome_empresa") or lead.get("company_name") or "Empresa Sem Nome"
+    
+    whatsapp = lead.get("telefone") or lead.get("whatsapp") or ""
+    if whatsapp == "null" or whatsapp is None:
+        whatsapp = ""
+        
+    instagram = lead.get("instagram") or ""
+    if instagram == "null" or instagram is None:
+        instagram = ""
+        
+    email = lead.get("email") or ""
+    if email == "null" or email is None:
+        email = ""
+        
+    # Map status to uppercase standard if possible
+    status_raw = str(lead.get("status", "DISCOVERED")).upper()
+    if status_raw == "CONTATADO":
+        status = "RESPONDED"
+    elif status_raw == "NOVO":
+        status = "DISCOVERED"
+    else:
+        status = status_raw
+        
+    origin = lead.get("origem") or lead.get("origin") or "Outro"
+    
+    # Map notes
+    notes = lead.get("notes") or lead.get("falha_identificada") or lead.get("dor_identificada") or ""
+    
+    # Map proposal
+    proposal = lead.get("proposta_pronta") or lead.get("proposal") or ""
+    
+    # Responsible
+    responsible = lead.get("responsible") or lead.get("responsavel") or "Eliezer"
+    
+    # Dates
+    last_interaction = lead.get("last_interaction") or lead.get("updatedAt") or lead.get("created_at")
+    created_at = lead.get("created_at") or lead.get("createdAt")
+    
+    return {
+        "id": lead_id,
+        "company_name": company_name,
+        "whatsapp": whatsapp,
+        "instagram": instagram,
+        "email": email,
+        "status": status,
+        "origin": origin,
+        "notes": notes,
+        "proposal": proposal,
+        "responsible": responsible,
+        "last_interaction": last_interaction,
+        "created_at": created_at
+    }
+
+def clean_n8n_response(res_data: Any) -> Any:
+    if isinstance(res_data, list):
+        if len(res_data) > 0:
+            return res_data[0]
+        return {}
+    return res_data
+
 class N8NService:
     @staticmethod
     async def run_scrapper(payload: dict) -> dict:
@@ -130,11 +195,11 @@ class N8NService:
             "target_platforms": payload.get("platforms", [])
         }
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.post(url, json=outgoing_payload, timeout=30.0)
                 response.raise_for_status()
-                return response.json()
+                return clean_n8n_response(response.json())
             except Exception as e:
                 logger.error(f"Error calling Scrapper webhook: {e}")
                 return {"status": "error", "message": str(e)}
@@ -150,16 +215,21 @@ class N8NService:
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=get_leads"
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.get(endpoint_url, timeout=30.0)
                 response.raise_for_status()
                 data = response.json()
+                raw_leads = []
                 if isinstance(data, list):
-                    return data
+                    raw_leads = data
                 elif isinstance(data, dict) and "leads" in data:
-                    return data["leads"]
-                return MOCK_LEADS
+                    raw_leads = data["leads"]
+                else:
+                    return MOCK_LEADS
+                
+                # Apply mapper to clean the leads
+                return [map_n8n_lead(l) for l in raw_leads if isinstance(l, dict)]
             except Exception as e:
                 logger.error(f"Error calling GET leads webhook: {e}. Falling back to mock data.")
                 return MOCK_LEADS
@@ -178,6 +248,17 @@ class N8NService:
                 MOCK_LEADS[i] = lead
                 break
 
+        # Map outgoing fields to both English and Portuguese keys to be safe with N8N
+        outgoing_payload = {**payload}
+        if "company_name" in payload:
+            outgoing_payload["nome_empresa"] = payload["company_name"]
+        if "whatsapp" in payload:
+            outgoing_payload["telefone"] = payload["whatsapp"]
+        if "proposal" in payload:
+            outgoing_payload["proposta_pronta"] = payload["proposal"]
+        if "origin" in payload:
+            outgoing_payload["origem"] = payload["origin"]
+
         if not url:
             logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead updated locally in-memory.")
             updated_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
@@ -187,11 +268,14 @@ class N8NService:
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=update_lead&id={lead_id}"
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
-                response = await client.put(endpoint_url, json=payload, timeout=30.0)
+                response = await client.put(endpoint_url, json=outgoing_payload, timeout=30.0)
                 response.raise_for_status()
-                return response.json()
+                res_data = clean_n8n_response(response.json())
+                if isinstance(res_data, dict) and ("company_name" in res_data or "nome_empresa" in res_data):
+                    return map_n8n_lead(res_data)
+                return next((l for l in MOCK_LEADS if l["id"] == lead_id), {"id": lead_id, **payload})
             except Exception as e:
                 logger.error(f"Error calling UPDATE lead webhook: {e}")
                 return next((l for l in MOCK_LEADS if l["id"] == lead_id), {"id": lead_id, **payload})
@@ -207,7 +291,7 @@ class N8NService:
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=get_messages&lead_id={lead_id}"
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.get(endpoint_url, timeout=30.0)
                 response.raise_for_status()
@@ -273,12 +357,12 @@ class N8NService:
             "lead_id": lead_id
         }
             
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.post(url, json=outgoing_payload, timeout=30.0)
                 response.raise_for_status()
                 try:
-                    res_json = response.json()
+                    res_json = clean_n8n_response(response.json())
                     if isinstance(res_json, dict) and "message" in res_json:
                         return res_json
                 except Exception:
@@ -309,11 +393,14 @@ class N8NService:
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=create_activity&lead_id={lead_id}"
             
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.post(endpoint_url, json=new_activity, timeout=30.0)
                 response.raise_for_status()
-                return response.json()
+                res_data = clean_n8n_response(response.json())
+                if isinstance(res_data, dict) and "event_type" in res_data:
+                    return res_data
+                return new_activity
             except Exception as e:
                 logger.error(f"Error calling CREATE activity webhook: {e}")
                 return new_activity
