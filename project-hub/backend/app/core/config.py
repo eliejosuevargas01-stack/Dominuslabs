@@ -38,16 +38,16 @@ class Settings(BaseSettings):
         return f"sqlite:///{os.path.join(self.UPLOAD_DIR, 'dominuslabs.db')}"
 
     # N8N Integration Webhooks
-    SCRAPPER_WEBHOOK_URL: str = os.getenv("SCRAPPER_WEBHOOK_URL", "")
-    CRM_GET_LEADS_WEBHOOK_URL: str = os.getenv("CRM_GET_LEADS_WEBHOOK_URL", "")
-    CRM_CREATE_LEAD_WEBHOOK_URL: str = os.getenv("CRM_CREATE_LEAD_WEBHOOK_URL", "")
-    CRM_UPDATE_LEAD_WEBHOOK_URL: str = os.getenv("CRM_UPDATE_LEAD_WEBHOOK_URL", "")
-    CRM_DELETE_LEAD_WEBHOOK_URL: str = os.getenv("CRM_DELETE_LEAD_WEBHOOK_URL", "")
-    CRM_GET_MESSAGES_WEBHOOK_URL: str = os.getenv("CRM_GET_MESSAGES_WEBHOOK_URL", "")
-    CRM_CREATE_MESSAGE_WEBHOOK_URL: str = os.getenv("CRM_CREATE_MESSAGE_WEBHOOK_URL", "")
-    CRM_SEND_WHATSAPP_WEBHOOK_URL: str = os.getenv("CRM_SEND_WHATSAPP_WEBHOOK_URL", "")
-    CRM_UPDATE_STATUS_WEBHOOK_URL: str = os.getenv("CRM_UPDATE_STATUS_WEBHOOK_URL", "")
-    CRM_CREATE_ACTIVITY_WEBHOOK_URL: str = os.getenv("CRM_CREATE_ACTIVITY_WEBHOOK_URL", "")
+    SCRAPPER_WEBHOOK_URL: str = os.getenv("SCRAPPER_WEBHOOK_URL", "https://scrapper.dominuslabs.online/scrape/meta_ads")
+    CRM_GET_LEADS_WEBHOOK_URL: str = os.getenv("CRM_GET_LEADS_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
+    CRM_CREATE_LEAD_WEBHOOK_URL: str = os.getenv("CRM_CREATE_LEAD_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
+    CRM_UPDATE_LEAD_WEBHOOK_URL: str = os.getenv("CRM_UPDATE_LEAD_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
+    CRM_DELETE_LEAD_WEBHOOK_URL: str = os.getenv("CRM_DELETE_LEAD_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
+    CRM_GET_MESSAGES_WEBHOOK_URL: str = os.getenv("CRM_GET_MESSAGES_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
+    CRM_CREATE_MESSAGE_WEBHOOK_URL: str = os.getenv("CRM_CREATE_MESSAGE_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
+    CRM_SEND_WHATSAPP_WEBHOOK_URL: str = os.getenv("CRM_SEND_WHATSAPP_WEBHOOK_URL", "http://whats.dominuslabs.online/api/sessions/eliezer-manaus-teste/messages/send")
+    CRM_UPDATE_STATUS_WEBHOOK_URL: str = os.getenv("CRM_UPDATE_STATUS_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
+    CRM_CREATE_ACTIVITY_WEBHOOK_URL: str = os.getenv("CRM_CREATE_ACTIVITY_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
 
     class Config:
         case_sensitive = True
