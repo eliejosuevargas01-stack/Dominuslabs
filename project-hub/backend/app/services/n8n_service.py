@@ -20,7 +20,10 @@ MOCK_LEADS = [
         "proposal": "Desenvolvimento de Landing Page de agendamento por R$ 1.200,00.",
         "responsible": "Eliezer",
         "last_interaction": "2026-06-10T10:00:00Z",
-        "created_at": "2026-06-09T08:30:00Z"
+        "created_at": "2026-06-09T08:30:00Z",
+        "cidade": "São Paulo",
+        "segmento": "Dentista",
+        "solucao_recomendada": "Landing Page"
     },
     {
         "id": "lead_2",
@@ -34,7 +37,10 @@ MOCK_LEADS = [
         "proposal": "Funil completo + CRM Dominus por R$ 3.500,00.",
         "responsible": "Eliezer",
         "last_interaction": "2026-06-10T14:30:00Z",
-        "created_at": "2026-06-08T09:15:00Z"
+        "created_at": "2026-06-08T09:15:00Z",
+        "cidade": "Rio de Janeiro",
+        "segmento": "Advogado",
+        "solucao_recomendada": "CRM"
     },
     {
         "id": "lead_3",
@@ -48,7 +54,10 @@ MOCK_LEADS = [
         "proposal": "Site institucional e SEO por R$ 5.000,00.",
         "responsible": "Eliezer",
         "last_interaction": "2026-06-09T18:00:00Z",
-        "created_at": "2026-06-05T11:00:00Z"
+        "created_at": "2026-06-05T11:00:00Z",
+        "cidade": "Belo Horizonte",
+        "segmento": "Energia Solar",
+        "solucao_recomendada": "SEO"
     },
     {
         "id": "lead_4",
@@ -62,7 +71,10 @@ MOCK_LEADS = [
         "proposal": "Cardápio inteligente + LP de captura por R$ 2.000,00.",
         "responsible": "Eliezer",
         "last_interaction": "2026-06-10T16:15:00Z",
-        "created_at": "2026-06-09T15:20:00Z"
+        "created_at": "2026-06-09T15:20:00Z",
+        "cidade": "São Paulo",
+        "segmento": "Restaurante",
+        "solucao_recomendada": "Cardápio Digital"
     },
     {
         "id": "lead_5",
@@ -76,7 +88,10 @@ MOCK_LEADS = [
         "proposal": "Landing page de vendas por R$ 3.000,00.",
         "responsible": "Eliezer",
         "last_interaction": "2026-06-10T11:00:00Z",
-        "created_at": "2026-06-07T14:40:00Z"
+        "created_at": "2026-06-07T14:40:00Z",
+        "cidade": "Curitiba",
+        "segmento": "Academia",
+        "solucao_recomendada": "Landing Page"
     }
 ]
 
@@ -185,6 +200,22 @@ def map_n8n_lead(lead: dict) -> dict:
     last_interaction = lead.get("last_interaction") or lead.get("updatedAt") or lead.get("created_at")
     created_at = lead.get("created_at") or lead.get("createdAt")
     
+    # Extract and clean additional fields, handling None, "null", and whitespace
+    raw_cidade = lead.get("cidade")
+    cidade = ""
+    if raw_cidade is not None and str(raw_cidade).strip().lower() not in ("null", ""):
+        cidade = str(raw_cidade).strip()
+        
+    raw_segmento = lead.get("segmento")
+    segmento = ""
+    if raw_segmento is not None and str(raw_segmento).strip().lower() not in ("null", ""):
+        segmento = str(raw_segmento).strip()
+        
+    raw_solucao = lead.get("solucao_recomendada") or lead.get("servico_ofertado")
+    solucao_recomendada = ""
+    if raw_solucao is not None and str(raw_solucao).strip().lower() not in ("null", ""):
+        solucao_recomendada = str(raw_solucao).strip()
+    
     return {
         "id": lead_id,
         "company_name": company_name,
@@ -198,7 +229,10 @@ def map_n8n_lead(lead: dict) -> dict:
         "proposal": proposal,
         "responsible": responsible,
         "last_interaction": last_interaction,
-        "created_at": created_at
+        "created_at": created_at,
+        "cidade": cidade,
+        "segmento": segmento,
+        "solucao_recomendada": solucao_recomendada
     }
 
 def clean_n8n_response(res_data: Any) -> Any:

@@ -12,6 +12,9 @@ class LeadBase(BaseModel):
     notes: Optional[str] = None
     proposal: Optional[str] = None
     responsible: Optional[str] = None
+    cidade: Optional[str] = ""
+    segmento: Optional[str] = ""
+    solucao_recomendada: Optional[str] = ""
 
 class LeadCreate(LeadBase):
     pass

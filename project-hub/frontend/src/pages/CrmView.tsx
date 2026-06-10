@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Users, UserCheck, MessageSquare, Send, Check, 
   Clipboard, Search, Loader2, 
@@ -16,6 +16,8 @@ export default function CrmView() {
   // Filters state
   const [statusFilter, setStatusFilter] = useState('');
   const [originFilter, setOriginFilter] = useState('');
+  const [segmentFilter, setSegmentFilter] = useState('');
+  const [cityFilter, setCityFilter] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Selected Lead Details drawer
@@ -46,6 +48,39 @@ export default function CrmView() {
   ];
 
   const origins = ['WhatsApp', 'Instagram', 'E-mail', 'Telefone', 'Outro'];
+
+  // Dynamic filter lists extracted from loaded leads
+  const dynamicStatuses = useMemo(() => {
+    const s = new Set<string>();
+    leads.forEach(l => {
+      if (l.status) s.add(l.status);
+    });
+    return Array.from(s).sort();
+  }, [leads]);
+
+  const dynamicOrigins = useMemo(() => {
+    const s = new Set<string>();
+    leads.forEach(l => {
+      if (l.origin) s.add(l.origin);
+    });
+    return Array.from(s).sort();
+  }, [leads]);
+
+  const dynamicSegments = useMemo(() => {
+    const s = new Set<string>();
+    leads.forEach(l => {
+      if (l.segmento && l.segmento.trim() !== '') s.add(l.segmento);
+    });
+    return Array.from(s).sort();
+  }, [leads]);
+
+  const dynamicCities = useMemo(() => {
+    const s = new Set<string>();
+    leads.forEach(l => {
+      if (l.cidade && l.cidade.trim() !== '') s.add(l.cidade);
+    });
+    return Array.from(s).sort();
+  }, [leads]);
 
   // Fetch initial leads and dashboard metrics
   const fetchData = async () => {
@@ -311,16 +346,21 @@ export default function CrmView() {
   const filteredLeads = leads.filter(lead => {
     const matchesStatus = statusFilter ? lead.status === statusFilter : true;
     const matchesOrigin = originFilter ? lead.origin === originFilter : true;
+    const matchesSegment = segmentFilter ? lead.segmento === segmentFilter : true;
+    const matchesCity = cityFilter ? lead.cidade === cityFilter : true;
     
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch = searchTerm 
       ? (lead.company_name?.toLowerCase().includes(searchLower) || 
          lead.email?.toLowerCase().includes(searchLower) ||
          lead.whatsapp?.includes(searchTerm) ||
-         lead.responsible?.toLowerCase().includes(searchLower))
+         lead.responsible?.toLowerCase().includes(searchLower) ||
+         lead.segmento?.toLowerCase().includes(searchLower) ||
+         lead.cidade?.toLowerCase().includes(searchLower) ||
+         lead.notes?.toLowerCase().includes(searchLower))
       : true;
       
-    return matchesStatus && matchesOrigin && matchesSearch;
+    return matchesStatus && matchesOrigin && matchesSegment && matchesCity && matchesSearch;
   });
 
   const getStatusColor = (status: string) => {
@@ -449,7 +489,7 @@ export default function CrmView() {
                 className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
               >
                 <option value="">Status (Todos)</option>
-                {statuses.map(st => (
+                {dynamicStatuses.map(st => (
                   <option key={st} value={st}>{st}</option>
                 ))}
               </select>
@@ -461,10 +501,50 @@ export default function CrmView() {
                 className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
               >
                 <option value="">Método de Contato (Todos)</option>
-                {origins.map(or => (
+                {dynamicOrigins.map(or => (
                   <option key={or} value={or}>{or}</option>
                 ))}
               </select>
+
+              {/* Segment Filter */}
+              <select
+                value={segmentFilter}
+                onChange={(e) => setSegmentFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Segmento (Todos)</option>
+                {dynamicSegments.map(seg => (
+                  <option key={seg} value={seg}>{seg}</option>
+                ))}
+              </select>
+
+              {/* City Filter */}
+              <select
+                value={cityFilter}
+                onChange={(e) => setCityFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Cidade (Todos)</option>
+                {dynamicCities.map(cit => (
+                  <option key={cit} value={cit}>{cit}</option>
+                ))}
+              </select>
+
+              {/* Clear Filters Button */}
+              {(statusFilter || originFilter || segmentFilter || cityFilter || searchTerm) && (
+                <button
+                  onClick={() => {
+                    setStatusFilter('');
+                    setOriginFilter('');
+                    setSegmentFilter('');
+                    setCityFilter('');
+                    setSearchTerm('');
+                  }}
+                  className="px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all cursor-pointer shadow-sm shadow-rose-100/50"
+                >
+                  Limpar Filtros
+                </button>
+              )}
             </div>
           </div>
 
@@ -484,6 +564,8 @@ export default function CrmView() {
                   <tr className="border-b border-violet-100/50 text-xs font-bold text-slate-400 uppercase tracking-wider">
                     <th className="py-3 px-2">ID</th>
                     <th className="py-3 px-2">Empresa</th>
+                    <th className="py-3 px-2">Segmento</th>
+                    <th className="py-3 px-2">Cidade</th>
                     <th className="py-3 px-2">WhatsApp</th>
                     <th className="py-3 px-2">Status</th>
                     <th className="py-3 px-2">Método de Contato</th>
@@ -503,6 +585,8 @@ export default function CrmView() {
                       >
                         <td className="py-3.5 px-2 text-slate-400">#{lead.id}</td>
                         <td className="py-3.5 px-2 text-slate-800">{lead.company_name}</td>
+                        <td className="py-3.5 px-2 text-slate-500">{lead.segmento || '-'}</td>
+                        <td className="py-3.5 px-2 text-slate-500">{lead.cidade || '-'}</td>
                         <td className="py-3.5 px-2">{lead.whatsapp || '-'}</td>
                         <td className="py-3.5 px-2">
                           <span className={`px-2 py-0.5 rounded-full border text-[10px] uppercase font-bold tracking-wide ${getStatusColor(lead.status)}`}>
@@ -619,6 +703,36 @@ export default function CrmView() {
                           <option key={or} value={or}>{or}</option>
                         ))}
                       </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cidade</label>
+                      <input
+                        type="text"
+                        value={editingLead.cidade || ''}
+                        onChange={(e) => setEditingLead({ ...editingLead, cidade: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-lg border border-violet-100 bg-white/50 text-xs font-semibold focus:border-purple-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Segmento</label>
+                      <input
+                        type="text"
+                        value={editingLead.segmento || ''}
+                        onChange={(e) => setEditingLead({ ...editingLead, segmento: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-lg border border-violet-100 bg-white/50 text-xs font-semibold focus:border-purple-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Solução Recomendada</label>
+                      <input
+                        type="text"
+                        value={editingLead.solucao_recomendada || ''}
+                        onChange={(e) => setEditingLead({ ...editingLead, solucao_recomendada: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-lg border border-violet-100 bg-white/50 text-xs font-semibold focus:border-purple-500 outline-none"
+                      />
                     </div>
                   </div>
 
