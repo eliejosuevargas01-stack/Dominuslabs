@@ -15,7 +15,7 @@ MOCK_LEADS = [
         "whatsapp": "+5511999999991",
         "email": "contato@clinicasorriso.com.br",
         "status": "DISCOVERED",
-        "origin": "Google Maps",
+        "origin": "WhatsApp",
         "notes": "Pesquisar se possuem site próprio.",
         "proposal": "Desenvolvimento de Landing Page de agendamento por R$ 1.200,00.",
         "responsible": "Eliezer",
@@ -26,7 +26,7 @@ MOCK_LEADS = [
         "id": "lead_2",
         "company_name": "Advocacia Silva & Associados",
         "instagram": "https://instagram.com/silva_associados",
-        "whatsapp": "+5511999999992",
+        "whatsapp": "",
         "email": "silva@associados.com.br",
         "status": "NEGOTIATING",
         "origin": "Instagram",
@@ -39,11 +39,11 @@ MOCK_LEADS = [
     {
         "id": "lead_3",
         "company_name": "SolarTech Energia",
-        "instagram": "https://instagram.com/solartech_energia",
-        "whatsapp": "+5511999999993",
+        "instagram": "",
+        "whatsapp": "",
         "email": "comercial@solartech.com.br",
         "status": "CLOSED_WON",
-        "origin": "Meta Ads Library",
+        "origin": "E-mail",
         "notes": "Contrato assinado. Enviar onboarding.",
         "proposal": "Site institucional e SEO por R$ 5.000,00.",
         "responsible": "Eliezer",
@@ -53,11 +53,11 @@ MOCK_LEADS = [
     {
         "id": "lead_4",
         "company_name": "Hamburgueria do Bairro",
-        "instagram": "https://instagram.com/burguer_bairro",
+        "instagram": "",
         "whatsapp": "+5511999999994",
-        "email": "burguer@bairro.com",
+        "email": "",
         "status": "RESPONDED",
-        "origin": "Facebook",
+        "origin": "WhatsApp",
         "notes": "Perguntou se integramos com cardápio online.",
         "proposal": "Cardápio inteligente + LP de captura por R$ 2.000,00.",
         "responsible": "Eliezer",
@@ -67,11 +67,11 @@ MOCK_LEADS = [
     {
         "id": "lead_5",
         "company_name": "Academia VIP Fit",
-        "instagram": "https://instagram.com/vipfit_academia",
-        "whatsapp": "+5511999999995",
-        "email": "gerencia@vipfit.com.br",
+        "instagram": "",
+        "whatsapp": "",
+        "email": "",
         "status": "OBJECTION",
-        "origin": "Google Maps",
+        "origin": "Outro",
         "notes": "Acha o preço de R$ 3.000 alto. Negociar desconto.",
         "proposal": "Landing page de vendas por R$ 3.000,00.",
         "responsible": "Eliezer",
@@ -82,35 +82,27 @@ MOCK_LEADS = [
 
 MOCK_CONVERSATIONS = {
     "lead_1": [
-        {"id": "m1", "sender": "lead", "message": "Olá! Gostaria de saber mais sobre os serviços de vocês.", "channel": "instagram", "timestamp": "2026-06-10T09:50:00Z"},
-        {"id": "m2", "sender": "user", "message": "Olá, tudo bem? Podemos agendar uma chamada para apresentar?", "channel": "instagram", "timestamp": "2026-06-10T10:00:00Z"}
+        {"id": "m1", "sender": "lead", "message": "Olá! Gostaria de saber mais sobre os serviços de vocês.", "channel": "whatsapp", "timestamp": "2026-06-10T09:50:00Z"},
+        {"id": "m2", "sender": "user", "message": "Olá, tudo bem? Podemos agendar uma chamada para apresentar?", "channel": "whatsapp", "timestamp": "2026-06-10T10:00:00Z"}
     ],
     "lead_2": [
-        {"id": "m3", "sender": "lead", "message": "Vocês integram com o sistema de processos judiciais?", "channel": "whatsapp", "timestamp": "2026-06-10T14:00:00Z"},
-        {"id": "m4", "sender": "user", "message": "Sim, integramos via API com a maioria dos tribunais e sistemas comerciais.", "channel": "whatsapp", "timestamp": "2026-06-10T14:30:00Z"}
-    ],
-    "lead_3": [
-        {"id": "m5", "sender": "user", "message": "Parabéns pela parceria! O contrato já está assinado.", "channel": "whatsapp", "timestamp": "2026-06-09T17:45:00Z"},
-        {"id": "m6", "sender": "lead", "message": "Obrigado! Ansioso para iniciar os trabalhos.", "channel": "whatsapp", "timestamp": "2026-06-09T18:00:00Z"}
+        {"id": "m3", "sender": "lead", "message": "Gostaria de ver alguns portfólios no Instagram.", "channel": "instagram", "timestamp": "2026-06-10T14:00:00Z"},
+        {"id": "m4", "sender": "user", "message": "Claro! Nosso perfil é @dominuslabs. Enviamos novidades por lá.", "channel": "instagram", "timestamp": "2026-06-10T14:30:00Z"}
     ],
     "lead_4": [
-        {"id": "m7", "sender": "lead", "message": "Vocês trabalham com tráfego pago também?", "channel": "instagram", "timestamp": "2026-06-10T16:00:00Z"},
-        {"id": "m8", "sender": "user", "message": "Sim, fazemos gestão de anúncios para Google e Meta.", "channel": "instagram", "timestamp": "2026-06-10T16:15:00Z"}
-    ],
-    "lead_5": [
-        {"id": "m9", "sender": "user", "message": "O que achou da nossa proposta comercial?", "channel": "whatsapp", "timestamp": "2026-06-10T10:45:00Z"},
-        {"id": "m10", "sender": "lead", "message": "Achei excelente, mas no momento o valor de R$ 3.000 está fora do orçamento.", "channel": "whatsapp", "timestamp": "2026-06-10T11:00:00Z"}
+        {"id": "m7", "sender": "lead", "message": "Vocês trabalham com tráfego pago também?", "channel": "whatsapp", "timestamp": "2026-06-10T16:00:00Z"},
+        {"id": "m8", "sender": "user", "message": "Sim, fazemos gestão de anúncios para Google e Meta.", "channel": "whatsapp", "timestamp": "2026-06-10T16:15:00Z"}
     ]
 }
 
 MOCK_ACTIVITIES = {
     "lead_1": [
-        {"lead_id": "lead_1", "event_type": "lead_created", "timestamp": "2026-06-09T08:30:00Z", "metadata": {"origin": "Google Maps"}},
+        {"lead_id": "lead_1", "event_type": "lead_created", "timestamp": "2026-06-09T08:30:00Z", "metadata": {"origin": "WhatsApp"}},
         {"lead_id": "lead_1", "event_type": "message_received", "timestamp": "2026-06-10T09:50:00Z", "metadata": {"message": "Olá! Gostaria de saber mais..."}}
     ],
     "lead_2": [
         {"lead_id": "lead_2", "event_type": "lead_created", "timestamp": "2026-06-08T09:15:00Z", "metadata": {"origin": "Instagram"}},
-        {"lead_id": "lead_2", "event_type": "message_received", "timestamp": "2026-06-10T14:00:00Z", "metadata": {"message": "Vocês integram com o sistema..."}}
+        {"lead_id": "lead_2", "event_type": "message_received", "timestamp": "2026-06-10T14:00:00Z", "metadata": {"message": "Gostaria de ver alguns portfólios..."}}
     ]
 }
 
@@ -121,51 +113,51 @@ def map_n8n_lead(lead: dict) -> dict:
     # Map Portuguese/Custom keys to Pydantic Lead Schema
     company_name = lead.get("nome_empresa") or lead.get("company_name") or "Empresa Sem Nome"
     
-    whatsapp = lead.get("telefone") or lead.get("whatsapp") or ""
-    if whatsapp == "null" or whatsapp is None:
-        whatsapp = ""
+    # Extract and clean contact fields, handling None, "null", and whitespace
+    raw_tel = lead.get("telefone")
+    raw_wa = lead.get("whatsapp")
+    whatsapp = ""
+    for val in (raw_tel, raw_wa):
+        if val is not None and str(val).strip().lower() not in ("null", ""):
+            whatsapp = str(val).strip()
+            break
+            
+    raw_ig = lead.get("instagram")
+    instagram = ""
+    if raw_ig is not None and str(raw_ig).strip().lower() not in ("null", ""):
+        instagram = str(raw_ig).strip()
         
-    instagram = lead.get("instagram") or ""
-    if instagram == "null" or instagram is None:
-        instagram = ""
+    raw_email = lead.get("email")
+    email = ""
+    if raw_email is not None and str(raw_email).strip().lower() not in ("null", ""):
+        email = str(raw_email).strip()
         
-    email = lead.get("email") or ""
-    if email == "null" or email is None:
-        email = ""
-        
-    # Map status to uppercase standard if possible
-    status_raw = str(lead.get("status", "DISCOVERED")).upper()
-    if status_raw == "CONTATADO":
-        status = "RESPONDED"
-    elif status_raw == "NOVO":
+    # Map status to uppercase standard with support for Portuguese mappings
+    status_raw = str(lead.get("status") or "DISCOVERED").strip().upper()
+    if status_raw in ("NOVO", "FRIO", "DISCOVERED"):
         status = "DISCOVERED"
+    elif status_raw in ("CONTATADO", "RESPONDED"):
+        status = "RESPONDED"
+    elif status_raw in ("INTERESSADO", "QUENTE", "INTERESTED"):
+        status = "INTERESTED"
+    elif status_raw in ("NEGOCIACAO", "NEGOCIAÇÃO", "NEGOTIATING"):
+        status = "NEGOTIATING"
+    elif status_raw in ("GANHO", "FECHADO", "CLOSED_WON"):
+        status = "CLOSED_WON"
+    elif status_raw in ("PERDIDO", "CLOSED_LOST"):
+        status = "CLOSED_LOST"
     else:
         status = status_raw
         
-    # Infer contact method / origin
-    origin_raw = lead.get("origem") or lead.get("origin") or lead.get("plataforma_veiculada") or ""
-    origin_lower = str(origin_raw).lower()
-    
-    if "whatsapp" in origin_lower or "telefone" in origin_lower:
+    # Infer contact method / origin based on populated fields priority
+    if whatsapp:
         origin = "WhatsApp"
-    elif "instagram" in origin_lower:
+    elif instagram:
         origin = "Instagram"
-    elif "email" in origin_lower:
+    elif email:
         origin = "E-mail"
-    elif "facebook" in origin_lower:
-        origin = "Facebook"
-    elif "maps" in origin_lower or "google" in origin_lower:
-        origin = "Google Maps"
     else:
-        # Fallback to inferring from populated fields
-        if instagram and instagram != "null":
-            origin = "Instagram"
-        elif whatsapp and whatsapp != "null":
-            origin = "WhatsApp"
-        elif email and email != "null":
-            origin = "E-mail"
-        else:
-            origin = "Outro"
+        origin = "Outro"
             
     # Determine if there are messages
     has_messages = False
@@ -176,12 +168,18 @@ def map_n8n_lead(lead: dict) -> dict:
     
     # Map notes
     notes = lead.get("notes") or lead.get("falha_identificada") or lead.get("dor_identificada") or ""
+    if notes is not None and str(notes).strip().lower() in ("null", ""):
+        notes = ""
     
     # Map proposal
     proposal = lead.get("proposta_pronta") or lead.get("proposal") or ""
+    if proposal is not None and str(proposal).strip().lower() in ("null", ""):
+        proposal = ""
     
     # Responsible
     responsible = lead.get("responsible") or lead.get("responsavel") or "Eliezer"
+    if responsible is not None and str(responsible).strip().lower() in ("null", ""):
+        responsible = "Eliezer"
     
     # Dates
     last_interaction = lead.get("last_interaction") or lead.get("updatedAt") or lead.get("created_at")
@@ -306,7 +304,7 @@ class N8NService:
         if not url:
             logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead updated locally in-memory.")
             updated_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
-            return updated_lead or {"id": lead_id, **payload}
+            return map_n8n_lead(updated_lead) if updated_lead else map_n8n_lead({"id": lead_id, **payload})
             
         # Append action parameter to CRM N8N query parameters
         sep = "&" if "?" in url else "?"
@@ -319,10 +317,17 @@ class N8NService:
                 res_data = clean_n8n_response(response.json())
                 if isinstance(res_data, dict) and ("company_name" in res_data or "nome_empresa" in res_data):
                     return map_n8n_lead(res_data)
-                return next((l for l in MOCK_LEADS if l["id"] == lead_id), {"id": lead_id, **payload})
+                
+                fallback_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
+                if fallback_lead:
+                    return map_n8n_lead(fallback_lead)
+                return map_n8n_lead({"id": lead_id, **payload})
             except Exception as e:
                 logger.error(f"Error calling UPDATE lead webhook: {e}")
-                return next((l for l in MOCK_LEADS if l["id"] == lead_id), {"id": lead_id, **payload})
+                fallback_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
+                if fallback_lead:
+                    return map_n8n_lead(fallback_lead)
+                return map_n8n_lead({"id": lead_id, **payload})
 
     @staticmethod
     async def get_messages(lead_id: str) -> List[dict]:
