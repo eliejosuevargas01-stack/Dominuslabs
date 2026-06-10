@@ -139,6 +139,29 @@ export default function CrmView() {
     }
   };
 
+  // Dynamically compute and save the contact method based on priority
+  const handleFieldChange = (field: string, value: string) => {
+    if (!editingLead) return;
+    const updated = { ...editingLead, [field]: value };
+    
+    // Recalculate origin (Contact Method)
+    const wa = field === 'whatsapp' ? value : (updated.whatsapp || '');
+    const ig = field === 'instagram' ? value : (updated.instagram || '');
+    const em = field === 'email' ? value : (updated.email || '');
+    
+    if (wa && wa.trim() !== '' && wa.trim().toLowerCase() !== 'null') {
+      updated.origin = 'WhatsApp';
+    } else if (ig && ig.trim() !== '' && ig.trim().toLowerCase() !== 'null') {
+      updated.origin = 'Instagram';
+    } else if (em && em.trim() !== '' && em.trim().toLowerCase() !== 'null') {
+      updated.origin = 'E-mail';
+    } else {
+      updated.origin = 'Outro';
+    }
+    
+    setEditingLead(updated);
+  };
+
   // Save Lead profile updates
   const handleSaveLeadDetails = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -545,7 +568,7 @@ export default function CrmView() {
                       <input
                         type="text"
                         value={editingLead.whatsapp || ''}
-                        onChange={(e) => setEditingLead({ ...editingLead, whatsapp: e.target.value })}
+                        onChange={(e) => handleFieldChange('whatsapp', e.target.value)}
                         className="w-full px-3 py-1.5 rounded-lg border border-violet-100 bg-white/50 text-xs font-semibold focus:border-purple-500 outline-none"
                       />
                     </div>
@@ -557,7 +580,7 @@ export default function CrmView() {
                       <input
                         type="text"
                         value={editingLead.instagram || ''}
-                        onChange={(e) => setEditingLead({ ...editingLead, instagram: e.target.value })}
+                        onChange={(e) => handleFieldChange('instagram', e.target.value)}
                         className="w-full px-3 py-1.5 rounded-lg border border-violet-100 bg-white/50 text-xs font-semibold focus:border-purple-500 outline-none"
                       />
                     </div>
@@ -566,7 +589,7 @@ export default function CrmView() {
                       <input
                         type="text"
                         value={editingLead.email || ''}
-                        onChange={(e) => setEditingLead({ ...editingLead, email: e.target.value })}
+                        onChange={(e) => handleFieldChange('email', e.target.value)}
                         className="w-full px-3 py-1.5 rounded-lg border border-violet-100 bg-white/50 text-xs font-semibold focus:border-purple-500 outline-none"
                       />
                     </div>
@@ -586,11 +609,11 @@ export default function CrmView() {
                       </select>
                     </div>
                      <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Método de Contato</label>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Método de Contato (Calculado)</label>
                       <select
+                        disabled
                         value={editingLead.origin || 'Outro'}
-                        onChange={(e) => setEditingLead({ ...editingLead, origin: e.target.value })}
-                        className="w-full px-3 py-1.5 rounded-lg border border-violet-100 bg-white/50 text-xs font-semibold focus:border-purple-500 outline-none cursor-pointer"
+                        className="w-full px-3 py-1.5 rounded-lg border border-violet-100 bg-slate-100 text-xs font-semibold outline-none cursor-not-allowed opacity-75"
                       >
                         {origins.map(or => (
                           <option key={or} value={or}>{or}</option>
