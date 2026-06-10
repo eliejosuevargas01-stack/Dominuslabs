@@ -19,12 +19,24 @@ class WebhookService:
         )
         log_repo.create_commit_log(db, log_in)
 
-        # Future enhancement: Parse message to automatically mark tasks as done.
-        # e.g., if message contains "task:hero", find task with name "hero" and update status.
-        # This is a stub for that functionality.
-        if "task:" in message.lower():
-            # Extract task name and find in db to update
-            pass
+        # Auto-check tasks: if commit message matches task name, set status to DONE
+        from app.models.task import ProjectTask, TaskStatus
+        
+        tasks = db.query(ProjectTask).filter(
+            ProjectTask.project_id == project_id,
+            ProjectTask.status != TaskStatus.DONE
+        ).all()
+        
+        for task in tasks:
+            clean_task = task.name.strip().lower()
+            clean_msg = message.strip().lower()
+            # Mark task as DONE if commit message matches or contains the task name
+            if clean_task == clean_msg or clean_task in clean_msg:
+                task.status = TaskStatus.DONE
+                task.completed_at = datetime.utcnow()
+                db.add(task)
+        
+        db.commit()
 
     @staticmethod
     def process_deploy_webhook(db: Session, project_id: int, provider: str, status: str, deploy_url: str, deploy_date: datetime):
