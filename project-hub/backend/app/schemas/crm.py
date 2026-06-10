@@ -23,6 +23,7 @@ class Lead(LeadBase):
     id: str  # String ID to support flexible N8N systems
     last_interaction: Optional[str] = None
     created_at: Optional[str] = None
+    has_messages: Optional[bool] = False
 
     model_config = ConfigDict(from_attributes=True)
 

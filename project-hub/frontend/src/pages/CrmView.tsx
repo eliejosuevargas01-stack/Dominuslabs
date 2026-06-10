@@ -45,7 +45,7 @@ export default function CrmView() {
     'QUALIFIED', 'PROPOSAL_SENT', 'NEGOTIATING', 'CLOSED_WON', 'CLOSED_LOST'
   ];
 
-  const origins = ['Google Maps', 'Instagram', 'Meta Ads Library', 'Facebook', 'Outro'];
+  const origins = ['WhatsApp', 'Instagram', 'E-mail', 'Telefone', 'Outro'];
 
   // Fetch initial leads and dashboard metrics
   const fetchData = async () => {
@@ -61,7 +61,20 @@ export default function CrmView() {
       });
       if (!leadsRes.ok) throw new Error('Falha ao buscar leads');
       const leadsData = await leadsRes.json();
-      setLeads(leadsData);
+      
+      // Sort leads: those with message history first, then by last_interaction descending
+      const sortedLeads = [...leadsData].sort((a, b) => {
+        const aHasMsg = a.has_messages ? 1 : 0;
+        const bHasMsg = b.has_messages ? 1 : 0;
+        if (aHasMsg !== bHasMsg) {
+          return bHasMsg - aHasMsg; // has_messages first
+        }
+        const aDate = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
+        const bDate = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
+        return bDate - aDate;
+      });
+      
+      setLeads(sortedLeads);
       setLoadingLeads(false);
 
       // 2. Fetch metrics
@@ -424,7 +437,7 @@ export default function CrmView() {
                 onChange={(e) => setOriginFilter(e.target.value)}
                 className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
               >
-                <option value="">Origem (Todas)</option>
+                <option value="">Método de Contato (Todos)</option>
                 {origins.map(or => (
                   <option key={or} value={or}>{or}</option>
                 ))}
@@ -450,7 +463,7 @@ export default function CrmView() {
                     <th className="py-3 px-2">Empresa</th>
                     <th className="py-3 px-2">WhatsApp</th>
                     <th className="py-3 px-2">Status</th>
-                    <th className="py-3 px-2">Origem</th>
+                    <th className="py-3 px-2">Método de Contato</th>
                     <th className="py-3 px-2">Última Interação</th>
                   </tr>
                 </thead>
@@ -572,8 +585,8 @@ export default function CrmView() {
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Origem</label>
+                     <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Método de Contato</label>
                       <select
                         value={editingLead.origin || 'Outro'}
                         onChange={(e) => setEditingLead({ ...editingLead, origin: e.target.value })}
@@ -735,7 +748,7 @@ export default function CrmView() {
                               {act.event_type === 'status_changed' && `Alterado de ${act.metadata.old_status} para ${act.metadata.new_status}`}
                               {act.event_type === 'message_sent' && `WhatsApp: "${act.metadata.message.substring(0, 30)}..."`}
                               {act.event_type === 'proposal_opened' && 'Proposta comercial copiada e Instagram aberto'}
-                              {act.event_type === 'lead_created' && `Origem: ${act.metadata.origin || 'Robô scraper'}`}
+                              {act.event_type === 'lead_created' && `Método de Contato: ${act.metadata.origin || 'Robô scraper'}`}
                             </p>
                           )}
                         </div>
