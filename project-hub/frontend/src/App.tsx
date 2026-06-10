@@ -51,8 +51,8 @@ function Header() {
           </span>
         </Link>
         
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="hidden sm:flex text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200 items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
             Internal Workstation
           </span>
