@@ -19,7 +19,7 @@ Você deve criar **apenas 1 volume persistente** para o serviço do **Backend**:
 * **Nome do Volume / Destino (Destination Path)**: `/app/uploads`
 * **Tipo**: Directory Bind Mount ou Docker Volume
 
-Ao montar `/app/uploads`, toda a estrutura de subpastas e o arquivo do banco SQLite serão salvos no host físico e não serão perdidos quando os contêineres forem reiniciados ou atualizados.
+Ao montar `/app/uploads`, toda a estrutura de subpastas de uploads (imagens, vídeos, etc.) será salva no host físico e não será perdida ao reiniciar os contêineres. O banco de dados não precisa de volume persistente neste contêiner porque está rodando no serviço dedicado do PostgreSQL.
 
 ---
 
@@ -38,11 +38,14 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Volume persistente para banco de dados e uploads
+      # Volume persistente apenas para arquivos de upload (imagens, vídeos, etc.)
       - dominuslabs_uploads:/app/uploads
     environment:
       - UPLOAD_DIR=/app/uploads
-      - DATABASE_URL=sqlite:////app/uploads/dominuslabs.db
+      - DATABASE_URL=postgresql://dominus:RS4k/m@ko80ok0gg08wgok0so0go0c4:5432/postgres
+      - ADMIN_USERNAME=Eliejosuevargas01
+      - ADMIN_PASSWORD=280108
+      - JWT_SECRET=dominuslabs-super-secret-key-2026
       - BACKEND_CORS_ORIGINS=["http://localhost:3000", "http://localhost:80", "https://seu-dominio-frontend.com"]
     restart: always
 
@@ -65,8 +68,10 @@ volumes:
 ```
 
 ### Variáveis de Ambiente Importantes:
-* `DATABASE_URL`: Deve apontar para `sqlite:////app/uploads/dominuslabs.db`. Os quatro `/` no início indicam um caminho absoluto para a pasta montada no volume persistente.
-* `VITE_API_URL`: Deve ser a URL pública do seu backend configurada no Coolify (ex: `https://api.dominuslabs.seu-site.com/api/v1`).
+* `DATABASE_URL`: A URL de conexão interna do PostgreSQL. O host `ko80ok0gg08wgok0so0go0c4` é o nome do container do banco de dados na rede do Coolify.
+* `ADMIN_USERNAME`: O usuário administrador (`Eliejosuevargas01`).
+* `ADMIN_PASSWORD`: A senha do administrador (`280108`).
+* `VITE_API_URL`: A URL pública final que aponta para o backend (ex: `https://api.dominuslabs.com/api/v1`).
 
 ---
 
