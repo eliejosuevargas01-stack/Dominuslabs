@@ -12,7 +12,7 @@ class LeadBase(BaseModel):
     notes: Optional[str] = None
     proposal: Optional[str] = None
     responsible: Optional[str] = None
-    cidade: Optional[str] = ""
+    falha_identificada: Optional[str] = ""
     segmento: Optional[str] = ""
     solucao_recomendada: Optional[str] = ""
 
@@ -27,6 +27,7 @@ class Lead(LeadBase):
     last_interaction: Optional[str] = None
     created_at: Optional[str] = None
     has_messages: Optional[bool] = False
+    mensagem_enviada: Optional[bool] = False
 
     model_config = ConfigDict(from_attributes=True)
 

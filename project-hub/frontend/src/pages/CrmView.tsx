@@ -17,7 +17,7 @@ export default function CrmView() {
   const [statusFilter, setStatusFilter] = useState('');
   const [originFilter, setOriginFilter] = useState('');
   const [segmentFilter, setSegmentFilter] = useState('');
-  const [cityFilter, setCityFilter] = useState('');
+  const [falhaFilter, setFalhaFilter] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Selected Lead Details drawer
@@ -74,10 +74,10 @@ export default function CrmView() {
     return Array.from(s).sort();
   }, [leads]);
 
-  const dynamicCities = useMemo(() => {
+  const dynamicFalhas = useMemo(() => {
     const s = new Set<string>();
     leads.forEach(l => {
-      if (l.cidade && l.cidade.trim() !== '') s.add(l.cidade);
+      if (l.falha_identificada && l.falha_identificada.trim() !== '') s.add(l.falha_identificada);
     });
     return Array.from(s).sort();
   }, [leads]);
@@ -97,12 +97,12 @@ export default function CrmView() {
       if (!leadsRes.ok) throw new Error('Falha ao buscar leads');
       const leadsData = await leadsRes.json();
       
-      // Sort leads: those with message history first, then by last_interaction descending
+      // Sort leads: those with sent messages first, then by last_interaction descending
       const sortedLeads = [...leadsData].sort((a, b) => {
-        const aHasMsg = a.has_messages ? 1 : 0;
-        const bHasMsg = b.has_messages ? 1 : 0;
-        if (aHasMsg !== bHasMsg) {
-          return bHasMsg - aHasMsg; // has_messages first
+        const aSent = a.mensagem_enviada ? 1 : 0;
+        const bSent = b.mensagem_enviada ? 1 : 0;
+        if (aSent !== bSent) {
+          return bSent - aSent; // mensagem_enviada first
         }
         const aDate = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
         const bDate = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
@@ -295,8 +295,8 @@ export default function CrmView() {
       setMessages([...messages, newMsg]);
       setWhatsappMessage('');
 
-      // Update lead last interaction time in local list
-      setLeads(leads.map(l => l.id === selectedLead.id ? { ...l, last_interaction: new Date().toISOString() } : l));
+      // Update lead last interaction time and set message_sent status in local list
+      setLeads(leads.map(l => l.id === selectedLead.id ? { ...l, last_interaction: new Date().toISOString(), mensagem_enviada: true } : l));
 
       // Append message_sent event to local activities list
       const timestamp = new Date().toISOString();
@@ -342,26 +342,40 @@ export default function CrmView() {
     }
   };
 
-  // Filter leads locally
-  const filteredLeads = leads.filter(lead => {
-    const matchesStatus = statusFilter ? lead.status === statusFilter : true;
-    const matchesOrigin = originFilter ? lead.origin === originFilter : true;
-    const matchesSegment = segmentFilter ? lead.segmento === segmentFilter : true;
-    const matchesCity = cityFilter ? lead.cidade === cityFilter : true;
-    
-    const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = searchTerm 
-      ? (lead.company_name?.toLowerCase().includes(searchLower) || 
-         lead.email?.toLowerCase().includes(searchLower) ||
-         lead.whatsapp?.includes(searchTerm) ||
-         lead.responsible?.toLowerCase().includes(searchLower) ||
-         lead.segmento?.toLowerCase().includes(searchLower) ||
-         lead.cidade?.toLowerCase().includes(searchLower) ||
-         lead.notes?.toLowerCase().includes(searchLower))
-      : true;
+  // Filter and sort leads locally
+  const filteredLeads = useMemo(() => {
+    const filtered = leads.filter(lead => {
+      const matchesStatus = statusFilter ? lead.status === statusFilter : true;
+      const matchesOrigin = originFilter ? lead.origin === originFilter : true;
+      const matchesSegment = segmentFilter ? lead.segmento === segmentFilter : true;
+      const matchesFalha = falhaFilter ? lead.falha_identificada === falhaFilter : true;
       
-    return matchesStatus && matchesOrigin && matchesSegment && matchesCity && matchesSearch;
-  });
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = searchTerm 
+        ? (lead.company_name?.toLowerCase().includes(searchLower) || 
+           lead.email?.toLowerCase().includes(searchLower) ||
+           lead.whatsapp?.includes(searchTerm) ||
+           lead.responsible?.toLowerCase().includes(searchLower) ||
+           lead.segmento?.toLowerCase().includes(searchLower) ||
+           lead.falha_identificada?.toLowerCase().includes(searchLower) ||
+           lead.notes?.toLowerCase().includes(searchLower))
+        : true;
+        
+      return matchesStatus && matchesOrigin && matchesSegment && matchesFalha && matchesSearch;
+    });
+
+    // Sort: leads with user messages sent first, then by last_interaction descending
+    return filtered.sort((a, b) => {
+      const aSent = a.mensagem_enviada ? 1 : 0;
+      const bSent = b.mensagem_enviada ? 1 : 0;
+      if (aSent !== bSent) {
+        return bSent - aSent; // mensagem_enviada first
+      }
+      const aDate = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
+      const bDate = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
+      return bDate - aDate;
+    });
+  }, [leads, statusFilter, originFilter, segmentFilter, falhaFilter, searchTerm]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -518,26 +532,26 @@ export default function CrmView() {
                 ))}
               </select>
 
-              {/* City Filter */}
+              {/* Failure Filter */}
               <select
-                value={cityFilter}
-                onChange={(e) => setCityFilter(e.target.value)}
+                value={falhaFilter}
+                onChange={(e) => setFalhaFilter(e.target.value)}
                 className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
               >
-                <option value="">Cidade (Todos)</option>
-                {dynamicCities.map(cit => (
-                  <option key={cit} value={cit}>{cit}</option>
+                <option value="">Falha Encontrada (Todos)</option>
+                {dynamicFalhas.map(fal => (
+                  <option key={fal} value={fal}>{fal}</option>
                 ))}
               </select>
 
               {/* Clear Filters Button */}
-              {(statusFilter || originFilter || segmentFilter || cityFilter || searchTerm) && (
+              {(statusFilter || originFilter || segmentFilter || falhaFilter || searchTerm) && (
                 <button
                   onClick={() => {
                     setStatusFilter('');
                     setOriginFilter('');
                     setSegmentFilter('');
-                    setCityFilter('');
+                    setFalhaFilter('');
                     setSearchTerm('');
                   }}
                   className="px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all cursor-pointer shadow-sm shadow-rose-100/50"
@@ -565,7 +579,7 @@ export default function CrmView() {
                     <th className="py-3 px-2">ID</th>
                     <th className="py-3 px-2">Empresa</th>
                     <th className="py-3 px-2">Segmento</th>
-                    <th className="py-3 px-2">Cidade</th>
+                    <th className="py-3 px-2">Falha Encontrada</th>
                     <th className="py-3 px-2">WhatsApp</th>
                     <th className="py-3 px-2">Status</th>
                     <th className="py-3 px-2">Método de Contato</th>
@@ -586,7 +600,7 @@ export default function CrmView() {
                         <td className="py-3.5 px-2 text-slate-400">#{lead.id}</td>
                         <td className="py-3.5 px-2 text-slate-800">{lead.company_name}</td>
                         <td className="py-3.5 px-2 text-slate-500">{lead.segmento || '-'}</td>
-                        <td className="py-3.5 px-2 text-slate-500">{lead.cidade || '-'}</td>
+                        <td className="py-3.5 px-2 text-slate-500">{lead.falha_identificada || '-'}</td>
                         <td className="py-3.5 px-2">{lead.whatsapp || '-'}</td>
                         <td className="py-3.5 px-2">
                           <span className={`px-2 py-0.5 rounded-full border text-[10px] uppercase font-bold tracking-wide ${getStatusColor(lead.status)}`}>
@@ -708,11 +722,11 @@ export default function CrmView() {
 
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cidade</label>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Falha Encontrada</label>
                       <input
                         type="text"
-                        value={editingLead.cidade || ''}
-                        onChange={(e) => setEditingLead({ ...editingLead, cidade: e.target.value })}
+                        value={editingLead.falha_identificada || ''}
+                        onChange={(e) => setEditingLead({ ...editingLead, falha_identificada: e.target.value })}
                         className="w-full px-3 py-1.5 rounded-lg border border-violet-100 bg-white/50 text-xs font-semibold focus:border-purple-500 outline-none"
                       />
                     </div>

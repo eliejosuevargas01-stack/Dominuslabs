@@ -21,7 +21,7 @@ MOCK_LEADS = [
         "responsible": "Eliezer",
         "last_interaction": "2026-06-10T10:00:00Z",
         "created_at": "2026-06-09T08:30:00Z",
-        "cidade": "São Paulo",
+        "falha_identificada": "Sem Landing Page",
         "segmento": "Dentista",
         "solucao_recomendada": "Landing Page"
     },
@@ -38,7 +38,7 @@ MOCK_LEADS = [
         "responsible": "Eliezer",
         "last_interaction": "2026-06-10T14:30:00Z",
         "created_at": "2026-06-08T09:15:00Z",
-        "cidade": "Rio de Janeiro",
+        "falha_identificada": "Sem Pixel do Facebook",
         "segmento": "Advogado",
         "solucao_recomendada": "CRM"
     },
@@ -55,7 +55,7 @@ MOCK_LEADS = [
         "responsible": "Eliezer",
         "last_interaction": "2026-06-09T18:00:00Z",
         "created_at": "2026-06-05T11:00:00Z",
-        "cidade": "Belo Horizonte",
+        "falha_identificada": "Site lento no mobile",
         "segmento": "Energia Solar",
         "solucao_recomendada": "SEO"
     },
@@ -72,7 +72,7 @@ MOCK_LEADS = [
         "responsible": "Eliezer",
         "last_interaction": "2026-06-10T16:15:00Z",
         "created_at": "2026-06-09T15:20:00Z",
-        "cidade": "São Paulo",
+        "falha_identificada": "Sem botão de WhatsApp",
         "segmento": "Restaurante",
         "solucao_recomendada": "Cardápio Digital"
     },
@@ -89,7 +89,7 @@ MOCK_LEADS = [
         "responsible": "Eliezer",
         "last_interaction": "2026-06-10T11:00:00Z",
         "created_at": "2026-06-07T14:40:00Z",
-        "cidade": "Curitiba",
+        "falha_identificada": "Formulário de contato quebrado",
         "segmento": "Academia",
         "solucao_recomendada": "Landing Page"
     }
@@ -180,6 +180,15 @@ def map_n8n_lead(lead: dict) -> dict:
         has_messages = True
     elif lead.get("has_messages") is True or lead.get("has_messages") == "true":
         has_messages = True
+        
+    # Determine if a message was sent by the user (mensagem_enviada)
+    mensagem_enviada = False
+    if lead_id in MOCK_CONVERSATIONS:
+        if any(m.get("sender") == "user" for m in MOCK_CONVERSATIONS[lead_id]):
+            mensagem_enviada = True
+    raw_me = lead.get("mensagem_enviada") or lead.get("has_sent_message")
+    if raw_me is True or str(raw_me).strip().lower() == "true":
+        mensagem_enviada = True
     
     # Map notes
     notes = lead.get("notes") or lead.get("falha_identificada") or lead.get("dor_identificada") or ""
@@ -201,10 +210,12 @@ def map_n8n_lead(lead: dict) -> dict:
     created_at = lead.get("created_at") or lead.get("createdAt")
     
     # Extract and clean additional fields, handling None, "null", and whitespace
-    raw_cidade = lead.get("cidade")
-    cidade = ""
-    if raw_cidade is not None and str(raw_cidade).strip().lower() not in ("null", ""):
-        cidade = str(raw_cidade).strip()
+    raw_falha = lead.get("falha_identificada")
+    falha_identificada = ""
+    if raw_falha is not None and str(raw_falha).strip().lower() not in ("null", ""):
+        falha_identificada = str(raw_falha).strip()
+    elif notes:
+        falha_identificada = notes
         
     raw_segmento = lead.get("segmento")
     segmento = ""
@@ -230,9 +241,10 @@ def map_n8n_lead(lead: dict) -> dict:
         "responsible": responsible,
         "last_interaction": last_interaction,
         "created_at": created_at,
-        "cidade": cidade,
+        "falha_identificada": falha_identificada,
         "segmento": segmento,
-        "solucao_recomendada": solucao_recomendada
+        "solucao_recomendada": solucao_recomendada,
+        "mensagem_enviada": mensagem_enviada
     }
 
 def clean_n8n_response(res_data: Any) -> Any:
@@ -273,9 +285,9 @@ class N8NService:
         if not url:
             logger.info("CRM_GET_LEADS_WEBHOOK_URL not configured. Returning mock leads.")
             mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
-            # stable sort: last_interaction descending, then has_messages descending
+            # stable sort: last_interaction descending, then mensagem_enviada descending
             mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
-            mapped_mock.sort(key=lambda x: x.get("has_messages", False), reverse=True)
+            mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
             return mapped_mock
         
         # Append action parameter to CRM N8N query parameters
@@ -295,19 +307,19 @@ class N8NService:
                 else:
                     mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
                     mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
-                    mapped_mock.sort(key=lambda x: x.get("has_messages", False), reverse=True)
+                    mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
                     return mapped_mock
                 
                 # Apply mapper and perform stable sorting
                 mapped_leads = [map_n8n_lead(l) for l in raw_leads if isinstance(l, dict)]
                 mapped_leads.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
-                mapped_leads.sort(key=lambda x: x.get("has_messages", False), reverse=True)
+                mapped_leads.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
                 return mapped_leads
             except Exception as e:
                 logger.error(f"Error calling GET leads webhook: {e}. Falling back to mock data.")
                 mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
                 mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
-                mapped_mock.sort(key=lambda x: x.get("has_messages", False), reverse=True)
+                mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
                 return mapped_mock
 
     @staticmethod
