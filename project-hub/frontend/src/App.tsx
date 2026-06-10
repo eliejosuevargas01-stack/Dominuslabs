@@ -4,7 +4,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminProjectView from './pages/AdminProjectView';
 import PublicProjectView from './pages/PublicProjectView';
 import Login from './pages/Login';
-import { LogOut, Sparkles } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import './App.css';
 import './index.css';
 

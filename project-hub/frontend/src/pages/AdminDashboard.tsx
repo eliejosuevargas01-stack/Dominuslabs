@@ -12,8 +12,7 @@ import {
   Globe, 
   Loader2, 
   X,
-  FileCode2,
-  Calendar
+  FileCode2
 } from 'lucide-react';
 
 const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
