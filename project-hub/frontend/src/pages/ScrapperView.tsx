@@ -13,10 +13,10 @@ export default function ScrapperView() {
   const [error, setError] = useState<string | null>(null);
 
   const availablePlatforms = [
-    { id: 'Google Maps', label: 'Google Maps' },
-    { id: 'Instagram', label: 'Instagram' },
-    { id: 'Meta Ads Library', label: 'Meta Ads Library' },
-    { id: 'Facebook', label: 'Facebook' }
+    { id: 'whatsapp', label: 'WhatsApp' },
+    { id: 'instagram', label: 'Instagram' },
+    { id: 'email', label: 'E-mail' },
+    { id: 'phone', label: 'Telefone' }
   ];
 
   const handleTogglePlatform = (id: string) => {
@@ -121,10 +121,10 @@ export default function ScrapperView() {
             </p>
           </div>
 
-          {/* Platforms Multi-Select */}
+           {/* Platforms Multi-Select */}
           <div className="space-y-2">
             <label className="block text-sm font-bold text-slate-700">
-              Plataformas Alvo
+              Canais de Contato Exigidos (Plataformas Alvo)
             </label>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {availablePlatforms.map((platform) => {
@@ -150,6 +150,9 @@ export default function ScrapperView() {
                 );
               })}
             </div>
+            <p className="text-[11px] text-slate-400">
+              O scrapper buscará apenas leads que possuam pelo menos um dos meios de contato selecionados acima.
+            </p>
           </div>
 
           {/* Numeric Limits */}
