@@ -142,7 +142,37 @@ def map_n8n_lead(lead: dict) -> dict:
     else:
         status = status_raw
         
-    origin = lead.get("origem") or lead.get("origin") or "Outro"
+    # Infer contact method / origin
+    origin_raw = lead.get("origem") or lead.get("origin") or lead.get("plataforma_veiculada") or ""
+    origin_lower = str(origin_raw).lower()
+    
+    if "whatsapp" in origin_lower or "telefone" in origin_lower:
+        origin = "WhatsApp"
+    elif "instagram" in origin_lower:
+        origin = "Instagram"
+    elif "email" in origin_lower:
+        origin = "E-mail"
+    elif "facebook" in origin_lower:
+        origin = "Facebook"
+    elif "maps" in origin_lower or "google" in origin_lower:
+        origin = "Google Maps"
+    else:
+        # Fallback to inferring from populated fields
+        if instagram and instagram != "null":
+            origin = "Instagram"
+        elif whatsapp and whatsapp != "null":
+            origin = "WhatsApp"
+        elif email and email != "null":
+            origin = "E-mail"
+        else:
+            origin = "Outro"
+            
+    # Determine if there are messages
+    has_messages = False
+    if lead_id in MOCK_CONVERSATIONS and len(MOCK_CONVERSATIONS[lead_id]) > 0:
+        has_messages = True
+    elif lead.get("has_messages") is True or lead.get("has_messages") == "true":
+        has_messages = True
     
     # Map notes
     notes = lead.get("notes") or lead.get("falha_identificada") or lead.get("dor_identificada") or ""
@@ -165,6 +195,7 @@ def map_n8n_lead(lead: dict) -> dict:
         "email": email,
         "status": status,
         "origin": origin,
+        "has_messages": has_messages,
         "notes": notes,
         "proposal": proposal,
         "responsible": responsible,
@@ -209,7 +240,11 @@ class N8NService:
         url = settings.CRM_GET_LEADS_WEBHOOK_URL
         if not url:
             logger.info("CRM_GET_LEADS_WEBHOOK_URL not configured. Returning mock leads.")
-            return MOCK_LEADS
+            mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
+            # stable sort: last_interaction descending, then has_messages descending
+            mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
+            mapped_mock.sort(key=lambda x: x.get("has_messages", False), reverse=True)
+            return mapped_mock
         
         # Append action parameter to CRM N8N query parameters
         sep = "&" if "?" in url else "?"
@@ -226,13 +261,22 @@ class N8NService:
                 elif isinstance(data, dict) and "leads" in data:
                     raw_leads = data["leads"]
                 else:
-                    return MOCK_LEADS
+                    mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
+                    mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
+                    mapped_mock.sort(key=lambda x: x.get("has_messages", False), reverse=True)
+                    return mapped_mock
                 
-                # Apply mapper to clean the leads
-                return [map_n8n_lead(l) for l in raw_leads if isinstance(l, dict)]
+                # Apply mapper and perform stable sorting
+                mapped_leads = [map_n8n_lead(l) for l in raw_leads if isinstance(l, dict)]
+                mapped_leads.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
+                mapped_leads.sort(key=lambda x: x.get("has_messages", False), reverse=True)
+                return mapped_leads
             except Exception as e:
                 logger.error(f"Error calling GET leads webhook: {e}. Falling back to mock data.")
-                return MOCK_LEADS
+                mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
+                mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
+                mapped_mock.sort(key=lambda x: x.get("has_messages", False), reverse=True)
+                return mapped_mock
 
     @staticmethod
     async def update_lead(lead_id: str, payload: dict) -> dict:
