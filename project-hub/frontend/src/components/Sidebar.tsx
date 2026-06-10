@@ -45,9 +45,7 @@ export default function Sidebar({ handleLogout }: SidebarProps) {
         {/* Logo and Menu Links */}
         <div className="p-6">
           <Link to="/project-hub" className="flex items-center gap-2 group mb-8 mt-4 md:mt-0">
-            <span className="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-700 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-md group-hover:scale-105 transition-transform">
-              D
-            </span>
+            <img src="/logo.png" alt="Dominus Labs" className="w-8 h-8 rounded-lg object-contain shadow-sm group-hover:scale-105 transition-transform" />
             <span className="font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-violet-800 via-indigo-700 to-emerald-600 bg-clip-text text-transparent">
               Dominuslabs
             </span>

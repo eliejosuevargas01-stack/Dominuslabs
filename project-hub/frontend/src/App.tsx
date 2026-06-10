@@ -45,9 +45,7 @@ function Header() {
     <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-md border-b border-violet-100 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <Link to="/project-hub" className="flex items-center gap-2 group md:hidden ml-10">
-          <span className="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-700 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-md group-hover:scale-105 transition-transform">
-            D
-          </span>
+          <img src="/logo.png" alt="Dominus Labs" className="w-8 h-8 rounded-lg object-contain shadow-sm group-hover:scale-105 transition-transform" />
           <span className="font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-violet-800 via-indigo-700 to-emerald-600 bg-clip-text text-transparent group-hover:opacity-90 transition-opacity">
             Dominuslabs
           </span>

@@ -49,9 +49,7 @@ export default function Login() {
 
         {/* Heading Logo */}
         <div className="text-center space-y-2">
-          <div className="mx-auto w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-700 to-indigo-600 flex items-center justify-center text-white font-bold text-2xl shadow-lg">
-            D
-          </div>
+          <img src="/logo.png" alt="Dominus Labs" className="mx-auto w-12 h-12 rounded-2xl object-contain shadow-lg" />
           <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-violet-800 to-indigo-700 bg-clip-text text-transparent">
             Dominuslabs
           </h1>
