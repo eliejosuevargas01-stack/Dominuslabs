@@ -199,3 +199,79 @@ async def deploy_webhook(request: Request, db: Session = Depends(get_db)):
     )
 
     return {"status": "success"}
+
+@router.post("/inbound/whatsapp")
+async def whatsapp_inbound_webhook(request: Request):
+    """
+    Inbound webhook for WhatsApp messages.
+    Receives message payload and appends to in-memory conversation list.
+    """
+    payload = await request.json()
+    lead_id = payload.get("lead_id")
+    message_text = payload.get("message")
+    sender = payload.get("sender", "lead")
+    
+    if not lead_id or not message_text:
+        return {"status": "ignored", "reason": "missing lead_id or message"}
+        
+    from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS
+    
+    new_msg = {
+        "id": f"msg_in_{int(datetime.utcnow().timestamp())}",
+        "sender": sender,
+        "message": message_text,
+        "channel": "whatsapp",
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+    
+    if lead_id not in MOCK_CONVERSATIONS:
+        MOCK_CONVERSATIONS[lead_id] = []
+    MOCK_CONVERSATIONS[lead_id].append(new_msg)
+    
+    # Update last interaction timestamp on lead
+    for lead in MOCK_LEADS:
+        if lead["id"] == lead_id:
+            lead["last_interaction"] = datetime.utcnow().isoformat() + "Z"
+            if sender == "lead":
+                lead["status"] = "RESPONDED" # Toggle status to responded
+            break
+            
+    return {"status": "success", "message": new_msg}
+
+@router.post("/inbound/instagram")
+async def instagram_inbound_webhook(request: Request):
+    """
+    Inbound webhook for Instagram messages.
+    Receives message payload and appends to in-memory conversation list.
+    """
+    payload = await request.json()
+    lead_id = payload.get("lead_id")
+    message_text = payload.get("message")
+    sender = payload.get("sender", "lead")
+    
+    if not lead_id or not message_text:
+        return {"status": "ignored", "reason": "missing lead_id or message"}
+        
+    from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS
+    
+    new_msg = {
+        "id": f"msg_in_{int(datetime.utcnow().timestamp())}",
+        "sender": sender,
+        "message": message_text,
+        "channel": "instagram",
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+    
+    if lead_id not in MOCK_CONVERSATIONS:
+        MOCK_CONVERSATIONS[lead_id] = []
+    MOCK_CONVERSATIONS[lead_id].append(new_msg)
+    
+    # Update last interaction timestamp on lead
+    for lead in MOCK_LEADS:
+        if lead["id"] == lead_id:
+            lead["last_interaction"] = datetime.utcnow().isoformat() + "Z"
+            if sender == "lead":
+                lead["status"] = "RESPONDED"
+            break
+            
+    return {"status": "success", "message": new_msg}

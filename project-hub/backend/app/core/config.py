@@ -37,6 +37,18 @@ class Settings(BaseSettings):
         os.makedirs(self.UPLOAD_DIR, exist_ok=True)
         return f"sqlite:///{os.path.join(self.UPLOAD_DIR, 'dominuslabs.db')}"
 
+    # N8N Integration Webhooks
+    SCRAPPER_WEBHOOK_URL: str = os.getenv("SCRAPPER_WEBHOOK_URL", "")
+    CRM_GET_LEADS_WEBHOOK_URL: str = os.getenv("CRM_GET_LEADS_WEBHOOK_URL", "")
+    CRM_CREATE_LEAD_WEBHOOK_URL: str = os.getenv("CRM_CREATE_LEAD_WEBHOOK_URL", "")
+    CRM_UPDATE_LEAD_WEBHOOK_URL: str = os.getenv("CRM_UPDATE_LEAD_WEBHOOK_URL", "")
+    CRM_DELETE_LEAD_WEBHOOK_URL: str = os.getenv("CRM_DELETE_LEAD_WEBHOOK_URL", "")
+    CRM_GET_MESSAGES_WEBHOOK_URL: str = os.getenv("CRM_GET_MESSAGES_WEBHOOK_URL", "")
+    CRM_CREATE_MESSAGE_WEBHOOK_URL: str = os.getenv("CRM_CREATE_MESSAGE_WEBHOOK_URL", "")
+    CRM_SEND_WHATSAPP_WEBHOOK_URL: str = os.getenv("CRM_SEND_WHATSAPP_WEBHOOK_URL", "")
+    CRM_UPDATE_STATUS_WEBHOOK_URL: str = os.getenv("CRM_UPDATE_STATUS_WEBHOOK_URL", "")
+    CRM_CREATE_ACTIVITY_WEBHOOK_URL: str = os.getenv("CRM_CREATE_ACTIVITY_WEBHOOK_URL", "")
+
     class Config:
         case_sensitive = True
 
