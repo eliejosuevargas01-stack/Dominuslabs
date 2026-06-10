@@ -1,11 +1,29 @@
 from fastapi import APIRouter, Depends, Request, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
+import json
 
 from app.core.database import get_db
 from app.services.webhook_service import webhook_service
 
 router = APIRouter()
+
+async def get_payload(request: Request) -> dict:
+    content_type = request.headers.get("content-type", "")
+    if "application/x-www-form-urlencoded" in content_type:
+        form_data = await request.form()
+        payload_str = form_data.get("payload")
+        if not payload_str:
+            return {}
+        try:
+            return json.loads(payload_str)
+        except Exception:
+            return {}
+    else:
+        try:
+            return await request.json()
+        except Exception:
+            return {}
 
 @router.post("/github/{public_token}")
 async def github_webhook_by_token(public_token: str, request: Request, db: Session = Depends(get_db)):
@@ -15,7 +33,7 @@ async def github_webhook_by_token(public_token: str, request: Request, db: Sessi
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    payload = await request.json()
+    payload = await get_payload(request)
 
     # 2. Native GitHub push payload format
     if "commits" in payload:
@@ -77,7 +95,7 @@ async def github_webhook_by_token(public_token: str, request: Request, db: Sessi
 @router.post("/github")
 async def github_webhook(request: Request, db: Session = Depends(get_db)):
     # Supports both standard GitHub push webhook payloads and the custom mock payload
-    payload = await request.json()
+    payload = await get_payload(request)
 
     # 1. Native GitHub push payload format
     if "repository" in payload and "commits" in payload:
