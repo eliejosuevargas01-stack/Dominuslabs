@@ -9,10 +9,58 @@ router = APIRouter()
 
 @router.post("/github")
 async def github_webhook(request: Request, db: Session = Depends(get_db)):
-    # In a real app, verify signature and parse payload.
-    # We are simulating parsing the expected fields.
+    # Supports both standard GitHub push webhook payloads and the custom mock payload
     payload = await request.json()
 
+    # 1. Native GitHub push payload format
+    if "repository" in payload and "commits" in payload:
+        repo_url = payload.get("repository", {}).get("html_url")
+        if not repo_url:
+            return {"status": "ignored", "reason": "repository html_url missing"}
+
+        # Look up project by matching github_url
+        from app.models.project import Project
+        search_url = repo_url.rstrip("/")
+        project = db.query(Project).filter(
+            (Project.github_url.like(f"%{search_url}%")) | 
+            (Project.github_url.like(f"%{search_url}.git%"))
+        ).first()
+
+        if not project:
+            return {"status": "ignored", "reason": f"no project found matching github_url: {repo_url}"}
+
+        commits = payload.get("commits", [])
+        processed_count = 0
+        for c in commits:
+            commit_hash = c.get("id")
+            message = c.get("message")
+            author = c.get("author", {}).get("name", "Unknown")
+            date_str = c.get("timestamp")
+
+            if not (commit_hash and message):
+                continue
+
+            try:
+                # GitHub dates can end in 'Z' or offset, replace Z with offset for compatibility
+                if date_str and date_str.endswith("Z"):
+                    date_str = date_str.replace("Z", "+00:00")
+                commit_date = datetime.fromisoformat(date_str) if date_str else datetime.utcnow()
+            except Exception:
+                commit_date = datetime.utcnow()
+
+            webhook_service.process_github_webhook(
+                db=db,
+                project_id=project.id,
+                commit_hash=commit_hash,
+                message=message,
+                author=author,
+                commit_date=commit_date
+            )
+            processed_count += 1
+            
+        return {"status": "success", "processed_commits": processed_count}
+
+    # 2. Custom mock payload format fallback
     project_id = payload.get("project_id")
     commit_hash = payload.get("commit_hash")
     message = payload.get("commit_message")
@@ -20,7 +68,6 @@ async def github_webhook(request: Request, db: Session = Depends(get_db)):
     date_str = payload.get("date")
 
     if not all([project_id, commit_hash, message, author, date_str]):
-        # Just return 200 for now if structure is wrong, as this is a stub
         return {"status": "ignored", "reason": "missing fields"}
 
     try:
