@@ -83,10 +83,16 @@ def create_task(project_id: int, task_in: ProjectTaskCreate, db: Session = Depen
 
 @router.put("/tasks/{task_id}", response_model=ProjectTask)
 def update_task(task_id: int, task_in: ProjectTaskUpdate, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
-    task = task_repo.update(db, task_id=task_id, obj_in=task_in)
+    from app.models.task import ProjectTask, TaskStatus
+    task = db.query(ProjectTask).filter(ProjectTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    return task
+        
+    # Block undoing tasks completed via GitHub Webhook
+    if task.completed_by_github and task_in.status and task_in.status != TaskStatus.DONE:
+        raise HTTPException(status_code=400, detail="Tarefas concluídas pelo GitHub não podem ser desfeitas.")
+        
+    return task_repo.update(db, task_id=task_id, obj_in=task_in)
 
 # Additional reads for logs and assets
 @router.get("/{project_id}/assets", response_model=List[ProjectAsset])
