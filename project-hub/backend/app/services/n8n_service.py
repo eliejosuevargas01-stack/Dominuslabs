@@ -122,9 +122,17 @@ class N8NService:
             logger.info("SCRAPPER_WEBHOOK_URL not configured. Returning mock success.")
             return {"status": "success", "message": "Scrapper triggered (MOCK Mode)", "data": payload}
         
+        # Map frontend platforms keys to N8N's expected target_platforms field name
+        outgoing_payload = {
+            "queries": payload.get("queries", []),
+            "min_results": payload.get("min_results", 1000),
+            "max_results": payload.get("max_results", 2000),
+            "target_platforms": payload.get("platforms", [])
+        }
+        
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(url, json=payload, timeout=30.0)
+                response = await client.post(url, json=outgoing_payload, timeout=30.0)
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
@@ -138,11 +146,14 @@ class N8NService:
             logger.info("CRM_GET_LEADS_WEBHOOK_URL not configured. Returning mock leads.")
             return MOCK_LEADS
         
+        # Append action parameter to CRM N8N query parameters
+        sep = "&" if "?" in url else "?"
+        endpoint_url = f"{url}{sep}action=get_leads"
+        
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.get(url, timeout=30.0)
+                response = await client.get(endpoint_url, timeout=30.0)
                 response.raise_for_status()
-                # Accept a list directly or a dict with a list key
                 data = response.json()
                 if isinstance(data, list):
                     return data
@@ -169,20 +180,20 @@ class N8NService:
 
         if not url:
             logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead updated locally in-memory.")
-            # Return the updated lead from mock list
             updated_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
             return updated_lead or {"id": lead_id, **payload}
             
+        # Append action parameter to CRM N8N query parameters
+        sep = "&" if "?" in url else "?"
+        endpoint_url = f"{url}{sep}action=update_lead&id={lead_id}"
+        
         async with httpx.AsyncClient() as client:
             try:
-                # Replace placeholder {id} if N8N expects it in URL, or send as payload parameter
-                endpoint_url = url.replace("{id}", lead_id)
                 response = await client.put(endpoint_url, json=payload, timeout=30.0)
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
                 logger.error(f"Error calling UPDATE lead webhook: {e}")
-                # Return local updated lead on failure
                 return next((l for l in MOCK_LEADS if l["id"] == lead_id), {"id": lead_id, **payload})
 
     @staticmethod
@@ -192,9 +203,12 @@ class N8NService:
             logger.info(f"CRM_GET_MESSAGES_WEBHOOK_URL not configured. Returning mock messages for {lead_id}.")
             return MOCK_CONVERSATIONS.get(lead_id, [])
             
+        # Append action parameter to CRM N8N query parameters
+        sep = "&" if "?" in url else "?"
+        endpoint_url = f"{url}{sep}action=get_messages&lead_id={lead_id}"
+        
         async with httpx.AsyncClient() as client:
             try:
-                endpoint_url = url.replace("{lead_id}", lead_id)
                 response = await client.get(endpoint_url, timeout=30.0)
                 response.raise_for_status()
                 data = response.json()
@@ -212,6 +226,10 @@ class N8NService:
         url = settings.CRM_SEND_WHATSAPP_WEBHOOK_URL
         lead_id = payload.get("lead_id")
         message_text = payload.get("message")
+        phone = payload.get("phone", "")
+        
+        # Clean phone number to digits-only for standard whatsapp api gateways
+        cleaned_phone = "".join(c for c in phone if c.isdigit())
         
         # Append message locally in mock conversations to show live updates
         new_msg = {
@@ -246,11 +264,26 @@ class N8NService:
             logger.info("CRM_SEND_WHATSAPP_WEBHOOK_URL not configured. Message logged locally in-memory.")
             return new_msg
             
+        # Match Evolution API payload structure as well as direct params
+        outgoing_payload = {
+            "number": cleaned_phone,
+            "body": message_text,
+            "phone": phone,
+            "message": message_text,
+            "lead_id": lead_id
+        }
+            
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(url, json=payload, timeout=30.0)
+                response = await client.post(url, json=outgoing_payload, timeout=30.0)
                 response.raise_for_status()
-                return response.json()
+                try:
+                    res_json = response.json()
+                    if isinstance(res_json, dict) and "message" in res_json:
+                        return res_json
+                except Exception:
+                    pass
+                return new_msg
             except Exception as e:
                 logger.error(f"Error calling SEND whatsapp message webhook: {e}")
                 return new_msg
@@ -272,9 +305,13 @@ class N8NService:
             logger.info("CRM_CREATE_ACTIVITY_WEBHOOK_URL not configured. Activity logged locally.")
             return new_activity
             
+        # Append action parameter to CRM N8N query parameters
+        sep = "&" if "?" in url else "?"
+        endpoint_url = f"{url}{sep}action=create_activity&lead_id={lead_id}"
+            
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(url, json=new_activity, timeout=30.0)
+                response = await client.post(endpoint_url, json=new_activity, timeout=30.0)
                 response.raise_for_status()
                 return response.json()
             except Exception as e:

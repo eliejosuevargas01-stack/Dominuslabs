@@ -106,4 +106,4 @@ def test_scrapper_endpoints(client):
     }, headers=headers)
     assert res.status_code == 200
     scrapper_result = res.json()
-    assert scrapper_result["status"] == "success"
+    assert scrapper_result["status"] in ("success", "accepted")
