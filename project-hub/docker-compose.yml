@@ -11,6 +11,8 @@ services:
       - ./uploads:/app/uploads
     environment:
       - BACKEND_CORS_ORIGINS=["http://localhost:3000","http://localhost:80"]
+      - ADMIN_USERNAME=Eliejosuevargas01
+      - ADMIN_PASSWORD=change_this_password
 
   frontend:
     build:
