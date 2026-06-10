@@ -7,7 +7,8 @@ import {
   uploadAsset, 
   fetchCommits, 
   fetchDeploys,
-  fetchTasks
+  fetchTasks,
+  API_BASE
 } from '../services/api';
 import ProgressBar from '../components/ProgressBar';
 import TaskChecklist from '../components/TaskChecklist';
@@ -48,7 +49,7 @@ const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8001/api/v1`;
+const API_BASE_URL = API_BASE;
 
 export default function AdminProjectView() {
   const { id } = useParams<{ id: string }>();
