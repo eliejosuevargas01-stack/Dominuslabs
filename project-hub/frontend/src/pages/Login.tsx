@@ -30,6 +30,9 @@ export default function Login() {
       setError('');
       const data = await loginUser(username.trim(), password.trim());
       localStorage.setItem("admin_token", data.access_token);
+      if (data.refresh_token) {
+        localStorage.setItem("admin_refresh_token", data.refresh_token);
+      }
       navigate('/admin');
     } catch (err: any) {
       console.error(err);

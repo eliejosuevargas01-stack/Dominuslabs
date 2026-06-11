@@ -62,6 +62,12 @@ def decode_access_token(token: str) -> dict:
     except Exception:
         return None
 
+def create_refresh_token(data: dict, expires_in: int = 604800) -> str:
+    """Create a refresh token valid for 7 days (604800 seconds)"""
+    payload = data.copy()
+    payload["type"] = "refresh"
+    return create_access_token(payload, expires_in=expires_in)
+
 def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
     token = credentials.credentials
     payload = decode_access_token(token)
@@ -69,5 +75,10 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
         raise HTTPException(
             status_code=401,
             detail="Token de autenticação inválido ou expirado"
+        )
+    if payload.get("type") == "refresh":
+        raise HTTPException(
+            status_code=401,
+            detail="Token de acesso inválido (enviado token de atualização)"
         )
     return payload.get("sub", "")
