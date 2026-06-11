@@ -7,7 +7,7 @@ class LeadBase(BaseModel):
     instagram: Optional[str] = None
     whatsapp: Optional[str] = None
     email: Optional[str] = None
-    status: Optional[str] = "DISCOVERED"
+    status: Optional[str] = "Prospectado"
     origin: Optional[str] = "Outro"
     notes: Optional[str] = None
     proposal: Optional[str] = None
@@ -51,6 +51,7 @@ class MessageSendPayload(BaseModel):
 class CrmDashboardMetrics(BaseModel):
     total_leads: int
     leads_novos: int
+    conversas_iniciadas: int
     mensagens_enviadas: int
     mensagens_recebidas: int
     respostas_pendentes: int

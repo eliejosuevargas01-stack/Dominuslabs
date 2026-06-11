@@ -2,9 +2,9 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Users, UserCheck, MessageSquare, Send, Check, 
   Clipboard, Search, Loader2, 
-  Activity, Sparkles, MessageCircle, AlertCircle, FileText
+  Sparkles, MessageCircle, AlertCircle, FileText
 } from 'lucide-react';
-import { API_BASE } from '../services/api';
+import { API_BASE, fetchWithAuth } from '../services/api';
 
 export default function CrmView() {
   const [leads, setLeads] = useState<any[]>([]);
@@ -32,9 +32,7 @@ export default function CrmView() {
   const [whatsappMessage, setWhatsappMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
 
-  // Activity Log State
-  const [activities, setActivities] = useState<any[]>([]);
-  const [loadingActivities, setLoadingActivities] = useState(false);
+
 
   // Proposal copy feedback
   const [copiedProposal, setCopiedProposal] = useState(false);
@@ -42,9 +40,13 @@ export default function CrmView() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const statuses = [
-    'DISCOVERED', 'VALIDATED', 'READY_TO_SEND', 'OUTREACH_SENT', 
-    'RESPONDED', 'INTERESTED', 'REDIRECTED', 'OBJECTION', 
-    'QUALIFIED', 'PROPOSAL_SENT', 'NEGOTIATING', 'CLOSED_WON', 'CLOSED_LOST'
+    'Prospectado',
+    'Abordagem Enviada',
+    'Em Qualificação',
+    'Diagnóstico/Proposta',
+    'Negociando/Objeção',
+    'Fechado (Win)',
+    'Perdido (Loss)'
   ];
 
   const origins = ['WhatsApp', 'Instagram', 'E-mail', 'Telefone', 'Outro'];
@@ -87,18 +89,39 @@ export default function CrmView() {
     setLoadingLeads(true);
     setLoadingMetrics(true);
     setError(null);
-    const token = localStorage.getItem('admin_token');
 
     try {
       // 1. Fetch leads
-      const leadsRes = await fetch(`${API_BASE}/crm/leads`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const leadsRes = await fetchWithAuth(`${API_BASE}/crm/leads`);
       if (!leadsRes.ok) throw new Error('Falha ao buscar leads');
       const leadsData = await leadsRes.json();
       
+      // 3. Auto-advance leads with chat history from Prospectado → Abordagem Enviada
+      const leadsToAdvance = leadsData.filter(
+        (l: any) => l.mensagem_enviada === true && l.status === 'Prospectado'
+      );
+
+      if (leadsToAdvance.length > 0) {
+        // Fire all PUT requests in parallel
+        await Promise.allSettled(
+          leadsToAdvance.map((l: any) =>
+            fetchWithAuth(`${API_BASE}/crm/leads/${l.id}`, {
+              method: 'PUT',
+              body: JSON.stringify({ ...l, status: 'Abordagem Enviada' })
+            })
+          )
+        );
+
+        // Reflect changes locally
+        leadsData.forEach((l: any) => {
+          if (l.mensagem_enviada === true && l.status === 'Prospectado') {
+            l.status = 'Abordagem Enviada';
+          }
+        });
+      }
+
       // Sort leads: those with sent messages first, then by last_interaction descending
-      const sortedLeads = [...leadsData].sort((a, b) => {
+      const sortedLeads = [...leadsData].sort((a: any, b: any) => {
         const aSent = a.mensagem_enviada ? 1 : 0;
         const bSent = b.mensagem_enviada ? 1 : 0;
         if (aSent !== bSent) {
@@ -113,9 +136,7 @@ export default function CrmView() {
       setLoadingLeads(false);
 
       // 2. Fetch metrics
-      const metricsRes = await fetch(`${API_BASE}/crm/dashboard`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const metricsRes = await fetchWithAuth(`${API_BASE}/crm/dashboard`);
       if (!metricsRes.ok) throw new Error('Falha ao buscar indicadores');
       const metricsData = await metricsRes.json();
       setMetrics(metricsData);
@@ -142,35 +163,19 @@ export default function CrmView() {
     setEditingLead({ ...lead });
     setUpdateSuccess(false);
     setMessages([]);
-    setActivities([]);
     
     setLoadingMessages(true);
-    setLoadingActivities(true);
-    const token = localStorage.getItem('admin_token');
 
     try {
       // Fetch messages
-      const msgRes = await fetch(`${API_BASE}/crm/conversations/${lead.id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const msgRes = await fetchWithAuth(`${API_BASE}/crm/conversations/${lead.id}`);
       if (msgRes.ok) {
         const msgData = await msgRes.json();
         setMessages(msgData);
       }
       setLoadingMessages(false);
-
-      // Fetch activities
-      const actRes = await fetch(`${API_BASE}/crm/leads/${lead.id}/activities`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (actRes.ok) {
-        const actData = await actRes.json();
-        setActivities(actData);
-      }
-      setLoadingActivities(false);
     } catch (err) {
       setLoadingMessages(false);
-      setLoadingActivities(false);
     }
   };
 
@@ -203,15 +208,10 @@ export default function CrmView() {
     if (!editingLead) return;
     setUpdatingLead(true);
     setUpdateSuccess(false);
-    const token = localStorage.getItem('admin_token');
 
     try {
-      const res = await fetch(`${API_BASE}/crm/leads/${editingLead.id}`, {
+      const res = await fetchWithAuth(`${API_BASE}/crm/leads/${editingLead.id}`, {
         method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
         body: JSON.stringify(editingLead)
       });
       if (!res.ok) throw new Error('Erro ao salvar dados do lead');
@@ -223,19 +223,9 @@ export default function CrmView() {
       setUpdateSuccess(true);
       
       // Refresh dashboard metrics in case status changed
-      const metricsRes = await fetch(`${API_BASE}/crm/dashboard`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const metricsRes = await fetchWithAuth(`${API_BASE}/crm/dashboard`);
       if (metricsRes.ok) {
         setMetrics(await metricsRes.json());
-      }
-
-      // Log event: status_changed or lead_updated
-      const oldStatus = selectedLead.status;
-      if (oldStatus !== updatedLead.status) {
-        await logActivity(updatedLead.id, 'status_changed', { old_status: oldStatus, new_status: updatedLead.status });
-      } else {
-        await logActivity(updatedLead.id, 'lead_updated', {});
       }
     } catch (err: any) {
       alert(err.message || 'Erro ao salvar lead.');
@@ -244,33 +234,13 @@ export default function CrmView() {
     }
   };
 
-  // Helper to log activities
-  const logActivity = async (leadId: string, eventType: string, metadata: any) => {
-    const token = localStorage.getItem('admin_token');
-    try {
-      const res = await fetch(`${API_BASE}/crm/leads/${leadId}/activities`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ event_type: eventType, metadata })
-      });
-      if (res.ok) {
-        const newAct = await res.json();
-        setActivities(prev => [...prev, newAct]);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
+
 
   // Send WhatsApp message
   const handleSendWhatsapp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!whatsappMessage.trim() || !selectedLead) return;
     setSendingMessage(true);
-    const token = localStorage.getItem('admin_token');
 
     const payload = {
       lead_id: selectedLead.id,
@@ -279,12 +249,8 @@ export default function CrmView() {
     };
 
     try {
-      const res = await fetch(`${API_BASE}/crm/messages/send`, {
+      const res = await fetchWithAuth(`${API_BASE}/crm/messages/send`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
         body: JSON.stringify(payload)
       });
 
@@ -295,23 +261,33 @@ export default function CrmView() {
       setMessages([...messages, newMsg]);
       setWhatsappMessage('');
 
-      // Update lead last interaction time and set message_sent status in local list
-      setLeads(leads.map(l => l.id === selectedLead.id ? { ...l, last_interaction: new Date().toISOString(), mensagem_enviada: true } : l));
+      // Update lead last interaction time, set message_sent, and auto-advance status
+      setLeads(leads.map(l => {
+        if (l.id !== selectedLead.id) return l;
+        const updated = { ...l, last_interaction: new Date().toISOString(), mensagem_enviada: true };
+        // Auto-advance from Prospectado to Abordagem Enviada on first contact
+        if (l.status === 'Prospectado') {
+          updated.status = 'Abordagem Enviada';
+        }
+        return updated;
+      }));
 
-      // Append message_sent event to local activities list
-      const timestamp = new Date().toISOString();
-      const newAct = {
-        lead_id: selectedLead.id,
-        event_type: 'message_sent',
-        timestamp,
-        metadata: { message: newMsg.message, channel: 'whatsapp' }
-      };
-      setActivities([...activities, newAct]);
+      // Auto-advance status on backend if it was Prospectado
+      if (selectedLead.status === 'Prospectado') {
+        await fetchWithAuth(`${API_BASE}/crm/leads/${selectedLead.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ ...selectedLead, status: 'Abordagem Enviada' })
+        });
+        setSelectedLead({ ...selectedLead, status: 'Abordagem Enviada' });
+        if (editingLead && editingLead.id === selectedLead.id) {
+          setEditingLead({ ...editingLead, status: 'Abordagem Enviada' });
+        }
+      }
+
+
 
       // Refresh dashboard metrics
-      const metricsRes = await fetch(`${API_BASE}/crm/dashboard`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const metricsRes = await fetchWithAuth(`${API_BASE}/crm/dashboard`);
       if (metricsRes.ok) {
         setMetrics(await metricsRes.json());
       }
@@ -331,14 +307,61 @@ export default function CrmView() {
     setCopiedProposal(true);
     setTimeout(() => setCopiedProposal(false), 2000);
 
-    // 2. Log event
-    await logActivity(selectedLead.id, 'proposal_opened', {});
 
-    // 3. Open Instagram if available
+
+    // 3. Open Instagram Direct Message if available
     if (selectedLead.instagram) {
-      window.open(selectedLead.instagram, '_blank');
+      let username = selectedLead.instagram.trim();
+      
+      if (username.startsWith('@')) {
+        username = username.substring(1);
+      }
+      
+      if (username.includes('instagram.com') || username.includes('ig.me')) {
+        try {
+          let path = username;
+          if (path.includes('://')) {
+            path = path.split('://')[1];
+          }
+          if (path.startsWith('www.')) {
+            path = path.substring(4);
+          }
+          if (path.startsWith('instagram.com/')) {
+            path = path.replace('instagram.com/', '');
+          } else if (path.startsWith('ig.me/')) {
+            path = path.replace('ig.me/', '');
+          }
+          
+          const parts = path.split('/');
+          let candidate = parts[0];
+          if (candidate.includes('?')) {
+            candidate = candidate.split('?')[0];
+          }
+          if (candidate) {
+            username = candidate;
+          }
+        } catch (e) {
+          // Fallback
+        }
+      }
+      
+      const dmLink = `https://ig.me/m/${username}`;
+      window.open(dmLink, '_blank');
     } else {
       alert('Texto da proposta copiado! Este lead não possui Instagram cadastrado.');
+    }
+
+    // 4. Auto-advance from Prospectado to Abordagem Enviada on first contact
+    if (selectedLead.status === 'Prospectado') {
+      setLeads(leads.map(l => l.id === selectedLead.id ? { ...l, status: 'Abordagem Enviada', mensagem_enviada: true } : l));
+      setSelectedLead({ ...selectedLead, status: 'Abordagem Enviada' });
+      if (editingLead && editingLead.id === selectedLead.id) {
+        setEditingLead({ ...editingLead, status: 'Abordagem Enviada' });
+      }
+      await fetchWithAuth(`${API_BASE}/crm/leads/${selectedLead.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ ...selectedLead, status: 'Abordagem Enviada' })
+      });
     }
   };
 
@@ -352,13 +375,17 @@ export default function CrmView() {
       
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = searchTerm 
-        ? (lead.company_name?.toLowerCase().includes(searchLower) || 
+        ? (String(lead.id || '').toLowerCase().includes(searchLower) ||
+           lead.company_name?.toLowerCase().includes(searchLower) || 
            lead.email?.toLowerCase().includes(searchLower) ||
-           lead.whatsapp?.includes(searchTerm) ||
+           String(lead.whatsapp || '').includes(searchTerm) ||
+           lead.instagram?.toLowerCase().includes(searchLower) ||
            lead.responsible?.toLowerCase().includes(searchLower) ||
            lead.segmento?.toLowerCase().includes(searchLower) ||
            lead.falha_identificada?.toLowerCase().includes(searchLower) ||
-           lead.notes?.toLowerCase().includes(searchLower))
+           lead.solucao_recomendada?.toLowerCase().includes(searchLower) ||
+           lead.notes?.toLowerCase().includes(searchLower) ||
+           lead.proposal?.toLowerCase().includes(searchLower))
         : true;
         
       return matchesStatus && matchesOrigin && matchesSegment && matchesFalha && matchesSearch;
@@ -379,12 +406,13 @@ export default function CrmView() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'CLOSED_WON': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-      case 'CLOSED_LOST': return 'bg-rose-100 text-rose-800 border-rose-200';
-      case 'NEGOTIATING': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
-      case 'PROPOSAL_SENT': return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'RESPONDED': return 'bg-amber-100 text-amber-800 border-amber-200';
-      case 'OUTREACH_SENT': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'Prospectado': return 'bg-slate-100 text-slate-700 border-slate-200';
+      case 'Abordagem Enviada': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'Em Qualificação': return 'bg-amber-100 text-amber-800 border-amber-200';
+      case 'Diagnóstico/Proposta': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'Negociando/Objeção': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+      case 'Fechado (Win)': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      case 'Perdido (Loss)': return 'bg-rose-100 text-rose-800 border-rose-200';
       default: return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
@@ -423,9 +451,9 @@ export default function CrmView() {
       )}
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {loadingMetrics ? (
-          Array(4).fill(0).map((_, i) => (
+          Array(5).fill(0).map((_, i) => (
             <div key={i} className="glass-card p-6 h-24 flex items-center justify-center animate-pulse">
               <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
             </div>
@@ -439,6 +467,16 @@ export default function CrmView() {
               <div>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Leads</p>
                 <p className="text-2xl font-display font-extrabold text-slate-800">{metrics.total_leads}</p>
+              </div>
+            </div>
+
+            <div className="glass-card p-5 bg-white/70 border border-violet-100/30 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-700">
+                <MessageCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Conversas Iniciadas</p>
+                <p className="text-2xl font-display font-extrabold text-slate-800">{metrics.conversas_iniciadas}</p>
               </div>
             </div>
 
@@ -476,9 +514,9 @@ export default function CrmView() {
       </div>
 
       {/* Main CRM Grid (Split Lead Table and Detail Drawer) */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         {/* Leads Table Card */}
-        <div className="xl:col-span-2 glass-card p-6 bg-white/70 border border-violet-100/30">
+        <div className="xl:col-span-7 glass-card p-6 bg-white/70 border border-violet-100/30">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <h2 className="text-lg font-bold text-slate-800">Funil de Leads</h2>
             
@@ -619,7 +657,7 @@ export default function CrmView() {
         </div>
 
         {/* Lead Details & Messaging Drawer */}
-        <div className="glass-card bg-white/70 border border-violet-100/30 overflow-hidden">
+        <div className="xl:col-span-5 glass-card bg-white/70 border border-violet-100/30 overflow-hidden">
           {selectedLead && editingLead ? (
             <div className="divide-y divide-violet-100/30">
               {/* Lead detail profile edit header */}
@@ -697,7 +735,7 @@ export default function CrmView() {
                     <div>
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</label>
                       <select
-                        value={editingLead.status || 'DISCOVERED'}
+                        value={editingLead.status || 'Prospectado'}
                         onChange={(e) => setEditingLead({ ...editingLead, status: e.target.value })}
                         className="w-full px-3 py-1.5 rounded-lg border border-violet-100 bg-white/50 text-xs font-semibold focus:border-purple-500 outline-none cursor-pointer"
                       >
@@ -805,7 +843,7 @@ export default function CrmView() {
                 </h4>
 
                 {/* Messages Box */}
-                <div className="h-48 overflow-y-auto border border-violet-100/50 rounded-xl p-3 bg-slate-50/50 flex flex-col gap-2.5">
+                <div className="h-80 overflow-y-auto border border-violet-100/50 rounded-xl p-3 bg-slate-50/50 flex flex-col gap-2.5">
                   {loadingMessages ? (
                     <div className="flex-1 flex items-center justify-center">
                       <Loader2 className="w-5 h-5 text-purple-600 animate-spin" />
@@ -840,19 +878,27 @@ export default function CrmView() {
                 </div>
 
                 {/* Chat Composer */}
-                <form onSubmit={handleSendWhatsapp} className="flex gap-2 mt-3">
-                  <input
-                    type="text"
-                    placeholder="Digite uma mensagem via WhatsApp..."
+                <form onSubmit={handleSendWhatsapp} className="flex gap-2 mt-3 items-end">
+                  <textarea
+                    placeholder="Digite uma mensagem via WhatsApp... (Pressione Enter para enviar, Shift+Enter para nova linha)"
                     value={whatsappMessage}
                     onChange={(e) => setWhatsappMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (whatsappMessage.trim() && !sendingMessage) {
+                          handleSendWhatsapp(e);
+                        }
+                      }
+                    }}
+                    rows={3}
                     disabled={sendingMessage}
-                    className="flex-grow px-3.5 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold focus:border-purple-500 outline-none"
+                    className="flex-grow px-3.5 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold focus:border-purple-500 outline-none resize-none min-h-[60px]"
                   />
                   <button
                     type="submit"
                     disabled={sendingMessage || !whatsappMessage.trim()}
-                    className="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center shadow-md shadow-emerald-600/10"
+                    className="p-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center shadow-md shadow-emerald-600/10 self-end h-10 w-10 flex-shrink-0"
                   >
                     {sendingMessage ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -863,51 +909,7 @@ export default function CrmView() {
                 </form>
               </div>
 
-              {/* Activity Log Timeline */}
-              <div className="p-6">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3.5 flex items-center gap-1.5">
-                  <Activity className="w-4 h-4 text-purple-600" />
-                  Registro de Atividades
-                </h4>
 
-                <div className="space-y-4 max-h-48 overflow-y-auto pr-1">
-                  {loadingActivities ? (
-                    <div className="flex justify-center py-4">
-                      <Loader2 className="w-4 h-4 text-purple-600 animate-spin" />
-                    </div>
-                  ) : activities.length === 0 ? (
-                    <p className="text-[10px] text-slate-400 font-semibold text-center py-2">
-                      Nenhuma atividade registrada para este lead.
-                    </p>
-                  ) : (
-                    <div className="relative border-l border-violet-100 ml-2.5 space-y-4 text-[11px]">
-                      {activities.map((act: any, i) => (
-                        <div key={i} className="relative pl-6 group">
-                          {/* Timeline dot */}
-                          <span className="absolute -left-1.5 top-1 w-3 h-3 rounded-full border-2 border-purple-600 bg-white group-hover:bg-purple-600 transition-colors"></span>
-                          
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-slate-700 uppercase tracking-wide text-[10px]">
-                              {act.event_type}
-                            </span>
-                            <span className="text-[9px] text-slate-400">{formatDate(act.timestamp)}</span>
-                          </div>
-                          
-                          {/* Metadata formatting */}
-                          {act.metadata && (
-                            <p className="text-slate-500 mt-0.5 text-[10px] italic leading-tight">
-                              {act.event_type === 'status_changed' && `Alterado de ${act.metadata.old_status} para ${act.metadata.new_status}`}
-                              {act.event_type === 'message_sent' && `WhatsApp: "${act.metadata.message.substring(0, 30)}..."`}
-                              {act.event_type === 'proposal_opened' && 'Proposta comercial copiada e Instagram aberto'}
-                              {act.event_type === 'lead_created' && `Método de Contato: ${act.metadata.origin || 'Robô scraper'}`}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
           ) : (
             <div className="py-32 px-6 text-center text-slate-400 space-y-3">

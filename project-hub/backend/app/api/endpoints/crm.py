@@ -47,10 +47,11 @@ async def get_dashboard_metrics(current_user: str = Depends(get_current_user)):
     leads = await n8n_service.get_leads()
     total_leads = len(leads)
     
-    leads_novos = sum(1 for l in leads if l.get("status") == "DISCOVERED")
-    propostas_enviadas = sum(1 for l in leads if l.get("status") == "PROPOSAL_SENT")
-    negociacoes = sum(1 for l in leads if l.get("status") == "NEGOTIATING")
-    clientes_fechados = sum(1 for l in leads if l.get("status") == "CLOSED_WON")
+    leads_novos = sum(1 for l in leads if l.get("status") == "Prospectado")
+    conversas_iniciadas = sum(1 for l in leads if l.get("mensagem_enviada") is True or l.get("status") == "Abordagem Enviada")
+    propostas_enviadas = sum(1 for l in leads if l.get("status") == "Diagnóstico/Proposta")
+    negociacoes = sum(1 for l in leads if l.get("status") == "Negociando/Objeção")
+    clientes_fechados = sum(1 for l in leads if l.get("status") == "Fechado (Win)")
     
     # Calculate sent/received from our conversations
     mensagens_enviadas = sum(sum(1 for m in msgs if m.get("sender") == "user") for msgs in MOCK_CONVERSATIONS.values())
@@ -71,6 +72,7 @@ async def get_dashboard_metrics(current_user: str = Depends(get_current_user)):
     return CrmDashboardMetrics(
         total_leads=total_leads,
         leads_novos=leads_novos,
+        conversas_iniciadas=conversas_iniciadas,
         mensagens_enviadas=mensagens_enviadas,
         mensagens_recebidas=mensagens_recebidas,
         respostas_pendentes=respostas_pendentes,

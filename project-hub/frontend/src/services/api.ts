@@ -20,10 +20,84 @@ function getHeaders(contentType: string | null = "application/json") {
     headers["Content-Type"] = contentType;
   }
   const token = localStorage.getItem("admin_token");
-  if (token) {
+  if (token && token !== "null" && token !== "undefined") {
     headers["Authorization"] = `Bearer ${token}`;
   }
   return headers;
+}
+
+export async function fetchWithAuth(
+  url: string,
+  options: RequestInit = {},
+  contentType: string | null = "application/json"
+) {
+  const token = localStorage.getItem("admin_token");
+  if (!token || token === "null" || token === "undefined") {
+    localStorage.removeItem("admin_token");
+    localStorage.removeItem("admin_refresh_token");
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
+    throw new Error("Sessão expirada. Por favor, faça login novamente.");
+  }
+
+  const mergedHeaders = {
+    ...getHeaders(contentType),
+    ...(options.headers || {}),
+  } as Record<string, string>;
+
+  // Ensure authorization header is set correctly
+  mergedHeaders["Authorization"] = `Bearer ${token}`;
+
+  let response = await fetch(url, {
+    ...options,
+    headers: mergedHeaders,
+  });
+
+  if (response.status === 401) {
+    const refreshToken = localStorage.getItem("admin_refresh_token");
+    if (refreshToken && refreshToken !== "null" && refreshToken !== "undefined") {
+      try {
+        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json();
+          if (refreshData && refreshData.access_token) {
+            localStorage.setItem("admin_token", refreshData.access_token);
+            if (refreshData.refresh_token) {
+              localStorage.setItem("admin_refresh_token", refreshData.refresh_token);
+            }
+
+            // Retry the original request with the new token
+            mergedHeaders["Authorization"] = `Bearer ${refreshData.access_token}`;
+            response = await fetch(url, {
+              ...options,
+              headers: mergedHeaders,
+            });
+
+            if (response.status !== 401) {
+              return response;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Token refresh failed:", err);
+      }
+    }
+
+    localStorage.removeItem("admin_token");
+    localStorage.removeItem("admin_refresh_token");
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
+    throw new Error("Sessão expirada. Por favor, faça login novamente.");
+  }
+
+  return response;
 }
 
 export async function loginUser(username: string, password: string) {
@@ -40,53 +114,31 @@ export async function loginUser(username: string, password: string) {
 }
 
 export async function fetchProjects() {
-  const res = await fetch(`${API_BASE}/projects/`, {
-    headers: getHeaders(),
-  });
-  if (res.status === 401) {
-    localStorage.removeItem("admin_token");
-    window.location.href = "/login";
-  }
+  const res = await fetchWithAuth(`${API_BASE}/projects/`);
   if (!res.ok) throw new Error("Failed to fetch projects");
   return res.json();
 }
 
 export async function fetchProject(id: string | number) {
-  const res = await fetch(`${API_BASE}/projects/${id}`, {
-    headers: getHeaders(),
-  });
-  if (res.status === 401) {
-    localStorage.removeItem("admin_token");
-    window.location.href = "/login";
-  }
+  const res = await fetchWithAuth(`${API_BASE}/projects/${id}`);
   if (!res.ok) throw new Error("Failed to fetch project");
   return res.json();
 }
 
 export async function createProject(data: any) {
-  const res = await fetch(`${API_BASE}/projects/`, {
+  const res = await fetchWithAuth(`${API_BASE}/projects/`, {
     method: "POST",
-    headers: getHeaders(),
     body: JSON.stringify(data),
   });
-  if (res.status === 401) {
-    localStorage.removeItem("admin_token");
-    window.location.href = "/login";
-  }
   if (!res.ok) throw new Error("Failed to create project");
   return res.json();
 }
 
 export async function updateProject(id: string | number, data: any) {
-  const res = await fetch(`${API_BASE}/projects/${id}`, {
+  const res = await fetchWithAuth(`${API_BASE}/projects/${id}`, {
     method: "PUT",
-    headers: getHeaders(),
     body: JSON.stringify(data),
   });
-  if (res.status === 401) {
-    localStorage.removeItem("admin_token");
-    window.location.href = "/login";
-  }
   if (!res.ok) throw new Error("Failed to update project");
   return res.json();
 }
@@ -99,53 +151,31 @@ export async function fetchPublicProject(publicToken: string) {
 }
 
 export async function fetchTasks(projectId: string | number) {
-  const res = await fetch(`${API_BASE}/projects/${projectId}/tasks`, {
-    headers: getHeaders(),
-  });
-  if (res.status === 401) {
-    localStorage.removeItem("admin_token");
-    window.location.href = "/login";
-  }
+  const res = await fetchWithAuth(`${API_BASE}/projects/${projectId}/tasks`);
   if (!res.ok) throw new Error("Failed to fetch tasks");
   return res.json();
 }
 
 export async function createTask(projectId: string | number, data: any) {
-  const res = await fetch(`${API_BASE}/projects/${projectId}/tasks`, {
+  const res = await fetchWithAuth(`${API_BASE}/projects/${projectId}/tasks`, {
     method: "POST",
-    headers: getHeaders(),
     body: JSON.stringify({ ...data, project_id: Number(projectId) }),
   });
-  if (res.status === 401) {
-    localStorage.removeItem("admin_token");
-    window.location.href = "/login";
-  }
   if (!res.ok) throw new Error("Failed to create task");
   return res.json();
 }
 
 export async function updateTask(taskId: string | number, data: any) {
-  const res = await fetch(`${API_BASE}/projects/tasks/${taskId}`, {
+  const res = await fetchWithAuth(`${API_BASE}/projects/tasks/${taskId}`, {
     method: "PUT",
-    headers: getHeaders(),
     body: JSON.stringify(data),
   });
-  if (res.status === 401) {
-    localStorage.removeItem("admin_token");
-    window.location.href = "/login";
-  }
   if (!res.ok) throw new Error("Failed to update task");
   return res.json();
 }
 
 export async function fetchAssets(projectId: string | number) {
-  const res = await fetch(`${API_BASE}/projects/${projectId}/assets`, {
-    headers: getHeaders(),
-  });
-  if (res.status === 401) {
-    localStorage.removeItem("admin_token");
-    window.location.href = "/login";
-  }
+  const res = await fetchWithAuth(`${API_BASE}/projects/${projectId}/assets`);
   if (!res.ok) throw new Error("Failed to fetch assets");
   return res.json();
 }
@@ -155,39 +185,26 @@ export async function uploadAsset(projectId: string | number, file: File) {
   formData.append("project_id", String(projectId));
   formData.append("file", file);
 
-  const res = await fetch(`${API_BASE}/uploads/`, {
-    method: "POST",
-    headers: getHeaders(null), // Empty Content-Type to let browser generate multipart boundaries
-    body: formData,
-  });
-  if (res.status === 401) {
-    localStorage.removeItem("admin_token");
-    window.location.href = "/login";
-  }
+  const res = await fetchWithAuth(
+    `${API_BASE}/uploads/`,
+    {
+      method: "POST",
+      body: formData,
+    },
+    null // Empty Content-Type to let browser generate multipart boundaries
+  );
   if (!res.ok) throw new Error("Failed to upload asset");
   return res.json();
 }
 
 export async function fetchCommits(projectId: string | number) {
-  const res = await fetch(`${API_BASE}/projects/${projectId}/commits`, {
-    headers: getHeaders(),
-  });
-  if (res.status === 401) {
-    localStorage.removeItem("admin_token");
-    window.location.href = "/login";
-  }
+  const res = await fetchWithAuth(`${API_BASE}/projects/${projectId}/commits`);
   if (!res.ok) throw new Error("Failed to fetch commits");
   return res.json();
 }
 
 export async function fetchDeploys(projectId: string | number) {
-  const res = await fetch(`${API_BASE}/projects/${projectId}/deploys`, {
-    headers: getHeaders(),
-  });
-  if (res.status === 401) {
-    localStorage.removeItem("admin_token");
-    window.location.href = "/login";
-  }
+  const res = await fetchWithAuth(`${API_BASE}/projects/${projectId}/deploys`);
   if (!res.ok) throw new Error("Failed to fetch deploys");
   return res.json();
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Play, Loader2, Check, AlertCircle, Sparkles } from 'lucide-react';
-import { API_BASE } from '../services/api';
+import { API_BASE, fetchWithAuth } from '../services/api';
 
 export default function ScrapperView() {
   const [queries, setQueries] = useState('');
@@ -59,13 +59,8 @@ export default function ScrapperView() {
     };
 
     try {
-      const token = localStorage.getItem('admin_token');
-      const response = await fetch(`${API_BASE}/scrapper/run`, {
+      const response = await fetchWithAuth(`${API_BASE}/scrapper/run`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
         body: JSON.stringify(payload)
       });
 
