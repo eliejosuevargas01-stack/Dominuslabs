@@ -38,7 +38,8 @@ class Settings(BaseSettings):
         return f"sqlite:///{os.path.join(self.UPLOAD_DIR, 'dominuslabs.db')}"
 
     # N8N Integration Webhooks
-    SCRAPPER_WEBHOOK_URL: str = os.getenv("SCRAPPER_WEBHOOK_URL", "https://scrapper.dominuslabs.online/scrape/meta_ads")
+    SCRAPPER_META_WEBHOOK_URL: str = os.getenv("SCRAPPER_META_WEBHOOK_URL", "https://scrapper.dominuslabs.online/scrape/meta_ads")
+    SCRAPPER_MAPS_WEBHOOK_URL: str = os.getenv("SCRAPPER_MAPS_WEBHOOK_URL", "https://scrapper.dominuslabs.online/scrape/google_maps")
     CRM_GET_LEADS_WEBHOOK_URL: str = os.getenv("CRM_GET_LEADS_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
     CRM_CREATE_LEAD_WEBHOOK_URL: str = os.getenv("CRM_CREATE_LEAD_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
     CRM_UPDATE_LEAD_WEBHOOK_URL: str = os.getenv("CRM_UPDATE_LEAD_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")

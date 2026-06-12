@@ -343,10 +343,11 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
 
 class N8NService:
     @staticmethod
-    async def run_scrapper(payload: dict) -> dict:
-        url = payload.get("webhook_url") or settings.SCRAPPER_WEBHOOK_URL
+    async def run_scrapper(payload: dict, platform: str = "meta_ads") -> dict:
+        fallback_url = settings.SCRAPPER_META_WEBHOOK_URL if platform == "meta_ads" else settings.SCRAPPER_MAPS_WEBHOOK_URL
+        url = payload.get("webhook_url") or fallback_url
         if not url:
-            logger.info("SCRAPPER_WEBHOOK_URL not configured. Returning mock success.")
+            logger.info("SCRAPPER Webhook URL not configured. Returning mock success.")
             return {"status": "success", "message": "Scrapper triggered (MOCK Mode)", "data": payload}
 
         # Map frontend platforms keys to N8N's expected target_platforms field name
