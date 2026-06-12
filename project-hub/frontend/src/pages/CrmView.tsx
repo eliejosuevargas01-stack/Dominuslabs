@@ -819,6 +819,36 @@ export default function CrmView() {
                     />
                   </div>
 
+                  {/* Mais Detalhes do Lead (Extra N8N payload fields) */}
+                  <div className="pt-2 border-t border-slate-100">
+                    <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Mais Detalhes do Lead</h5>
+                    {editingLead.id_anuncio_meta && (
+                      <a
+                        href={`https://www.facebook.com/ads/library/?id=${editingLead.id_anuncio_meta}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-[11px] font-bold mb-3 transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                        Ver anúncio (Meta Ads)
+                      </a>
+                    )}
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      {Object.entries(editingLead)
+                        .filter(([key]) => ![
+                            'id', 'company_name', 'instagram', 'whatsapp', 'email', 'status', 'origin', 'notes',
+                            'proposal', 'responsible', 'falha_identificada', 'segmento', 'solucao_recomendada',
+                            'last_interaction', 'created_at', 'has_messages', 'mensagem_enviada', 'id_anuncio_meta'
+                          ].includes(key))
+                        .map(([key, val]) => (
+                          <div key={key} className="bg-slate-50 p-1.5 rounded border border-slate-100 break-words">
+                            <span className="font-bold text-slate-500 block uppercase mb-0.5 truncate">{key.replace(/_/g, ' ')}</span>
+                            <span className="font-semibold text-slate-700">{typeof val === 'object' ? JSON.stringify(val) : String(val)}</span>
+                          </div>
+                      ))}
+                    </div>
+                  </div>
+
                   {updateSuccess && (
                     <p className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
                       <Check className="w-3.5 h-3.5" /> Salvo com sucesso!
