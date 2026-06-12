@@ -843,7 +843,16 @@ export default function CrmView() {
                         .map(([key, val]) => (
                           <div key={key} className="bg-slate-50 p-1.5 rounded border border-slate-100 break-words">
                             <span className="font-bold text-slate-500 block uppercase mb-0.5 truncate">{key.replace(/_/g, ' ')}</span>
-                            <span className="font-semibold text-slate-700">{typeof val === 'object' ? JSON.stringify(val) : String(val)}</span>
+                            {typeof val === 'object' ? (
+                              <span className="font-semibold text-slate-700">{JSON.stringify(val)}</span>
+                            ) : (
+                              <input
+                                type="text"
+                                value={val !== null && val !== undefined ? String(val) : ''}
+                                onChange={(e) => setEditingLead({ ...editingLead, [key]: e.target.value })}
+                                className="w-full px-2 py-1 rounded border border-violet-100 bg-white text-xs font-semibold text-slate-700 focus:border-purple-500 outline-none transition-colors"
+                              />
+                            )}
                           </div>
                       ))}
                     </div>
