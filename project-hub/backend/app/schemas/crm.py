@@ -15,6 +15,9 @@ class LeadBase(BaseModel):
     falha_identificada: Optional[str] = ""
     segmento: Optional[str] = ""
     solucao_recomendada: Optional[str] = ""
+    id_anuncio_meta: Optional[str] = None
+
+    model_config = ConfigDict(extra="allow")
 
 class LeadCreate(LeadBase):
     pass

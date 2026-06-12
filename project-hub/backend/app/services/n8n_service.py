@@ -23,7 +23,11 @@ MOCK_LEADS = [
         "created_at": "2026-06-09T08:30:00Z",
         "falha_identificada": "Sem Landing Page",
         "segmento": "Dentista",
-        "solucao_recomendada": "Landing Page"
+        "solucao_recomendada": "Landing Page",
+        "id_anuncio_meta": "972540022197311",
+        "facebook_page_url": "https://www.facebook.com/clinicasorriso/",
+        "tem_site_proprio": False,
+        "dor_identificada": "[\"formulario horrivel\"]"
     },
     {
         "id": "lead_2",
@@ -124,10 +128,10 @@ MOCK_ACTIVITIES = {
 def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     # Get ID as string
     lead_id = str(lead.get("id", lead.get("_id", "")))
-    
+
     # Map Portuguese/Custom keys to Pydantic Lead Schema
     company_name = lead.get("nome_empresa") or lead.get("company_name") or "Empresa Sem Nome"
-    
+
     # Extract and clean contact fields, handling None, "null", and whitespace
     raw_tel = lead.get("telefone")
     raw_wa = lead.get("whatsapp")
@@ -136,24 +140,24 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         if val is not None and str(val).strip().lower() not in ("null", ""):
             whatsapp = str(val).strip()
             break
-            
+
     raw_ig = lead.get("instagram")
     instagram = ""
     if raw_ig is not None and str(raw_ig).strip().lower() not in ("null", ""):
         instagram = str(raw_ig).strip()
-        
+
     # Fallback to link_destibo_botao or url_site if instagram is empty but they contain instagram.com
     if not instagram:
         for val in (lead.get("link_destibo_botao"), lead.get("url_site")):
             if val is not None and "instagram.com" in str(val).lower():
                 instagram = str(val).strip()
                 break
-        
+
     raw_email = lead.get("email")
     email = ""
     if raw_email is not None and str(raw_email).strip().lower() not in ("null", ""):
         email = str(raw_email).strip()
-        
+
     # Map status to support Portuguese custom stages
     status_raw = str(lead.get("status") or "Prospectado").strip()
     status_upper = status_raw.upper()
@@ -173,7 +177,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         status = "Perdido (Loss)"
     else:
         status = status_raw
-        
+
     # Infer contact method / origin based on populated fields priority
     if whatsapp:
         origin = "WhatsApp"
@@ -183,7 +187,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         origin = "E-mail"
     else:
         origin = "Outro"
-            
+
     # Determine if there are messages
     has_messages = False
     if lead_id in MOCK_CONVERSATIONS and len(MOCK_CONVERSATIONS[lead_id]) > 0:
@@ -192,7 +196,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         has_messages = True
     elif lead.get("has_messages") is True or lead.get("has_messages") == "true":
         has_messages = True
-        
+
     # Determine if a message was sent by the user (mensagem_enviada)
     mensagem_enviada = False
     if lead_id in MOCK_CONVERSATIONS:
@@ -200,7 +204,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
             mensagem_enviada = True
     if conversations_map and lead_id in conversations_map:
         if any(
-            m.get("tipo") == "mensagem_enviada" or 
+            m.get("tipo") == "mensagem_enviada" or
             m.get("sender") == "user" or
             (m.get("mensagem_enviada") is not None and str(m.get("mensagem_enviada")).strip().lower() not in ("null", ""))
             for m in conversations_map[lead_id]
@@ -218,26 +222,26 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     # If a message was sent but status is still Prospectado, advance to Abordagem Enviada
     if mensagem_enviada and status == "Prospectado":
         status = "Abordagem Enviada"
-    
+
     # Map notes
     notes = lead.get("notes") or lead.get("falha_identificada") or lead.get("dor_identificada") or ""
     if notes is not None and str(notes).strip().lower() in ("null", ""):
         notes = ""
-    
+
     # Map proposal
     proposal = lead.get("proposta_pronta") or lead.get("proposal") or ""
     if proposal is not None and str(proposal).strip().lower() in ("null", ""):
         proposal = ""
-    
+
     # Responsible
     responsible = lead.get("responsible") or lead.get("responsavel") or "Eliezer"
     if responsible is not None and str(responsible).strip().lower() in ("null", ""):
         responsible = "Eliezer"
-    
+
     # Dates
     last_interaction = lead.get("last_interaction") or lead.get("updatedAt") or lead.get("created_at")
     created_at = lead.get("created_at") or lead.get("createdAt")
-    
+
     if conversations_map and lead_id in conversations_map and conversations_map[lead_id]:
         # Get the latest message timestamp
         latest_msg = max(conversations_map[lead_id], key=lambda x: x.get("data") or x.get("timestamp") or x.get("createdAt") or "")
@@ -245,7 +249,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         if latest_ts:
             if not last_interaction or latest_ts > last_interaction:
                 last_interaction = latest_ts
-    
+
     # Extract and clean additional fields, handling None, "null", and whitespace
     raw_falha = lead.get("falha_identificada")
     falha_identificada = ""
@@ -253,18 +257,19 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         falha_identificada = str(raw_falha).strip()
     elif notes:
         falha_identificada = notes
-        
+
     raw_segmento = lead.get("segmento")
     segmento = ""
     if raw_segmento is not None and str(raw_segmento).strip().lower() not in ("null", ""):
         segmento = str(raw_segmento).strip()
-        
+
     raw_solucao = lead.get("solucao_recomendada") or lead.get("servico_ofertado")
     solucao_recomendada = ""
     if raw_solucao is not None and str(raw_solucao).strip().lower() not in ("null", ""):
         solucao_recomendada = str(raw_solucao).strip()
-    
-    return {
+
+    mapped_lead = {
+        **lead,
         "id": lead_id,
         "company_name": company_name,
         "whatsapp": whatsapp,
@@ -284,6 +289,12 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         "mensagem_enviada": mensagem_enviada
     }
 
+    # Ensure id_anuncio_meta uses the standard key if present under another name
+    if "id_anuncio_meta" not in mapped_lead and lead.get("ad_archive_id"):
+        mapped_lead["id_anuncio_meta"] = lead.get("ad_archive_id")
+
+    return mapped_lead
+
 def clean_n8n_response(res_data: Any) -> Any:
     if isinstance(res_data, list):
         if len(res_data) > 0:
@@ -296,7 +307,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
     msg_id = str(msg.get("id", ""))
     created_at = msg.get("createdAt") or msg.get("data")
     updated_at = msg.get("updatedAt") or msg.get("data")
-    
+
     # 1. User message (mensagem_enviada)
     user_text = msg.get("mensagem_enviada")
     if user_text is not None and str(user_text).strip().lower() not in ("null", ""):
@@ -316,7 +327,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             "channel": lead_channel,
             "timestamp": created_at
         })
-        
+
     # 2. Lead reply (resposta)
     lead_text = msg.get("resposta")
     if lead_text is not None and str(lead_text).strip().lower() not in ("null", ""):
@@ -327,25 +338,30 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             "channel": lead_channel,
             "timestamp": updated_at
         })
-        
+
     return mapped
 
 class N8NService:
     @staticmethod
     async def run_scrapper(payload: dict) -> dict:
-        url = settings.SCRAPPER_WEBHOOK_URL
+        url = payload.get("webhook_url") or settings.SCRAPPER_WEBHOOK_URL
         if not url:
             logger.info("SCRAPPER_WEBHOOK_URL not configured. Returning mock success.")
             return {"status": "success", "message": "Scrapper triggered (MOCK Mode)", "data": payload}
-        
+
         # Map frontend platforms keys to N8N's expected target_platforms field name
         outgoing_payload = {
             "queries": payload.get("queries", []),
-            "min_results": payload.get("min_results", 1000),
-            "max_results": payload.get("max_results", 2000),
-            "target_platforms": payload.get("platforms", [])
+            "min_results": payload.get("min_results", 10),
+            "max_results": payload.get("max_results", 20),
         }
-        
+        if "target_platform" in payload:
+            outgoing_payload["target_platform"] = payload["target_platform"]
+        if "contact_channel" in payload:
+            outgoing_payload["contact_channel"] = payload["contact_channel"]
+        if "objective" in payload:
+            outgoing_payload["objective"] = payload["objective"]
+
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.post(url, json=outgoing_payload, timeout=30.0)
@@ -365,11 +381,11 @@ class N8NService:
             mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
             mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
             return mapped_mock
-        
+
         # Append action parameter to CRM N8N query parameters
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=get_leads"
-        
+
         raw_leads = None
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
@@ -382,13 +398,13 @@ class N8NService:
                     raw_leads = data["leads"]
             except Exception as e:
                 logger.error(f"Error calling GET leads webhook: {e}. Falling back to mock data.")
-                
+
         if raw_leads is None:
             mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
             mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
             mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
             return mapped_mock
-            
+
         # Apply mapper and perform stable sorting
         mapped_leads = [map_n8n_lead(l) for l in raw_leads if isinstance(l, dict)]
         mapped_leads.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
@@ -398,7 +414,7 @@ class N8NService:
     @staticmethod
     async def update_lead(lead_id: str, payload: dict) -> dict:
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
-        
+
         # Sync the change to our mock state first so it persists in the developer's session
         for i, lead in enumerate(MOCK_LEADS):
             if lead["id"] == lead_id:
@@ -424,11 +440,11 @@ class N8NService:
             logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead updated locally in-memory.")
             updated_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
             return map_n8n_lead(updated_lead) if updated_lead else map_n8n_lead({"id": lead_id, **payload})
-            
+
         # Append action parameter to CRM N8N query parameters
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=update_lead&id={lead_id}"
-        
+
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.put(endpoint_url, json=outgoing_payload, timeout=30.0)
@@ -436,7 +452,7 @@ class N8NService:
                 res_data = clean_n8n_response(response.json())
                 if isinstance(res_data, dict) and ("company_name" in res_data or "nome_empresa" in res_data):
                     return map_n8n_lead(res_data)
-                
+
                 fallback_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
                 if fallback_lead:
                     return map_n8n_lead(fallback_lead)
@@ -454,11 +470,11 @@ class N8NService:
         url = settings.CRM_GET_MESSAGES_WEBHOOK_URL
         if not url:
             return all_msgs
-            
+
         # Append action parameter to CRM N8N query parameters
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=get&lead_id={lead_id}"
-        
+
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.get(endpoint_url, timeout=30.0)
@@ -474,7 +490,7 @@ class N8NService:
                         raw_msgs = data.get("messages") or data.get("conversas") or data.get("historico") or data.get("history") or []
                         if not isinstance(raw_msgs, list):
                             raw_msgs = [data]
-                
+
                 # Fetch lead to get correct channel (origin)
                 lead_channel = "whatsapp"
                 try:
@@ -484,7 +500,7 @@ class N8NService:
                         lead_channel = lead_obj["origin"].lower()
                 except Exception:
                     pass
-                
+
                 # Map and flatten messages
                 existing_ids = {m.get("id") for m in all_msgs if m.get("id")}
                 for m in raw_msgs:
@@ -498,7 +514,7 @@ class N8NService:
                             if mapped_msg.get("id") not in existing_ids:
                                 all_msgs.append(mapped_msg)
                                 existing_ids.add(mapped_msg.get("id"))
-                                
+
                 all_msgs.sort(key=lambda x: x.get("timestamp") or "")
                 return all_msgs
             except Exception as e:
@@ -511,10 +527,10 @@ class N8NService:
         lead_id = payload.get("lead_id")
         message_text = payload.get("message")
         phone = payload.get("phone", "")
-        
+
         # Clean phone number to digits-only for standard whatsapp api gateways
         cleaned_phone = "".join(c for c in phone if c.isdigit())
-        
+
         # Append message locally in mock conversations to show live updates
         new_msg = {
             "id": f"msg_{int(datetime.utcnow().timestamp())}",
@@ -547,7 +563,7 @@ class N8NService:
         if not url:
             logger.info("CRM_SEND_WHATSAPP_WEBHOOK_URL not configured. Message logged locally in-memory.")
             return new_msg
-            
+
         # Match Evolution API payload structure as well as direct params
         outgoing_payload = {
             "number": cleaned_phone,
@@ -556,7 +572,7 @@ class N8NService:
             "message": message_text,
             "lead_id": lead_id
         }
-            
+
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.post(url, json=outgoing_payload, timeout=30.0)
