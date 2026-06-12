@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.schemas.asset import ProjectAsset, ProjectAssetCreate
 from app.repositories.asset_repo import asset_repo
 from app.repositories.project_repo import project_repo
+from app.core.auth import get_current_user
 
 router = APIRouter()
 
@@ -26,7 +27,8 @@ def get_upload_subfolder(file_type: str) -> str:
 def upload_file(
     project_id: int = Form(...),
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
 ):
     # Check if project exists
     project = project_repo.get(db, id=project_id)
@@ -61,3 +63,12 @@ def upload_file(
     )
 
     return asset_repo.create(db, obj_in=asset_in)
+
+from fastapi.responses import FileResponse
+
+@router.get("/{subfolder}/{filename}")
+def get_uploaded_file(subfolder: str, filename: str):
+    file_path = os.path.join(settings.UPLOAD_DIR, subfolder, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
