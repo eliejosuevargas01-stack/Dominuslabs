@@ -20,7 +20,7 @@ async def run_scrape_google_maps(payload: ScrapePayload, current_user: str = Dep
     """
     Trigger the Google Maps scraper workflow on N8N.
     """
-    result = await n8n_service.run_scrapper(payload.model_dump())
+    result = await n8n_service.run_scrapper(payload.model_dump(), platform="google_maps")
     if result.get("status") == "error":
         raise HTTPException(status_code=500, detail=result.get("message", "Erro ao executar scraper de Google Maps"))
     return result
