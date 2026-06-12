@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Play, Loader2, Check, AlertCircle, Sparkles, MapPin, Target, Webhook } from 'lucide-react';
 import { API_BASE, fetchWithAuth } from '../services/api';
 
@@ -6,7 +6,11 @@ export default function ScrapperView() {
   const [activeTab, setActiveTab] = useState<'meta' | 'maps'>('meta');
 
   // Shared state
-  const [queries, setQueries] = useState('');
+  const [queries, setQueries] = useState(() => localStorage.getItem('scrapper_queries') || '');
+
+  useEffect(() => {
+    localStorage.setItem('scrapper_queries', queries);
+  }, [queries]);
   const [webhookUrl, setWebhookUrl] = useState('');
   
   // Meta Ads specific state
