@@ -10,8 +10,8 @@ class ProjectBase(BaseModel):
     project_type: str
     value: float
     status: ProjectStatus = ProjectStatus.NEW
-    github_url: Optional[HttpUrl] = None
-    deploy_url: Optional[HttpUrl] = None
+    github_url: Optional[str] = None
+    deploy_url: Optional[str] = None
 
 class ProjectCreate(ProjectBase):
     pass
@@ -23,8 +23,8 @@ class ProjectUpdate(BaseModel):
     project_type: Optional[str] = None
     value: Optional[float] = None
     status: Optional[ProjectStatus] = None
-    github_url: Optional[HttpUrl] = None
-    deploy_url: Optional[HttpUrl] = None
+    github_url: Optional[str] = None
+    deploy_url: Optional[str] = None
 
 class ProjectInDBBase(ProjectBase):
     id: int
