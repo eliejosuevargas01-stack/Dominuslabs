@@ -126,14 +126,22 @@ MOCK_ACTIVITIES = {
 }
 
 def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
-    # Get ID as string
-    lead_id = str(lead.get("id", lead.get("_id", "")))
+    # Get ID as string (check lead_id first for the new payload)
+    lead_id = str(lead.get("id" if "id" in lead else "lead_id", lead.get("_id", "")))
+    if not lead_id or lead_id.lower() == "none":
+        # Fallback if lead_id was none/empty
+        lead_id = str(lead.get("id", lead.get("lead_id", lead.get("_id", ""))))
+
+    # Extract nested payload dict safely
+    payload_dict = lead.get("payload") or {}
+    if not isinstance(payload_dict, dict):
+        payload_dict = {}
 
     # Map Portuguese/Custom keys to Pydantic Lead Schema
-    company_name = lead.get("nome_empresa") or lead.get("company_name") or "Empresa Sem Nome"
+    company_name = lead.get("nome_empresa") or lead.get("empresa_nome") or lead.get("company_name") or "Empresa Sem Nome"
 
     # Extract and clean contact fields, handling None, "null", and whitespace
-    raw_tel = lead.get("telefone")
+    raw_tel = lead.get("telefone") or lead.get("telefone_contato")
     raw_wa = lead.get("whatsapp")
     whatsapp = ""
     for val in (raw_tel, raw_wa):
@@ -148,12 +156,12 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
 
     # Fallback to link_destibo_botao or url_site if instagram is empty but they contain instagram.com
     if not instagram:
-        for val in (lead.get("link_destibo_botao"), lead.get("url_site")):
+        for val in (lead.get("link_destibo_botao"), lead.get("url_site"), payload_dict.get("url_site")):
             if val is not None and "instagram.com" in str(val).lower():
                 instagram = str(val).strip()
                 break
 
-    raw_email = lead.get("email")
+    raw_email = lead.get("email") or lead.get("email_contato") or payload_dict.get("email")
     email = ""
     if raw_email is not None and str(raw_email).strip().lower() not in ("null", ""):
         email = str(raw_email).strip()
@@ -163,7 +171,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     status_upper = status_raw.upper()
     if status_upper in ("NOVO", "FRIO", "DISCOVERED", "PROSPECTADO"):
         status = "Prospectado"
-    elif status_upper in ("CONTATADO", "RESPONDED", "ABORDAGEM ENVIADA", "ABORDADO", "OUTREACH_SENT", "AGUARDANDO_RETORNO"):
+    elif status_upper in ("CONTATADO", "RESPONDED", "ABORDAGEM ENVIADA", "ABORDADO", "OUTREACH_SENT", "AGUARDANDO_RETORNO", "ABORDAGEM INICIADA"):
         status = "Abordagem Enviada"
     elif status_upper in ("EM QUALIFICACAO", "EM QUALIFICAÇÃO", "QUALIFIED", "INTERESTED"):
         status = "Em Qualificação"
@@ -179,13 +187,28 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         status = status_raw
 
     # Infer contact method / origin based on populated fields priority
-    if whatsapp:
+    origin = lead.get("origem") or lead.get("origin")
+    if not origin or str(origin).strip().lower() == "null":
+        if whatsapp:
+            origin = "WhatsApp"
+        elif instagram:
+            origin = "Instagram"
+        elif email:
+            origin = "E-mail"
+        else:
+            origin = "Outro"
+    
+    # Capitalize origin properly if it maps to known ones
+    origin_lower = str(origin).strip().lower()
+    if origin_lower == "whatsapp":
         origin = "WhatsApp"
-    elif instagram:
+    elif origin_lower == "instagram":
         origin = "Instagram"
-    elif email:
+    elif origin_lower in ("e-mail", "email"):
         origin = "E-mail"
-    else:
+    elif origin_lower == "telefone":
+        origin = "Telefone"
+    elif origin_lower == "outro":
         origin = "Outro"
 
     # Determine if there are messages
@@ -229,7 +252,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         notes = ""
 
     # Map proposal
-    proposal = lead.get("proposta_pronta") or lead.get("proposal") or ""
+    proposal = lead.get("proposta_pronta") or lead.get("proposal") or lead.get("proposta_inicial") or ""
     if proposal is not None and str(proposal).strip().lower() in ("null", ""):
         proposal = ""
 
@@ -239,8 +262,8 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         responsible = "Eliezer"
 
     # Dates
-    last_interaction = lead.get("last_interaction") or lead.get("updatedAt") or lead.get("created_at")
-    created_at = lead.get("created_at") or lead.get("createdAt")
+    last_interaction = lead.get("last_interaction") or lead.get("updated_at") or lead.get("updatedAt") or lead.get("created_at") or lead.get("data_coleta")
+    created_at = lead.get("created_at") or lead.get("createdAt") or lead.get("data_coleta")
 
     if conversations_map and lead_id in conversations_map and conversations_map[lead_id]:
         # Get the latest message timestamp
@@ -258,7 +281,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     elif notes:
         falha_identificada = notes
 
-    raw_segmento = lead.get("segmento")
+    raw_segmento = lead.get("segmento") or lead.get("nicho")
     segmento = ""
     if raw_segmento is not None and str(raw_segmento).strip().lower() not in ("null", ""):
         segmento = str(raw_segmento).strip()
@@ -268,6 +291,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     if raw_solucao is not None and str(raw_solucao).strip().lower() not in ("null", ""):
         solucao_recomendada = str(raw_solucao).strip()
 
+    # Base mapped lead with all keys
     mapped_lead = {
         **lead,
         "id": lead_id,
@@ -289,9 +313,30 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         "mensagem_enviada": mensagem_enviada
     }
 
-    # Ensure id_anuncio_meta uses the standard key if present under another name
-    if "id_anuncio_meta" not in mapped_lead and lead.get("ad_archive_id"):
-        mapped_lead["id_anuncio_meta"] = lead.get("ad_archive_id")
+    # Reconstruct id_anuncio_meta from other potential places
+    id_anuncio_meta = (
+        lead.get("id_anuncio_meta")
+        or lead.get("ad_archive_id")
+        or payload_dict.get("id_anuncio_meta")
+        or (lead.get("payload") or {}).get("id_anuncio_meta") if isinstance(lead.get("payload"), dict) else None
+    )
+    if id_anuncio_meta:
+        mapped_lead["id_anuncio_meta"] = str(id_anuncio_meta).strip()
+
+    # Flatten nested payload dictionary fields directly to the top-level
+    for k, v in payload_dict.items():
+        if k not in mapped_lead or mapped_lead[k] is None or mapped_lead[k] == "":
+            mapped_lead[k] = v
+
+    # Delete original Portuguese raw keys, metadata and raw payload to avoid duplicate display
+    keys_to_remove = [
+        "lead_id", "empresa_nome", "nome_empresa", "telefone_contato", "telefone",
+        "email_contato", "origem", "nicho", "data_coleta", "updated_at", "updatedAt",
+        "createdAt", "payload"
+    ]
+    for k in keys_to_remove:
+        if k in mapped_lead:
+            del mapped_lead[k]
 
     return mapped_lead
 
@@ -416,12 +461,40 @@ class N8NService:
     async def update_lead(lead_id: str, payload: dict) -> dict:
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
 
+        # Reconstruct the nested payload dictionary if any of its keys are in payload
+        payload_keys = [
+            "tem_cta", "url_site", "tem_formulario", "id_anuncio_meta",
+            "tem_site_proprio", "erros_identificados_site"
+        ]
+        
+        has_payload_updates = any(k in payload for k in payload_keys)
+        
+        # Look up existing payload dict in mock state
+        existing_payload_dict = {}
+        for lead in MOCK_LEADS:
+            if lead.get("id") == lead_id:
+                raw_p = lead.get("payload")
+                if isinstance(raw_p, dict):
+                    existing_payload_dict = raw_p
+                break
+
+        # Reconstruct the payload dict
+        reconstructed_payload = {**existing_payload_dict}
+        for k in payload_keys:
+            if k in payload:
+                reconstructed_payload[k] = payload[k]
+        if "email" in payload:
+            reconstructed_payload["email"] = payload["email"]
+
         # Sync the change to our mock state first so it persists in the developer's session
         for i, lead in enumerate(MOCK_LEADS):
             if lead["id"] == lead_id:
                 # Merge fields
                 for k, v in payload.items():
                     lead[k] = v
+                
+                # Ensure the nested payload is also updated inside the mock lead
+                lead["payload"] = reconstructed_payload
                 lead["last_interaction"] = datetime.utcnow().isoformat() + "Z"
                 MOCK_LEADS[i] = lead
                 break
@@ -430,12 +503,23 @@ class N8NService:
         outgoing_payload = {**payload}
         if "company_name" in payload:
             outgoing_payload["nome_empresa"] = payload["company_name"]
+            outgoing_payload["empresa_nome"] = payload["company_name"]
         if "whatsapp" in payload:
             outgoing_payload["telefone"] = payload["whatsapp"]
+            outgoing_payload["telefone_contato"] = payload["whatsapp"]
+        if "email" in payload:
+            outgoing_payload["email_contato"] = payload["email"]
         if "proposal" in payload:
             outgoing_payload["proposta_pronta"] = payload["proposal"]
+            outgoing_payload["proposta_inicial"] = payload["proposal"]
         if "origin" in payload:
             outgoing_payload["origem"] = payload["origin"]
+        if "segmento" in payload:
+            outgoing_payload["nicho"] = payload["segmento"]
+
+        # Include the reconstructed nested payload dict in the outgoing payload
+        if has_payload_updates or reconstructed_payload:
+            outgoing_payload["payload"] = reconstructed_payload
 
         if not url:
             logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead updated locally in-memory.")
@@ -451,7 +535,7 @@ class N8NService:
                 response = await client.put(endpoint_url, json=outgoing_payload, timeout=30.0)
                 response.raise_for_status()
                 res_data = clean_n8n_response(response.json())
-                if isinstance(res_data, dict) and ("company_name" in res_data or "nome_empresa" in res_data):
+                if isinstance(res_data, dict) and ("company_name" in res_data or "nome_empresa" in res_data or "empresa_nome" in res_data):
                     return map_n8n_lead(res_data)
 
                 fallback_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
