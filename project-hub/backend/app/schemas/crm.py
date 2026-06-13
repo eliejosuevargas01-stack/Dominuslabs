@@ -32,7 +32,7 @@ class Lead(LeadBase):
     has_messages: Optional[bool] = False
     mensagem_enviada: Optional[bool] = False
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="allow")
 
 class MessageBase(BaseModel):
     sender: str  # "lead" or "user"

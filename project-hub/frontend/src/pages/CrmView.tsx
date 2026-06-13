@@ -838,12 +838,21 @@ export default function CrmView() {
                         .filter(([key]) => ![
                             'id', 'company_name', 'instagram', 'whatsapp', 'email', 'status', 'origin', 'notes',
                             'proposal', 'responsible', 'falha_identificada', 'segmento', 'solucao_recomendada',
-                            'last_interaction', 'created_at', 'has_messages', 'mensagem_enviada', 'id_anuncio_meta'
+                            'last_interaction', 'created_at', 'has_messages', 'mensagem_enviada', 'payload'
                           ].includes(key))
                         .map(([key, val]) => (
                           <div key={key} className="bg-slate-50 p-1.5 rounded border border-slate-100 break-words">
                             <span className="font-bold text-slate-500 block uppercase mb-0.5 truncate">{key.replace(/_/g, ' ')}</span>
-                            {typeof val === 'object' ? (
+                            {typeof val === 'boolean' ? (
+                              <select
+                                value={String(val)}
+                                onChange={(e) => setEditingLead({ ...editingLead, [key]: e.target.value === 'true' })}
+                                className="w-full px-2 py-1 rounded border border-violet-100 bg-white text-xs font-semibold text-slate-700 focus:border-purple-500 outline-none transition-colors cursor-pointer"
+                              >
+                                <option value="true">Sim</option>
+                                <option value="false">Não</option>
+                              </select>
+                            ) : typeof val === 'object' && val !== null ? (
                               <span className="font-semibold text-slate-700">{JSON.stringify(val)}</span>
                             ) : (
                               <input
