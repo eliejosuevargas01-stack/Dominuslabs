@@ -14,7 +14,7 @@ export default function Login() {
     // If already logged in, redirect to admin
     const token = localStorage.getItem("admin_token");
     if (token) {
-      navigate('/admin');
+      navigate('/project-hub');
     }
   }, [navigate]);
 
@@ -33,7 +33,7 @@ export default function Login() {
       if (data.refresh_token) {
         localStorage.setItem("admin_refresh_token", data.refresh_token);
       }
-      navigate('/admin');
+      navigate('/project-hub');
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Credenciais inválidas. Tente novamente.');

@@ -248,7 +248,7 @@ export default function AdminDashboard() {
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/30 transition-colors group">
                       <td className="p-4 pl-6">
-                        <Link to={`/admin/project/${p.id}`} className="font-semibold text-slate-900 hover:text-violet-600 transition-colors">
+                        <Link to={`/project-hub/project/${p.id}`} className="font-semibold text-slate-900 hover:text-violet-600 transition-colors">
                           {p.name}
                         </Link>
                         <span className="block text-xs text-slate-400 mt-0.5">{p.project_type}</span>
@@ -284,7 +284,7 @@ export default function AdminDashboard() {
                       </td>
                       <td className="p-4 pr-6 text-right">
                         <Link
-                          to={`/admin/project/${p.id}`}
+                          to={`/project-hub/project/${p.id}`}
                           className="text-xs font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100/80 px-3 py-1.5 rounded-xl transition-all inline-block"
                         >
                           Gerenciar

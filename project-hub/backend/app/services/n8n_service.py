@@ -1,8 +1,13 @@
 import httpx
 import logging
+import json
+import copy
 from typing import List, Dict, Any
 from app.core.config import settings
 from datetime import datetime
+
+RAW_LEADS_CACHE = {}
+
 
 logger = logging.getLogger("n8n_service")
 
@@ -125,22 +130,32 @@ MOCK_ACTIVITIES = {
     ]
 }
 
+def safe_parse_json(val: Any) -> dict:
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str) and val.strip():
+        try:
+            parsed = json.loads(val)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+    return {}
+
 def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
-    # Get ID as string (check lead_id first for the new payload)
     lead_id = str(lead.get("id" if "id" in lead else "lead_id", lead.get("_id", "")))
     if not lead_id or lead_id.lower() == "none":
-        # Fallback if lead_id was none/empty
         lead_id = str(lead.get("id", lead.get("lead_id", lead.get("_id", ""))))
 
-    # Extract nested payload dict safely
+    if lead_id and lead_id.lower() != "none" and lead_id != "":
+        RAW_LEADS_CACHE[lead_id] = copy.deepcopy(lead)
+
     payload_dict = lead.get("payload") or {}
     if not isinstance(payload_dict, dict):
         payload_dict = {}
 
-    # Map Portuguese/Custom keys to Pydantic Lead Schema
     company_name = lead.get("nome_empresa") or lead.get("empresa_nome") or lead.get("company_name") or "Empresa Sem Nome"
 
-    # Extract and clean contact fields, handling None, "null", and whitespace
     raw_tel = lead.get("telefone") or lead.get("telefone_contato")
     raw_wa = lead.get("whatsapp")
     whatsapp = ""
@@ -154,7 +169,6 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     if raw_ig is not None and str(raw_ig).strip().lower() not in ("null", ""):
         instagram = str(raw_ig).strip()
 
-    # Fallback to link_destibo_botao or url_site if instagram is empty but they contain instagram.com
     if not instagram:
         for val in (lead.get("link_destibo_botao"), lead.get("url_site"), payload_dict.get("url_site")):
             if val is not None and "instagram.com" in str(val).lower():
@@ -166,7 +180,6 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     if raw_email is not None and str(raw_email).strip().lower() not in ("null", ""):
         email = str(raw_email).strip()
 
-    # Map status to support Portuguese custom stages
     status_raw = str(lead.get("status") or "Prospectado").strip()
     status_upper = status_raw.upper()
     if status_upper in ("NOVO", "FRIO", "DISCOVERED", "PROSPECTADO"):
@@ -186,32 +199,15 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     else:
         status = status_raw
 
-    # Infer contact method / origin based on populated fields priority
-    origin = lead.get("origem") or lead.get("origin")
-    if not origin or str(origin).strip().lower() == "null":
-        if whatsapp:
-            origin = "WhatsApp"
-        elif instagram:
-            origin = "Instagram"
-        elif email:
-            origin = "E-mail"
-        else:
-            origin = "Outro"
-    
-    # Capitalize origin properly if it maps to known ones
-    origin_lower = str(origin).strip().lower()
-    if origin_lower == "whatsapp":
+    if whatsapp:
         origin = "WhatsApp"
-    elif origin_lower == "instagram":
+    elif instagram:
         origin = "Instagram"
-    elif origin_lower in ("e-mail", "email"):
+    elif email:
         origin = "E-mail"
-    elif origin_lower == "telefone":
-        origin = "Telefone"
-    elif origin_lower == "outro":
+    else:
         origin = "Outro"
 
-    # Determine if there are messages
     has_messages = False
     if lead_id in MOCK_CONVERSATIONS and len(MOCK_CONVERSATIONS[lead_id]) > 0:
         has_messages = True
@@ -220,7 +216,6 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     elif lead.get("has_messages") is True or lead.get("has_messages") == "true":
         has_messages = True
 
-    # Determine if a message was sent by the user (mensagem_enviada)
     mensagem_enviada = False
     if lead_id in MOCK_CONVERSATIONS:
         if any(m.get("sender") == "user" for m in MOCK_CONVERSATIONS[lead_id]):
@@ -237,43 +232,35 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     if raw_me is True or str(raw_me).strip().lower() == "true":
         mensagem_enviada = True
 
-    # If the status is "Abordagem Enviada", it means a message was sent (mensagem_enviada and has_messages should be True)
     if status == "Abordagem Enviada":
         mensagem_enviada = True
         has_messages = True
 
-    # If a message was sent but status is still Prospectado, advance to Abordagem Enviada
     if mensagem_enviada and status == "Prospectado":
         status = "Abordagem Enviada"
 
-    # Map notes
     notes = lead.get("notes") or lead.get("falha_identificada") or lead.get("dor_identificada") or ""
     if notes is not None and str(notes).strip().lower() in ("null", ""):
         notes = ""
 
-    # Map proposal
     proposal = lead.get("proposta_pronta") or lead.get("proposal") or lead.get("proposta_inicial") or ""
     if proposal is not None and str(proposal).strip().lower() in ("null", ""):
         proposal = ""
 
-    # Responsible
     responsible = lead.get("responsible") or lead.get("responsavel") or "Eliezer"
     if responsible is not None and str(responsible).strip().lower() in ("null", ""):
         responsible = "Eliezer"
 
-    # Dates
     last_interaction = lead.get("last_interaction") or lead.get("updated_at") or lead.get("updatedAt") or lead.get("created_at") or lead.get("data_coleta")
     created_at = lead.get("created_at") or lead.get("createdAt") or lead.get("data_coleta")
 
     if conversations_map and lead_id in conversations_map and conversations_map[lead_id]:
-        # Get the latest message timestamp
         latest_msg = max(conversations_map[lead_id], key=lambda x: x.get("data") or x.get("timestamp") or x.get("createdAt") or "")
         latest_ts = latest_msg.get("data") or latest_msg.get("timestamp") or latest_msg.get("createdAt")
         if latest_ts:
             if not last_interaction or latest_ts > last_interaction:
                 last_interaction = latest_ts
 
-    # Extract and clean additional fields, handling None, "null", and whitespace
     raw_falha = lead.get("falha_identificada")
     falha_identificada = ""
     if raw_falha is not None and str(raw_falha).strip().lower() not in ("null", ""):
@@ -291,7 +278,6 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     if raw_solucao is not None and str(raw_solucao).strip().lower() not in ("null", ""):
         solucao_recomendada = str(raw_solucao).strip()
 
-    # Base mapped lead with all keys
     mapped_lead = {
         **lead,
         "id": lead_id,
@@ -313,7 +299,12 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         "mensagem_enviada": mensagem_enviada
     }
 
-    # Reconstruct id_anuncio_meta from other potential places
+    origem_plataforma = lead.get("origem") or lead.get("origin") or ""
+    if origin_lower := str(origem_plataforma).strip().lower():
+        if origin_lower in ("whatsapp", "instagram", "e-mail", "email", "telefone", "outro"):
+            origem_plataforma = ""
+    mapped_lead["origem"] = origem_plataforma
+
     id_anuncio_meta = (
         lead.get("id_anuncio_meta")
         or lead.get("ad_archive_id")
@@ -323,16 +314,34 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     if id_anuncio_meta:
         mapped_lead["id_anuncio_meta"] = str(id_anuncio_meta).strip()
 
-    # Flatten nested payload dictionary fields directly to the top-level
     for k, v in payload_dict.items():
         if k not in mapped_lead or mapped_lead[k] is None or mapped_lead[k] == "":
             mapped_lead[k] = v
 
-    # Delete original Portuguese raw keys, metadata and raw payload to avoid duplicate display
+    presenca = safe_parse_json(lead.get("presenca_digital"))
+    reputacao = safe_parse_json(lead.get("reputacao_google"))
+    oportunidades = safe_parse_json(lead.get("oportunidades_identificadas"))
+    diagnostico = safe_parse_json(presenca.get("diagnostico_site"))
+
+    mapped_lead["presenca_digital_url_site"] = presenca.get("url_site") or lead.get("url_site") or ""
+    mapped_lead["presenca_digital_status_site"] = presenca.get("status_site") or ""
+    mapped_lead["presenca_digital_tem_cta"] = diagnostico.get("tem cta") or diagnostico.get("tem_cta") or ""
+    mapped_lead["presenca_digital_url_abre"] = diagnostico.get("url abre") or diagnostico.get("url_abre") or ""
+    mapped_lead["presenca_digital_demora_abrir"] = diagnostico.get("demora pra abrir?") or diagnostico.get("demora_abrir") or ""
+    mapped_lead["presenca_digital_formulario_captacao"] = diagnostico.get("tem formulario de captação?") or diagnostico.get("formulario_captacao") or ""
+    
+    mapped_lead["reputacao_google_nota_media"] = reputacao.get("nota_media")
+    mapped_lead["reputacao_google_total_avaliacoes"] = reputacao.get("total_avaliacoes")
+
+    mapped_lead["oportunidades_identificadas_telefone_fixo"] = oportunidades.get("telefone_fixo")
+    mapped_lead["oportunidades_identificadas_urgencia_site"] = oportunidades.get("urgencia_de_site") or oportunidades.get("urgencia_site")
+    mapped_lead["oportunidades_identificadas_urgencia_avaliacoes"] = oportunidades.get("urgencia_de_avaliacoes") or oportunidades.get("urgencia_avaliacoes")
+    mapped_lead["oportunidades_identificadas_urgencia_gestao_reputacao"] = oportunidades.get("urgencia_de_gestao_reputacao") or oportunidades.get("urgencia_gestao_reputacao")
+
     keys_to_remove = [
         "lead_id", "empresa_nome", "nome_empresa", "telefone_contato", "telefone",
-        "email_contato", "origem", "nicho", "data_coleta", "updated_at", "updatedAt",
-        "createdAt", "payload"
+        "email_contato", "origin", "nicho", "data_coleta", "updated_at", "updatedAt",
+        "createdAt", "payload", "presenca_digital", "reputacao_google", "oportunidades_identificadas"
     ]
     for k in keys_to_remove:
         if k in mapped_lead:
@@ -353,7 +362,6 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
     created_at = msg.get("createdAt") or msg.get("data")
     updated_at = msg.get("updatedAt") or msg.get("data")
 
-    # 1. User message (mensagem_enviada)
     user_text = msg.get("mensagem_enviada")
     if user_text is not None and str(user_text).strip().lower() not in ("null", ""):
         mapped.append({
@@ -364,7 +372,6 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             "timestamp": created_at
         })
     elif msg.get("tipo") == "mensagem_enviada":
-        # Fallback if text is empty but type is message sent
         mapped.append({
             "id": f"{msg_id}_user_fallback",
             "sender": "user",
@@ -373,7 +380,6 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             "timestamp": created_at
         })
 
-    # 2. Lead reply (resposta)
     lead_text = msg.get("resposta")
     if lead_text is not None and str(lead_text).strip().lower() not in ("null", ""):
         mapped.append({
@@ -386,6 +392,282 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
 
     return mapped
 
+def update_raw_lead(raw_lead: dict, payload: dict) -> dict:
+    """
+    Updates a copy of the original raw lead with values from the frontend payload,
+    preserving the exact key names and formats received from N8N.
+    No new keys are added, and original keys that are not updated remain untouched.
+    """
+    res = copy.deepcopy(raw_lead)
+
+    # Helper function to check and update keys at a given dict level
+    def update_keys(d: dict, mappings: dict):
+        for target_key, val in mappings.items():
+            if target_key in d:
+                d[target_key] = val
+
+    # 1. Top level mappings
+    top_mappings = {}
+    
+    # Name mappings
+    name_val = payload.get("company_name")
+    if name_val is not None:
+        top_mappings["empresa_nome"] = name_val
+        top_mappings["nome_empresa"] = name_val
+        top_mappings["company_name"] = name_val
+
+    # Phone mappings
+    phone_val = payload.get("whatsapp")
+    if phone_val is not None:
+        top_mappings["telefone_contato"] = phone_val
+        top_mappings["telefone"] = phone_val
+        top_mappings["whatsapp"] = phone_val
+
+    # Email mappings
+    email_val = payload.get("email")
+    if email_val is not None:
+        top_mappings["email_contato"] = email_val
+        top_mappings["email"] = email_val
+
+    # Status
+    status_val = payload.get("status")
+    if status_val is not None:
+        top_mappings["status"] = status_val
+
+    # Origin
+    origem_val = payload.get("origem") or payload.get("origin")
+    if origem_val is not None:
+        top_mappings["origem"] = origem_val
+        top_mappings["origin"] = origem_val
+
+    # Nicho/Segmento
+    segmento_val = payload.get("segmento") or payload.get("nicho")
+    if segmento_val is not None:
+        top_mappings["nicho"] = segmento_val
+        top_mappings["segmento"] = segmento_val
+
+    # Proposal
+    proposal_val = payload.get("proposal") or payload.get("proposta_inicial")
+    if proposal_val is not None:
+        top_mappings["proposta_inicial"] = proposal_val
+        top_mappings["proposta_pronta"] = proposal_val
+        top_mappings["proposal"] = proposal_val
+
+    # Localizacao, score, temperatura, lid
+    for k in ["localizacao", "score", "temperatura", "lid"]:
+        if k in payload:
+            top_mappings[k] = payload[k]
+
+    # Notes / falha / dor
+    notes_val = payload.get("notes")
+    if notes_val is not None:
+        top_mappings["notes"] = notes_val
+        top_mappings["falha_identificada"] = notes_val
+        top_mappings["dor_identificada"] = notes_val
+    if "falha_identificada" in payload:
+        top_mappings["falha_identificada"] = payload["falha_identificada"]
+
+    # Responsible
+    resp_val = payload.get("responsible")
+    if resp_val is not None:
+        top_mappings["responsible"] = resp_val
+        top_mappings["responsavel"] = resp_val
+
+    # Time tracking
+    top_mappings["updated_at"] = datetime.utcnow().isoformat() + "Z"
+    top_mappings["updatedAt"] = datetime.utcnow().isoformat() + "Z"
+
+    update_keys(res, top_mappings)
+
+    # 2. Nested payload mappings
+    if "payload" in res:
+        raw_payload = res["payload"]
+        is_str = isinstance(raw_payload, str)
+        payload_dict = safe_parse_json(raw_payload) if is_str else (raw_payload or {})
+        if not isinstance(payload_dict, dict):
+            payload_dict = {}
+
+        p_mappings = {}
+        if "email" in payload:
+            p_mappings["email"] = payload["email"]
+        elif "email_contato" in payload:
+            p_mappings["email"] = payload["email_contato"]
+
+        # CTA, site, formulario, anuncio
+        if "presenca_digital_tem_cta" in payload:
+            p_mappings["tem_cta"] = payload["presenca_digital_tem_cta"]
+        if "tem_cta" in payload:
+            p_mappings["tem_cta"] = payload["tem_cta"]
+            
+        if "presenca_digital_url_site" in payload:
+            p_mappings["url_site"] = payload["presenca_digital_url_site"]
+        if "url_site" in payload:
+            p_mappings["url_site"] = payload["url_site"]
+
+        if "presenca_digital_formulario_captacao" in payload:
+            p_mappings["tem_formulario"] = payload["presenca_digital_formulario_captacao"]
+        if "tem_formulario" in payload:
+            p_mappings["tem_formulario"] = payload["tem_formulario"]
+
+        if "id_anuncio_meta" in payload:
+            p_mappings["id_anuncio_meta"] = payload["id_anuncio_meta"]
+
+        if "tem_site_proprio" in payload:
+            p_mappings["tem_site_proprio"] = payload["tem_site_proprio"]
+
+        if "erros_identificados_site" in payload:
+            p_mappings["erros_identificados_site"] = payload["erros_identificados_site"]
+
+        update_keys(payload_dict, p_mappings)
+        res["payload"] = json.dumps(payload_dict) if is_str else payload_dict
+
+    # 3. Nested presenca_digital mappings
+    if "presenca_digital" in res:
+        raw_presenca = res["presenca_digital"]
+        is_str = isinstance(raw_presenca, str)
+        presenca_dict = safe_parse_json(raw_presenca) if is_str else (raw_presenca or {})
+        if not isinstance(presenca_dict, dict):
+            presenca_dict = {}
+
+        pr_mappings = {}
+        if "presenca_digital_url_site" in payload:
+            pr_mappings["url_site"] = payload["presenca_digital_url_site"]
+        elif "url_site" in payload:
+            pr_mappings["url_site"] = payload["url_site"]
+
+        if "presenca_digital_status_site" in payload:
+            pr_mappings["status_site"] = payload["presenca_digital_status_site"]
+
+        if "tem_site_proprio" in payload:
+            pr_mappings["tem_site_proprio"] = payload["tem_site_proprio"]
+
+        if "erros_identificados_site" in payload:
+            pr_mappings["erros_identificados_site"] = payload["erros_identificados_site"]
+
+        update_keys(presenca_dict, pr_mappings)
+
+        # diagnostico_site within presenca_digital
+        if "diagnostico_site" in presenca_dict:
+            raw_diag = presenca_dict["diagnostico_site"]
+            diag_is_str = isinstance(raw_diag, str)
+            diag_dict = safe_parse_json(raw_diag) if diag_is_str else (raw_diag or {})
+            if not isinstance(diag_dict, dict):
+                diag_dict = {}
+
+            diag_mappings = {}
+            cta_val = payload.get("presenca_digital_tem_cta")
+            if cta_val is not None:
+                diag_mappings["tem cta"] = cta_val
+                diag_mappings["tem_cta"] = cta_val
+
+            url_abre_val = payload.get("presenca_digital_url_abre")
+            if url_abre_val is not None:
+                diag_mappings["url abre"] = url_abre_val
+                diag_mappings["url_abre"] = url_abre_val
+
+            demora_val = payload.get("presenca_digital_demora_abrir")
+            if demora_val is not None:
+                diag_mappings["demora pra abrir?"] = demora_val
+                diag_mappings["demora_abrir"] = demora_val
+
+            form_val = payload.get("presenca_digital_formulario_captacao")
+            if form_val is not None:
+                diag_mappings["tem formulario de captação?"] = form_val
+                diag_mappings["formulario_captacao"] = form_val
+
+            update_keys(diag_dict, diag_mappings)
+            presenca_dict["diagnostico_site"] = json.dumps(diag_dict) if diag_is_str else diag_dict
+
+        res["presenca_digital"] = json.dumps(presenca_dict) if is_str else presenca_dict
+
+    # 4. Nested reputacao_google mappings
+    if "reputacao_google" in res:
+        raw_rep = res["reputacao_google"]
+        is_str = isinstance(raw_rep, str)
+        rep_dict = safe_parse_json(raw_rep) if is_str else (raw_rep or {})
+        if not isinstance(rep_dict, dict):
+            rep_dict = {}
+
+        rep_mappings = {}
+        if "reputacao_google_nota_media" in payload:
+            val = payload["reputacao_google_nota_media"]
+            try:
+                rep_mappings["nota_media"] = float(val) if val is not None else None
+            except ValueError:
+                rep_mappings["nota_media"] = val
+
+        if "reputacao_google_total_avaliacoes" in payload:
+            val = payload["reputacao_google_total_avaliacoes"]
+            try:
+                rep_mappings["total_avaliacoes"] = int(val) if val is not None else None
+            except ValueError:
+                rep_mappings["total_avaliacoes"] = val
+
+        update_keys(rep_dict, rep_mappings)
+        res["reputacao_google"] = json.dumps(rep_dict) if is_str else rep_dict
+
+    # 5. Nested oportunidades_identificadas mappings
+    if "oportunidades_identificadas" in res:
+        raw_op = res["oportunidades_identificadas"]
+        is_str = isinstance(raw_op, str)
+        op_dict = safe_parse_json(raw_op) if is_str else (raw_op or {})
+        if not isinstance(op_dict, dict):
+            op_dict = {}
+
+        op_mappings = {}
+        if "oportunidades_identificadas_telefone_fixo" in payload:
+            op_mappings["telefone_fixo"] = payload["oportunidades_identificadas_telefone_fixo"]
+
+        urg_site_val = payload.get("oportunidades_identificadas_urgencia_site")
+        if urg_site_val is not None:
+            op_mappings["urgencia_de_site"] = urg_site_val
+            op_mappings["urgencia_site"] = urg_site_val
+
+        urg_av_val = payload.get("oportunidades_identificadas_urgencia_avaliacoes")
+        if urg_av_val is not None:
+            op_mappings["urgencia_de_avaliacoes"] = urg_av_val
+            op_mappings["urgencia_avaliacoes"] = urg_av_val
+
+        urg_rep_val = payload.get("oportunidades_identificadas_urgencia_gestao_reputacao")
+        if urg_rep_val is not None:
+            op_mappings["urgencia_de_gestao_reputacao"] = urg_rep_val
+            op_mappings["urgencia_gestao_reputacao"] = urg_rep_val
+
+        update_keys(op_dict, op_mappings)
+        res["oportunidades_identificadas"] = json.dumps(op_dict) if is_str else op_dict
+
+    return res
+
+def sanitize_outgoing_payload(payload: dict) -> dict:
+    """
+    Filters the outgoing payload to contain ONLY whitelisted Portuguese keys.
+    """
+    whitelist = {
+        "lead_id", "origem", "data_coleta", "nicho", "status", "empresa_nome",
+        "telefone_contato", "email_contato", "localizacao", "score", "temperatura",
+        "payload", "created_at", "updated_at", "proposta_inicial", "lid"
+    }
+    
+    sanitized = {}
+    for k, v in payload.items():
+        if k in whitelist:
+            sanitized[k] = v
+
+    # Sanitize nested payload dict if present
+    if "payload" in sanitized:
+        raw_p = sanitized["payload"]
+        is_str = isinstance(raw_p, str)
+        p_dict = safe_parse_json(raw_p) if is_str else (raw_p or {})
+        if isinstance(p_dict, dict):
+            p_whitelist = {
+                "email", "tem_cta", "url_site", "tem_formulario",
+                "id_anuncio_meta", "tem_site_proprio", "erros_identificados_site"
+            }
+            sanitized_p = {pk: pv for pk, pv in p_dict.items() if pk in p_whitelist}
+            sanitized["payload"] = json.dumps(sanitized_p) if is_str else sanitized_p
+
+    return sanitized
+
 class N8NService:
     @staticmethod
     async def run_scrapper(payload: dict, platform: str = "meta_ads") -> dict:
@@ -395,7 +677,6 @@ class N8NService:
             logger.info("SCRAPPER Webhook URL not configured. Returning mock success.")
             return {"status": "success", "message": "Scrapper triggered (MOCK Mode)", "data": payload}
 
-        # Map frontend platforms keys to N8N's expected target_platforms field name
         outgoing_payload = {
             "queries": payload.get("queries", []),
             "min_results": payload.get("min_results", 10),
@@ -423,12 +704,10 @@ class N8NService:
         if not url:
             logger.info("CRM_GET_LEADS_WEBHOOK_URL not configured. Returning mock leads.")
             mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
-            # stable sort: last_interaction descending, then mensagem_enviada descending
             mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
             mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
             return mapped_mock
 
-        # Append action parameter to CRM N8N query parameters
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=get_leads"
 
@@ -451,7 +730,6 @@ class N8NService:
             mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
             return mapped_mock
 
-        # Apply mapper and perform stable sorting
         mapped_leads = [map_n8n_lead(l) for l in raw_leads if isinstance(l, dict)]
         mapped_leads.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
         mapped_leads.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
@@ -461,65 +739,85 @@ class N8NService:
     async def update_lead(lead_id: str, payload: dict) -> dict:
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
 
-        # Reconstruct the nested payload dictionary if any of its keys are in payload
-        payload_keys = [
-            "tem_cta", "url_site", "tem_formulario", "id_anuncio_meta",
-            "tem_site_proprio", "erros_identificados_site"
-        ]
-        
-        has_payload_updates = any(k in payload for k in payload_keys)
-        
-        # Look up existing payload dict in mock state
-        existing_payload_dict = {}
-        for lead in MOCK_LEADS:
-            if lead.get("id") == lead_id:
-                raw_p = lead.get("payload")
-                if isinstance(raw_p, dict):
-                    existing_payload_dict = raw_p
-                break
+        # Try to find in cache
+        raw_lead = None
+        if lead_id in RAW_LEADS_CACHE:
+            raw_lead = copy.deepcopy(RAW_LEADS_CACHE[lead_id])
 
-        # Reconstruct the payload dict
-        reconstructed_payload = {**existing_payload_dict}
-        for k in payload_keys:
-            if k in payload:
-                reconstructed_payload[k] = payload[k]
-        if "email" in payload:
-            reconstructed_payload["email"] = payload["email"]
+        if not raw_lead:
+            # Fallback template with Portuguese keys if not in cache
+            raw_lead = {
+                "lead_id": lead_id,
+                "origem": payload.get("origem") or "",
+                "data_coleta": payload.get("created_at") or None,
+                "nicho": payload.get("segmento") or "",
+                "status": payload.get("status") or "Prospectado",
+                "empresa_nome": payload.get("company_name") or "",
+                "telefone_contato": payload.get("whatsapp") or "",
+                "email_contato": payload.get("email") or "",
+                "localizacao": payload.get("localizacao") or None,
+                "score": payload.get("score") or None,
+                "temperatura": payload.get("temperatura") or None,
+                "payload": {
+                    "email": payload.get("email") or None,
+                    "tem_cta": payload.get("presenca_digital_tem_cta") or "não",
+                    "url_site": payload.get("url_site") or None,
+                    "tem_formulario": payload.get("presenca_digital_formulario_captacao") or "não",
+                    "id_anuncio_meta": payload.get("id_anuncio_meta") or None,
+                    "tem_site_proprio": payload.get("tem_site_proprio") if payload.get("tem_site_proprio") is not None else False,
+                    "erros_identificados_site": payload.get("erros_identificados_site") or None
+                },
+                "created_at": payload.get("created_at") or None,
+                "updated_at": datetime.utcnow().isoformat() + "Z",
+                "proposta_inicial": payload.get("proposal") or "",
+                "lid": payload.get("lid") or None
+            }
 
-        # Sync the change to our mock state first so it persists in the developer's session
+        # Update the raw lead copy
+        outgoing_payload = update_raw_lead(raw_lead, payload)
+
+        # Sanitize outgoing payload to contain ONLY Portuguese keys
+        outgoing_payload = sanitize_outgoing_payload(outgoing_payload)
+
+        # Update in cache for subsequent calls
+        RAW_LEADS_CACHE[lead_id] = copy.deepcopy(outgoing_payload)
+
+        # Also update mock leads for local consistency/fallback
+        reconstructed_payload_meta = {}
+        if isinstance(outgoing_payload.get("payload"), dict):
+            reconstructed_payload_meta = outgoing_payload["payload"]
+        elif isinstance(outgoing_payload.get("payload"), str):
+            reconstructed_payload_meta = safe_parse_json(outgoing_payload["payload"])
+
+        reconstructed_presenca = {}
+        if isinstance(outgoing_payload.get("presenca_digital"), dict):
+            reconstructed_presenca = outgoing_payload["presenca_digital"]
+        elif isinstance(outgoing_payload.get("presenca_digital"), str):
+            reconstructed_presenca = safe_parse_json(outgoing_payload["presenca_digital"])
+
+        reconstructed_reputacao = {}
+        if isinstance(outgoing_payload.get("reputacao_google"), dict):
+            reconstructed_reputacao = outgoing_payload["reputacao_google"]
+        elif isinstance(outgoing_payload.get("reputacao_google"), str):
+            reconstructed_reputacao = safe_parse_json(outgoing_payload["reputacao_google"])
+
+        reconstructed_oportunidades = {}
+        if isinstance(outgoing_payload.get("oportunidades_identificadas"), dict):
+            reconstructed_oportunidades = outgoing_payload["oportunidades_identificadas"]
+        elif isinstance(outgoing_payload.get("oportunidades_identificadas"), str):
+            reconstructed_oportunidades = safe_parse_json(outgoing_payload["oportunidades_identificadas"])
+
         for i, lead in enumerate(MOCK_LEADS):
             if lead["id"] == lead_id:
-                # Merge fields
                 for k, v in payload.items():
                     lead[k] = v
-                
-                # Ensure the nested payload is also updated inside the mock lead
-                lead["payload"] = reconstructed_payload
+                lead["payload"] = reconstructed_payload_meta
+                lead["presenca_digital"] = reconstructed_presenca
+                lead["reputacao_google"] = reconstructed_reputacao
+                lead["oportunidades_identificadas"] = reconstructed_oportunidades
                 lead["last_interaction"] = datetime.utcnow().isoformat() + "Z"
                 MOCK_LEADS[i] = lead
                 break
-
-        # Map outgoing fields to both English and Portuguese keys to be safe with N8N
-        outgoing_payload = {**payload}
-        if "company_name" in payload:
-            outgoing_payload["nome_empresa"] = payload["company_name"]
-            outgoing_payload["empresa_nome"] = payload["company_name"]
-        if "whatsapp" in payload:
-            outgoing_payload["telefone"] = payload["whatsapp"]
-            outgoing_payload["telefone_contato"] = payload["whatsapp"]
-        if "email" in payload:
-            outgoing_payload["email_contato"] = payload["email"]
-        if "proposal" in payload:
-            outgoing_payload["proposta_pronta"] = payload["proposal"]
-            outgoing_payload["proposta_inicial"] = payload["proposal"]
-        if "origin" in payload:
-            outgoing_payload["origem"] = payload["origin"]
-        if "segmento" in payload:
-            outgoing_payload["nicho"] = payload["segmento"]
-
-        # Include the reconstructed nested payload dict in the outgoing payload
-        if has_payload_updates or reconstructed_payload:
-            outgoing_payload["payload"] = reconstructed_payload
 
         if not url:
             logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead updated locally in-memory.")
