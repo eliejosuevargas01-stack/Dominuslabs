@@ -214,7 +214,7 @@ export default function AdminProjectView() {
     return (
       <div className="text-center py-12">
         <p className="text-slate-500">Projeto não encontrado.</p>
-        <Link to="/admin" className="text-violet-600 font-bold hover:underline mt-4 inline-block">Voltar ao dashboard</Link>
+        <Link to="/project-hub" className="text-violet-600 font-bold hover:underline mt-4 inline-block">Voltar ao dashboard</Link>
       </div>
     );
   }
@@ -225,7 +225,7 @@ export default function AdminProjectView() {
     <div className="space-y-6 pb-12 animate-[fade-in_0.3s_ease-out]">
       {/* Header action bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <Link to="/admin" className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-violet-600 transition-colors self-start">
+        <Link to="/project-hub" className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-violet-600 transition-colors self-start">
           <ArrowLeft className="w-4 h-4" />
           Voltar ao Dashboard
         </Link>

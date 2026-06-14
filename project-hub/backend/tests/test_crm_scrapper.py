@@ -212,4 +212,39 @@ def test_auth_refresh_endpoint(client):
     )
     assert bad_refresh_res.status_code == 401
 
+def test_n8n_raw_mapping_service():
+    from app.services.n8n_service import map_n8n_lead, update_raw_lead, RAW_LEADS_CACHE
+    import copy
+
+    mock_n8n_lead = {
+        "lead_id": "meta_999888",
+        "origem": "meta_ads_library",
+        "status": "Prospectado",
+        "empresa_nome": "Sorveteria Delícia",
+        "payload": {
+            "tem_cta": "não",
+            "tem_site_proprio": False
+        }
+    }
+
+    mapped = map_n8n_lead(mock_n8n_lead)
+    assert "meta_999888" in RAW_LEADS_CACHE
+
+    cached = RAW_LEADS_CACHE["meta_999888"]
+    frontend_payload = {
+        "company_name": "Sorveteria Delícia Atualizada",
+        "status": "Negociando/Objeção",
+        "presenca_digital_tem_cta": "sim",
+        "tem_site_proprio": True,
+        "localizacao": "Curitiba"
+    }
+
+    outgoing = update_raw_lead(cached, frontend_payload)
+    assert outgoing["empresa_nome"] == "Sorveteria Delícia Atualizada"
+    assert outgoing["status"] == "Negociando/Objeção"
+    assert outgoing["payload"]["tem_cta"] == "sim"
+    assert outgoing["payload"]["tem_site_proprio"] is True
+    assert "localizacao" not in outgoing
+
+
 
