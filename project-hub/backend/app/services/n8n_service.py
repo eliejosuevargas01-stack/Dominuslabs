@@ -857,9 +857,29 @@ class N8NService:
         if not url:
             return all_msgs
 
+        # Resolve lid from cache or lead list
+        lid = None
+        if lead_id in RAW_LEADS_CACHE:
+            cached = RAW_LEADS_CACHE[lead_id]
+            lid = cached.get("lid") or cached.get("LID") or cached.get("Lid")
+        
+        if not lid:
+            try:
+                leads = await N8NService.get_leads()
+                lead_obj = next((l for l in leads if l["id"] == lead_id), None)
+                if lead_obj:
+                    lid = lead_obj.get("lid")
+                    if not lid and lead_id in RAW_LEADS_CACHE:
+                        cached = RAW_LEADS_CACHE[lead_id]
+                        lid = cached.get("lid") or cached.get("LID") or cached.get("Lid")
+            except Exception:
+                pass
+
         # Append action parameter to CRM N8N query parameters
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=get&lead_id={lead_id}"
+        if lid:
+            endpoint_url += f"&lid={lid}"
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
