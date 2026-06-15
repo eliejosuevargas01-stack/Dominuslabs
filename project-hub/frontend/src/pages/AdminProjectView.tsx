@@ -132,6 +132,21 @@ export default function AdminProjectView() {
     loadProjectData();
   }, [loadProjectData]);
 
+  useEffect(() => {
+    if (!project || !project.public_token) return;
+
+    const eventSource = new EventSource(`${API_BASE}/webhooks/events/${project.public_token}`);
+    eventSource.onmessage = (event) => {
+      if (event.data === 'reload') {
+        loadProjectData();
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [project?.public_token, loadProjectData]);
+
   const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setEditForm(prev => ({ ...prev, [name]: value }));
