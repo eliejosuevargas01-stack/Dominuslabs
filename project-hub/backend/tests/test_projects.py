@@ -179,3 +179,70 @@ def test_project_rich_preview(client):
     assert 'meta property="og:description" content="Portal de acompanhamento do projeto Super WhatsApp Project (Automação) para o cliente VIP Client Name. Confira o status e progresso do desenvolvimento."' in html
     assert f'meta property="og:url" content="https://dominuslabs.online/project/{public_token}"' in html
     assert 'meta property="og:image" content="https://dominuslabs.online/logo.png"' in html
+
+def test_project_feedback_and_showcase(client):
+    # 1. Get auth token
+    login_res = client.post(
+        "/api/v1/auth/login",
+        json={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD}
+    )
+    token = login_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 2. Create project
+    project_payload = {
+        "name": "Feedback Test Project",
+        "client_name": "Reviewer Client",
+        "project_type": "Landing Page",
+        "value": 1200.0,
+        "status": "IN_PROGRESS"
+    }
+    project_data = client.post("/api/v1/projects/", json=project_payload, headers=headers).json()
+    project_id = project_data["id"]
+    public_token = project_data["public_token"]
+
+    # 3. Try submitting feedback while status is IN_PROGRESS (should fail with 400)
+    feedback_payload = {
+        "project_token": public_token,
+        "final_result": "Muito bom",
+        "service_rating": "Excelente",
+        "invested_value_rating": "Justo",
+        "process_rating": "Rápido",
+        "improvements": "Nenhuma",
+        "rating": 5
+    }
+    res = client.post("/api/v1/projects/public/feedback", json=feedback_payload)
+    assert res.status_code == 400
+    assert "Feedback só pode ser enviado para projetos concluídos." in res.json()["detail"]
+
+    # 4. Set status to DELIVERED
+    update_payload = {"status": "DELIVERED"}
+    client.put(f"/api/v1/projects/{project_id}", json=update_payload, headers=headers)
+
+    # 5. Submit feedback (should succeed)
+    res = client.post("/api/v1/projects/public/feedback", json=feedback_payload)
+    assert res.status_code == 201
+    assert res.json()["status"] == "success"
+
+    # 6. Submit duplicate feedback (should fail with 400)
+    res = client.post("/api/v1/projects/public/feedback", json=feedback_payload)
+    assert res.status_code == 400
+    assert "Feedback já enviado para este projeto." in res.json()["detail"]
+
+    # 7. Verify showcase data endpoint returns the correct projects and testimonial
+    res = client.get("/api/v1/projects/public/showcase/data")
+    assert res.status_code == 200
+    data = res.json()
+    assert "projects" in data
+    assert "testimonials" in data
+    
+    # Showcase should contain the project
+    target_proj = next((p for p in data["projects"] if p["name"] == "Feedback Test Project"), None)
+    assert target_proj is not None
+    assert target_proj["status"] == "DELIVERED"
+    
+    # Showcase should contain the testimonial
+    target_testimonial = next((t for t in data["testimonials"] if t["client_name"] == "Reviewer Client"), None)
+    assert target_testimonial is not None
+    assert target_testimonial["rating"] == 5
+    assert target_testimonial["comment"] == "Muito bom"

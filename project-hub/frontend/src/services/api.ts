@@ -208,3 +208,30 @@ export async function fetchDeploys(projectId: string | number) {
   if (!res.ok) throw new Error("Failed to fetch deploys");
   return res.json();
 }
+
+export async function submitFeedback(payload: {
+  project_token: string;
+  final_result: string;
+  service_rating: string;
+  invested_value_rating: string;
+  process_rating: string;
+  improvements: string;
+  rating: number;
+}) {
+  const res = await fetch(`${API_BASE}/projects/public/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Falha ao enviar feedback.");
+  }
+  return res.json();
+}
+
+export async function fetchShowcaseData() {
+  const res = await fetch(`${API_BASE}/projects/public/showcase/data`);
+  if (!res.ok) throw new Error("Failed to fetch showcase data");
+  return res.json();
+}
