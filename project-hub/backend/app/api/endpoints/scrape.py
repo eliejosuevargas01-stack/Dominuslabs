@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.schemas.scrape import ScrapePayload
 from app.services.n8n_service import n8n_service
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, check_scrapper_permission
 
 router = APIRouter()
 
 @router.post("/meta_ads")
-async def run_scrape_meta_ads(payload: ScrapePayload, current_user: str = Depends(get_current_user)):
+async def run_scrape_meta_ads(payload: ScrapePayload, current_user: str = Depends(check_scrapper_permission)):
     """
     Trigger the Meta Ads scraper workflow on N8N.
     """
@@ -16,7 +16,7 @@ async def run_scrape_meta_ads(payload: ScrapePayload, current_user: str = Depend
     return result
 
 @router.post("/google_maps")
-async def run_scrape_google_maps(payload: ScrapePayload, current_user: str = Depends(get_current_user)):
+async def run_scrape_google_maps(payload: ScrapePayload, current_user: str = Depends(check_scrapper_permission)):
     """
     Trigger the Google Maps scraper workflow on N8N.
     """

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from app.schemas.crm import Lead, LeadUpdate, Message, MessageSendPayload, CrmDashboardMetrics
 from app.services.n8n_service import n8n_service, MOCK_CONVERSATIONS
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, check_crm_permission
 from datetime import datetime
 
 router = APIRouter()
@@ -16,7 +16,7 @@ async def read_leads(current_user: str = Depends(get_current_user)):
     return leads
 
 @router.put("/leads/{lead_id}", response_model=Lead)
-async def update_lead(lead_id: str, lead_in: LeadUpdate, current_user: str = Depends(get_current_user)):
+async def update_lead(lead_id: str, lead_in: LeadUpdate, current_user: str = Depends(check_crm_permission)):
     """
     Update a lead's profile details.
     """
@@ -32,12 +32,15 @@ async def read_conversation_messages(lead_id: str, current_user: str = Depends(g
     return messages
 
 @router.post("/messages/send", response_model=Message)
-async def send_whatsapp_message(payload: MessageSendPayload, current_user: str = Depends(get_current_user)):
+async def send_whatsapp_message(payload: MessageSendPayload, current_user: str = Depends(check_crm_permission)):
     """
     Send an outbound WhatsApp message to the lead.
     """
-    message = await n8n_service.send_whatsapp_message(payload.model_dump())
-    return message
+    try:
+        message = await n8n_service.send_whatsapp_message(payload.model_dump())
+        return message
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/dashboard", response_model=CrmDashboardMetrics)
 async def get_dashboard_metrics(current_user: str = Depends(get_current_user)):
@@ -97,7 +100,7 @@ async def get_lead_activities(lead_id: str, current_user: str = Depends(get_curr
     return await n8n_service.get_activities(lead_id)
 
 @router.post("/leads/{lead_id}/activities")
-async def log_lead_activity(lead_id: str, payload: ActivityCreatePayload, current_user: str = Depends(get_current_user)):
+async def log_lead_activity(lead_id: str, payload: ActivityCreatePayload, current_user: str = Depends(check_crm_permission)):
     """
     Create a new activity log entry for a lead (e.g. proposal_opened).
     """

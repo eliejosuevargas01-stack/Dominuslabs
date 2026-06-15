@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.endpoints import projects, uploads, webhooks, auth, scrapper, crm, scrape
+from app.api.endpoints import projects, uploads, webhooks, auth, scrapper, crm, scrape, users
 
 api_router = APIRouter()
 
@@ -11,3 +11,4 @@ api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"]
 api_router.include_router(scrapper.router, prefix="/scrapper", tags=["scrapper"])
 api_router.include_router(crm.router, prefix="/crm", tags=["crm"])
 api_router.include_router(scrape.router, prefix="/scrape", tags=["scrape"])
+api_router.include_router(users.router, prefix="/users", tags=["users"])

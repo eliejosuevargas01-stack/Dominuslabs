@@ -42,17 +42,43 @@ def test_crm_endpoints(client):
     messages = res.json()
     assert isinstance(messages, list)
 
-    # Test send whatsapp message
+    # Test send whatsapp message (Success)
     send_payload = {
         "lead_id": lead_id,
         "phone": "+5511999999991",
         "message": "Olá, esta é uma mensagem de teste!"
     }
-    res = client.post("/api/v1/crm/messages/send", json=send_payload, headers=headers)
-    assert res.status_code == 200
-    msg_sent = res.json()
-    assert msg_sent["sender"] == "user"
-    assert msg_sent["message"] == "Olá, esta é uma mensagem de teste!"
+    from unittest.mock import patch
+    with patch("httpx.AsyncClient.post") as mock_post:
+        class MockResponse:
+            status_code = 200
+            def json(self):
+                return {"status": "success", "message": "Message sent"}
+            @property
+            def text(self):
+                return '{"status": "success", "message": "Message sent"}'
+        mock_post.return_value = MockResponse()
+
+        res = client.post("/api/v1/crm/messages/send", json=send_payload, headers=headers)
+        assert res.status_code == 200
+        msg_sent = res.json()
+        assert msg_sent["sender"] == "user"
+        assert msg_sent["message"] == "Olá, esta é uma mensagem de teste!"
+
+    # Test send whatsapp message (Failure propagation)
+    with patch("httpx.AsyncClient.post") as mock_post:
+        class MockFailedResponse:
+            status_code = 400
+            def json(self):
+                return {"error": "bad_request", "message": "O numero informado nao esta registrado no WhatsApp."}
+            @property
+            def text(self):
+                return '{"error": "bad_request", "message": "O numero informado nao esta registrado no WhatsApp."}'
+        mock_post.return_value = MockFailedResponse()
+
+        res = client.post("/api/v1/crm/messages/send", json=send_payload, headers=headers)
+        assert res.status_code == 400
+        assert "O numero informado nao esta registrado no WhatsApp." in res.json()["detail"]
 
     # Test get dashboard metrics
     res = client.get("/api/v1/crm/dashboard", headers=headers)

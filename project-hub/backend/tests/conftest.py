@@ -26,6 +26,50 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 def db():
     # Create tables in the test database
     Base.metadata.create_all(bind=engine)
+    
+    # Seed users for test session
+    from app.core.config import settings
+    from app.models.user import User
+    from app.core.security import get_password_hash
+    
+    seed_session = TestingSessionLocal()
+    try:
+        admin_email = settings.ADMIN_USERNAME
+        if "@" not in admin_email:
+            admin_email = f"{settings.ADMIN_USERNAME}@dominuslabs.online"
+            
+        admin_user = User(
+            email=admin_email,
+            hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+            role="admin",
+            can_create_projects=True,
+            can_edit_projects=True,
+            can_manage_crm=True,
+            can_use_scrapper=True
+        )
+        seed_session.add(admin_user)
+        
+        viewer_email = settings.VIEWER_USERNAME
+        if "@" not in viewer_email:
+            viewer_email = "patrik182rodrigues@gmail.com"
+            
+        viewer_user = User(
+            email=viewer_email,
+            hashed_password=get_password_hash(settings.VIEWER_PASSWORD),
+            role="custom",
+            can_create_projects=True,
+            can_edit_projects=False,
+            can_manage_crm=True,
+            can_use_scrapper=True
+        )
+        seed_session.add(viewer_user)
+        seed_session.commit()
+    except Exception as e:
+        seed_session.rollback()
+        raise e
+    finally:
+        seed_session.close()
+
     connection = engine.connect()
     transaction = connection.begin()
     session = TestingSessionLocal(bind=connection)
