@@ -8,7 +8,8 @@ import {
   fetchCommits, 
   fetchDeploys,
   fetchTasks,
-  API_BASE
+  API_BASE,
+  getUserRole
 } from '../services/api';
 import ProgressBar from '../components/ProgressBar';
 import TaskChecklist from '../components/TaskChecklist';
@@ -52,6 +53,7 @@ const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
 const API_BASE_URL = API_BASE;
 
 export default function AdminProjectView() {
+  const isViewer = getUserRole() === 'viewer';
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<any>(null);
   const [assets, setAssets] = useState<any[]>([]);
@@ -245,13 +247,15 @@ export default function AdminProjectView() {
           Voltar ao Dashboard
         </Link>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setEditOpen(true)}
-            className="btn-secondary flex items-center gap-2 px-4 py-2 rounded-xl text-sm cursor-pointer"
-          >
-            <Edit3 className="w-4 h-4" />
-            Editar Detalhes
-          </button>
+          {!isViewer && (
+            <button
+              onClick={() => setEditOpen(true)}
+              className="btn-secondary flex items-center gap-2 px-4 py-2 rounded-xl text-sm cursor-pointer"
+            >
+              <Edit3 className="w-4 h-4" />
+              Editar Detalhes
+            </button>
+          )}
           <a
             href={clientPublicUrl}
             target="_blank"
@@ -404,16 +408,18 @@ export default function AdminProjectView() {
             <div className="flex items-center justify-between border-b border-slate-100/80 pb-3 flex-wrap gap-2">
               <h2 className="text-lg font-bold text-slate-900">Arquivos do Projeto (Assets)</h2>
               
-              <label className="btn-secondary text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
-                <UploadCloud className="w-4 h-4" />
-                Upload Arquivo
-                <input 
-                  type="file" 
-                  onChange={handleFileUpload} 
-                  className="hidden" 
-                  disabled={uploading} 
-                />
-              </label>
+              {!isViewer && (
+                <label className="btn-secondary text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
+                  <UploadCloud className="w-4 h-4" />
+                  Upload Arquivo
+                  <input 
+                    type="file" 
+                    onChange={handleFileUpload} 
+                    className="hidden" 
+                    disabled={uploading} 
+                  />
+                </label>
+              )}
             </div>
 
             {uploadError && <p className="text-xs text-rose-500 font-semibold">{uploadError}</p>}
@@ -477,7 +483,7 @@ export default function AdminProjectView() {
             <div className="border-t border-slate-100/80 pt-4">
               <TaskChecklist 
                 projectId={id || ''} 
-                admin={true} 
+                admin={!isViewer} 
                 onTasksUpdated={loadProjectData} 
               />
             </div>

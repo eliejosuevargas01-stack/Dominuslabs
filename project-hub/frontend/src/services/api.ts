@@ -235,3 +235,17 @@ export async function fetchShowcaseData() {
   if (!res.ok) throw new Error("Failed to fetch showcase data");
   return res.json();
 }
+
+export function getUserRole(): string {
+  const token = localStorage.getItem("admin_token");
+  if (!token) return "";
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return "";
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.role || "admin";
+  } catch (e) {
+    console.error("Failed to decode token", e);
+    return "";
+  }
+}

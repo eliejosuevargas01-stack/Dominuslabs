@@ -14,14 +14,20 @@ class RefreshRequest(BaseModel):
 
 @router.post("/login")
 def login(payload: LoginRequest):
-    if payload.username != settings.ADMIN_USERNAME or payload.password != settings.ADMIN_PASSWORD:
+    role = None
+    if payload.username == settings.ADMIN_USERNAME and payload.password == settings.ADMIN_PASSWORD:
+        role = "admin"
+    elif payload.username == settings.VIEWER_USERNAME and payload.password == settings.VIEWER_PASSWORD:
+        role = "viewer"
+        
+    if not role:
         raise HTTPException(
             status_code=401,
             detail="Usuário ou senha incorretos"
         )
     
-    access_token = create_access_token(data={"sub": payload.username})
-    refresh_token = create_refresh_token(data={"sub": payload.username})
+    access_token = create_access_token(data={"sub": payload.username, "role": role})
+    refresh_token = create_refresh_token(data={"sub": payload.username, "role": role})
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -38,8 +44,9 @@ def refresh(payload: RefreshRequest):
         )
     
     username = token_payload.get("sub", "")
-    new_access_token = create_access_token(data={"sub": username})
-    new_refresh_token = create_refresh_token(data={"sub": username})
+    role = token_payload.get("role", "admin")
+    new_access_token = create_access_token(data={"sub": username, "role": role})
+    new_refresh_token = create_refresh_token(data={"sub": username, "role": role})
     return {
         "access_token": new_access_token,
         "refresh_token": new_refresh_token,

@@ -246,3 +246,46 @@ def test_project_feedback_and_showcase(client):
     assert target_testimonial is not None
     assert target_testimonial["rating"] == 5
     assert target_testimonial["comment"] == "Muito bom"
+
+def test_viewer_role_permissions(client):
+    # 1. Login as viewer
+    res = client.post(
+        "/api/v1/auth/login",
+        json={"username": settings.VIEWER_USERNAME, "password": settings.VIEWER_PASSWORD}
+    )
+    assert res.status_code == 200
+    token = res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 2. Verify reading projects works
+    res = client.get("/api/v1/projects/", headers=headers)
+    assert res.status_code == 200
+
+    # 3. Verify creating a project fails with 403
+    project_payload = {
+        "name": "Viewer Try Project",
+        "client_name": "Viewer Client",
+        "project_type": "Landing Page",
+        "value": 1200.0,
+        "status": "IN_PROGRESS"
+    }
+    res = client.post("/api/v1/projects/", json=project_payload, headers=headers)
+    assert res.status_code == 403
+
+    # 4. Verify editing/updating a project fails with 403
+    res = client.put("/api/v1/projects/1", json={"name": "Hacked"}, headers=headers)
+    assert res.status_code == 403
+
+    # 5. Verify creating a task fails with 403
+    res = client.post("/api/v1/projects/1/tasks", json={"name": "Hacked Task"}, headers=headers)
+    assert res.status_code == 403
+
+    # 6. Verify updating a task status fails with 403
+    res = client.put("/api/v1/projects/tasks/1", json={"status": "DONE"}, headers=headers)
+    assert res.status_code == 403
+
+    # 7. Verify uploading a file/asset fails with 403
+    upload_payload = {"project_id": 1}
+    files = {"file": ("test.txt", b"hello content", "text/plain")}
+    res = client.post("/api/v1/uploads/", data=upload_payload, files=files, headers=headers)
+    assert res.status_code == 403
