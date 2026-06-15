@@ -682,11 +682,14 @@ class N8NService:
             "min_results": payload.get("min_results", 10),
             "max_results": payload.get("max_results", 20),
         }
-        if "target_platform" in payload:
+        if "target_platform" in payload and payload["target_platform"]:
             outgoing_payload["target_platform"] = payload["target_platform"]
-        if "contact_channel" in payload:
+            # If target_platform is whatsapp, also set contact_channel to whatsapp for maximum N8N compatibility
+            if payload["target_platform"] == "whatsapp":
+                outgoing_payload["contact_channel"] = "whatsapp"
+        if "contact_channel" in payload and payload["contact_channel"]:
             outgoing_payload["contact_channel"] = payload["contact_channel"]
-        if "objective" in payload:
+        if "objective" in payload and payload["objective"]:
             outgoing_payload["objective"] = payload["objective"]
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
