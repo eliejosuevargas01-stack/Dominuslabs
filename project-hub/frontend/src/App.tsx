@@ -4,6 +4,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminProjectView from './pages/AdminProjectView';
 import PublicProjectView from './pages/PublicProjectView';
 import Login from './pages/Login';
+import Showcase from './pages/Showcase';
 import Sidebar from './components/Sidebar';
 import ScrapperView from './pages/ScrapperView';
 import CrmView from './pages/CrmView';
@@ -123,6 +124,7 @@ function App() {
           {/* Public Access Routes (no sidebar layout) */}
           <Route path="/login" element={<Login />} />
           <Route path="/project/:public_token" element={<PublicProjectView />} />
+          <Route path="/cases" element={<Showcase />} />
 
           {/* Protected Admin Routes (with sidebar layout) */}
           <Route 

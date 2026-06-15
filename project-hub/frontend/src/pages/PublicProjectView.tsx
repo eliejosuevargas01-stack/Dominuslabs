@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { fetchPublicProject, API_BASE } from '../services/api';
+import { fetchPublicProject, API_BASE, submitFeedback } from '../services/api';
 import ProgressBar from '../components/ProgressBar';
 import { 
   ShieldCheck, 
@@ -34,6 +34,46 @@ export default function PublicProjectView() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Feedback Form State
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [feedbackSuccess, setFeedbackSuccess] = useState(false);
+  const [feedbackError, setFeedbackError] = useState('');
+  const [rating, setRating] = useState(5);
+  const [formFields, setFormFields] = useState({
+    final_result: '',
+    service_rating: '',
+    invested_value_rating: '',
+    process_rating: '',
+    improvements: ''
+  });
+
+  const handleFieldChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormFields(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleFeedbackSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!public_token) return;
+
+    try {
+      setSubmittingFeedback(true);
+      setFeedbackError('');
+      await submitFeedback({
+        project_token: public_token,
+        rating,
+        ...formFields
+      });
+      setFeedbackSuccess(true);
+      loadPublicData(true);
+    } catch (err: any) {
+      console.error(err);
+      setFeedbackError(err.message || 'Erro ao enviar avaliação.');
+    } finally {
+      setSubmittingFeedback(false);
+    }
+  };
 
   const loadPublicData = useCallback(async (silent = false) => {
     if (!public_token) return;
@@ -88,7 +128,7 @@ export default function PublicProjectView() {
     );
   }
 
-  const { project, tasks, commits, deploys, progress } = data;
+  const { project, tasks, commits, deploys, progress, feedback_submitted } = data;
 
   const statusLabels: any = {
     NEW: 'Novo',
@@ -145,6 +185,147 @@ export default function PublicProjectView() {
           <div className="p-5 bg-slate-50/50 border border-slate-100 rounded-2xl">
             <ProgressBar progress={progress} />
           </div>
+
+          {/* Client Feedback Section */}
+          {project.status === 'DELIVERED' && (
+            <div className="p-6 bg-gradient-to-br from-violet-50/50 to-indigo-50/50 border border-violet-100 rounded-3xl space-y-6">
+              {(feedback_submitted || feedbackSuccess) ? (
+                <div className="text-center py-6 space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800">Avaliação Enviada!</h3>
+                  <p className="text-sm text-slate-500 max-w-md mx-auto">
+                    Agradecemos imensamente pelo seu feedback! Ele nos ajuda a aprimorar nossos processos e a entregar soluções cada vez melhores na Dominuslabs.
+                  </p>
+                </div>
+              ) : (
+                <form onSubmit={handleFeedbackSubmit} className="space-y-5">
+                  <div className="border-b border-violet-100 pb-3">
+                    <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-amber-500 animate-pulse" />
+                      Avalie o Nosso Serviço
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Seu projeto foi concluído! Por favor, responda este rápido formulário para avaliá-lo.
+                    </p>
+                  </div>
+
+                  {feedbackError && (
+                    <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-semibold text-center">
+                      {feedbackError}
+                    </div>
+                  )}
+
+                  {/* Rating Selector */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Nota Geral *</label>
+                    <div className="flex items-center gap-1.5">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setRating(star)}
+                          className="p-1 hover:scale-110 transition-transform cursor-pointer"
+                        >
+                          <svg
+                            className={`w-8 h-8 ${star <= rating ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`}
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                          </svg>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Open-ended Questions */}
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-600">O que você achou do resultado final do projeto? *</label>
+                      <textarea
+                        name="final_result"
+                        required
+                        rows={2}
+                        value={formFields.final_result}
+                        onChange={handleFieldChange}
+                        placeholder="Ex: Excelente, superou minhas expectativas..."
+                        className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white/80 resize-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-600">O que achou do nosso atendimento? *</label>
+                      <textarea
+                        name="service_rating"
+                        required
+                        rows={2}
+                        value={formFields.service_rating}
+                        onChange={handleFieldChange}
+                        placeholder="Ex: Muito atenciosos e ágeis no suporte..."
+                        className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white/80 resize-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-600">O que achou do valor investido? *</label>
+                      <textarea
+                        name="invested_value_rating"
+                        required
+                        rows={2}
+                        value={formFields.invested_value_rating}
+                        onChange={handleFieldChange}
+                        placeholder="Ex: Excelente custo-benefício, valeu cada centavo..."
+                        className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white/80 resize-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-600">Como avalia o processo do início ao fim do desenvolvimento? *</label>
+                      <textarea
+                        name="process_rating"
+                        required
+                        rows={2}
+                        value={formFields.process_rating}
+                        onChange={handleFieldChange}
+                        placeholder="Ex: Transparente, com acompanhamento em tempo real..."
+                        className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white/80 resize-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-600">O que poderíamos melhorar no projeto e, no geral, na Dominuslabs? *</label>
+                      <textarea
+                        name="improvements"
+                        required
+                        rows={2}
+                        value={formFields.improvements}
+                        onChange={handleFieldChange}
+                        placeholder="Escreva sugestões de melhoria ou pontos a aprimorar..."
+                        className="w-full text-sm border border-slate-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white/80 resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={submittingFeedback}
+                    className="btn-primary w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold shadow-md cursor-pointer disabled:opacity-50 transition-all"
+                  >
+                    {submittingFeedback ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Enviando avaliação...
+                      </>
+                    ) : (
+                      'Enviar Avaliação'
+                    )}
+                  </button>
+                </form>
+              )}
+            </div>
+          ) }
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             

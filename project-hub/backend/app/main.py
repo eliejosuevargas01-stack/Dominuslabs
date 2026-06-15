@@ -13,6 +13,7 @@ from app.models.project import Project
 from app.models.asset import ProjectAsset
 from app.models.task import ProjectTask
 from app.models.logs import CommitLog, DeployLog
+from app.models.feedback import Feedback
 
 # Create persistent upload folders and database tables
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "images"), exist_ok=True)
