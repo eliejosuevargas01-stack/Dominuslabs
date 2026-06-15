@@ -14,7 +14,10 @@ class LogRepository:
         return db.query(CommitLog).filter(CommitLog.project_id == project_id).order_by(CommitLog.commit_date.desc()).all()
 
     def create_deploy_log(self, db: Session, obj_in: DeployLogCreate):
-        db_obj = DeployLog(**obj_in.model_dump())
+        dump = obj_in.model_dump()
+        if dump.get("deploy_url"):
+            dump["deploy_url"] = str(dump["deploy_url"])
+        db_obj = DeployLog(**dump)
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)

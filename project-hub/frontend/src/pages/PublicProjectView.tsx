@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { fetchPublicProject } from '../services/api';
+import { fetchPublicProject, API_BASE } from '../services/api';
 import ProgressBar from '../components/ProgressBar';
 import { 
   ShieldCheck, 
@@ -35,23 +35,39 @@ export default function PublicProjectView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const loadPublicData = useCallback(async (silent = false) => {
+    if (!public_token) return;
+    try {
+      if (!silent) setLoading(true);
+      const result = await fetchPublicProject(public_token);
+      setData(result);
+      setError('');
+    } catch (err: any) {
+      console.error(err);
+      setError('Projeto não encontrado ou token inválido.');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [public_token]);
+
   useEffect(() => {
-    const loadPublicData = async () => {
-      if (!public_token) return;
-      try {
-        setLoading(true);
-        const result = await fetchPublicProject(public_token);
-        setData(result);
-        setError('');
-      } catch (err: any) {
-        console.error(err);
-        setError('Projeto não encontrado ou token inválido.');
-      } finally {
-        setLoading(false);
+    loadPublicData();
+  }, [loadPublicData]);
+
+  useEffect(() => {
+    if (!public_token) return;
+
+    const eventSource = new EventSource(`${API_BASE}/webhooks/events/${public_token}`);
+    eventSource.onmessage = (event) => {
+      if (event.data === 'reload') {
+        loadPublicData(true);
       }
     };
-    loadPublicData();
-  }, [public_token]);
+
+    return () => {
+      eventSource.close();
+    };
+  }, [public_token, loadPublicData]);
 
   if (loading) {
     return (

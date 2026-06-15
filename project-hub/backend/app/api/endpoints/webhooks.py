@@ -1,12 +1,78 @@
 from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
 import json
+import asyncio
 
 from app.core.database import get_db
 from app.services.webhook_service import webhook_service
 
 router = APIRouter()
+
+# In-memory queues for Server-Sent Events (SSE)
+project_listeners = {}  # {public_token: [asyncio.Queue]}
+global_listeners = []   # [asyncio.Queue]
+
+async def notify_listeners(public_token: str):
+    # Notify specific project listeners
+    if public_token in project_listeners:
+        for queue in list(project_listeners[public_token]):
+            await queue.put("reload")
+    # Notify global dashboard listeners
+    for queue in list(global_listeners):
+        await queue.put("reload")
+
+@router.get("/events/{public_token}")
+async def project_events(public_token: str, request: Request):
+    queue = asyncio.Queue()
+    if public_token not in project_listeners:
+        project_listeners[public_token] = []
+    project_listeners[public_token].append(queue)
+    
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=20.0)
+                    yield f"data: {event}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if public_token in project_listeners:
+                if queue in project_listeners[public_token]:
+                    project_listeners[public_token].remove(queue)
+                if not project_listeners[public_token]:
+                    del project_listeners[public_token]
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@router.get("/events")
+async def all_projects_events(request: Request):
+    queue = asyncio.Queue()
+    global_listeners.append(queue)
+
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=20.0)
+                    yield f"data: {event}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if queue in global_listeners:
+                global_listeners.remove(queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 async def get_payload(request: Request) -> dict:
     content_type = request.headers.get("content-type", "")
@@ -34,6 +100,38 @@ async def github_webhook_by_token(public_token: str, request: Request, db: Sessi
         raise HTTPException(status_code=404, detail="Project not found")
 
     payload = await get_payload(request)
+
+    # 1.5 Detect Netlify Deploy webhook
+    if "site_id" in payload or "deploy_url" in payload:
+        netlify_event = request.headers.get("x-netlify-event", "deploy-succeeded")
+        status = "SUCCESS"
+        if "succeeded" in netlify_event.lower() or netlify_event in ("deploy_created", "deploy-succeeded"):
+            status = "SUCCESS"
+        elif "failed" in netlify_event.lower():
+            status = "FAILED"
+            
+        deploy_url = payload.get("deploy_url") or payload.get("ssl_url") or payload.get("url")
+        created_at_str = payload.get("created_at")
+        try:
+            if created_at_str:
+                if created_at_str.endswith("Z"):
+                    created_at_str = created_at_str.replace("Z", "+00:00")
+                deploy_date = datetime.fromisoformat(created_at_str)
+            else:
+                deploy_date = datetime.utcnow()
+        except Exception:
+            deploy_date = datetime.utcnow()
+
+        webhook_service.process_deploy_webhook(
+            db=db,
+            project_id=project.id,
+            provider="netlify",
+            status=status,
+            deploy_url=deploy_url,
+            deploy_date=deploy_date
+        )
+        await notify_listeners(public_token)
+        return {"status": "success", "type": "netlify_deploy"}
 
     # 2. Native GitHub push payload format
     if "commits" in payload:
@@ -65,6 +163,7 @@ async def github_webhook_by_token(public_token: str, request: Request, db: Sessi
             )
             processed_count += 1
             
+        await notify_listeners(public_token)
         return {"status": "success", "processed_commits": processed_count}
 
     # 3. Custom mock payload format fallback
@@ -90,6 +189,7 @@ async def github_webhook_by_token(public_token: str, request: Request, db: Sessi
         commit_date=commit_date
     )
 
+    await notify_listeners(public_token)
     return {"status": "success"}
 
 @router.post("/github")
@@ -126,7 +226,6 @@ async def github_webhook(request: Request, db: Session = Depends(get_db)):
                 continue
 
             try:
-                # GitHub dates can end in 'Z' or offset, replace Z with offset for compatibility
                 if date_str and date_str.endswith("Z"):
                     date_str = date_str.replace("Z", "+00:00")
                 commit_date = datetime.fromisoformat(date_str) if date_str else datetime.utcnow()
@@ -143,6 +242,7 @@ async def github_webhook(request: Request, db: Session = Depends(get_db)):
             )
             processed_count += 1
             
+        await notify_listeners(project.public_token)
         return {"status": "success", "processed_commits": processed_count}
 
     # 2. Custom mock payload format fallback
@@ -168,6 +268,11 @@ async def github_webhook(request: Request, db: Session = Depends(get_db)):
         author=author,
         commit_date=commit_date
     )
+
+    from app.models.project import Project
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if project:
+        await notify_listeners(project.public_token)
 
     return {"status": "success"}
 
@@ -197,6 +302,11 @@ async def deploy_webhook(request: Request, db: Session = Depends(get_db)):
         deploy_url=deploy_url,
         deploy_date=deploy_date
     )
+
+    from app.models.project import Project
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if project:
+        await notify_listeners(project.public_token)
 
     return {"status": "success"}
 

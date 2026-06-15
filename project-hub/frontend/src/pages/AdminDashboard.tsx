@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchProjects, createProject } from '../services/api';
+import { fetchProjects, createProject, API_BASE } from '../services/api';
 import { 
   Folder, 
   Layers, 
@@ -50,9 +50,9 @@ export default function AdminDashboard() {
     deploy_url: ''
   });
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await fetchProjects();
       setProjects(data);
       setError('');
@@ -60,12 +60,23 @@ export default function AdminDashboard() {
       console.error(err);
       setError('Erro ao carregar os projetos. Verifique se o backend está ativo.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadDashboardData();
+
+    const eventSource = new EventSource(`${API_BASE}/webhooks/events`);
+    eventSource.onmessage = (event) => {
+      if (event.data === 'reload') {
+        loadDashboardData(true);
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
