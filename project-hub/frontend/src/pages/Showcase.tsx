@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchShowcaseData } from '../services/api';
+import Footer from '../components/Footer';
 import { 
   FolderCheck, 
   Clock, 
@@ -282,13 +283,16 @@ export default function Showcase() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 bg-white text-violet-800 hover:bg-violet-50 px-6 py-3 rounded-2xl font-extrabold text-sm shadow-md transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
             >
-              Falar com um Especialista
+              Falar com Eliezer
               <ArrowRight className="w-4 h-4 text-violet-800" />
             </a>
           </div>
         </section>
 
       </div>
+
+      {/* Footer */}
+      <Footer onTabSelect={setActiveTab} />
     </div>
   );
 }

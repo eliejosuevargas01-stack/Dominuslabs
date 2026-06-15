@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { fetchPublicProject, API_BASE, submitFeedback } from '../services/api';
 import ProgressBar from '../components/ProgressBar';
+import Footer from '../components/Footer';
 import { 
   ShieldCheck, 
   Globe, 
@@ -147,7 +148,15 @@ export default function PublicProjectView() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4 sm:p-8 space-y-8 animate-[fade-in_0.3s_ease-out]">
+    <div className="min-h-screen bg-slate-50/50 relative overflow-hidden flex flex-col justify-between">
+      {/* Background Animation Bubbles */}
+      <div className="animated-bg">
+        <div className="bg-bubble-1"></div>
+        <div className="bg-bubble-2"></div>
+        <div className="bg-bubble-3"></div>
+      </div>
+
+      <div className="max-w-4xl mx-auto w-full p-4 sm:p-8 space-y-8 animate-[fade-in_0.3s_ease-out] flex-1">
       
       {/* Decorative Brand Header */}
       <div className="text-center space-y-2 pb-2">
@@ -452,6 +461,10 @@ export default function PublicProjectView() {
         </div>
 
       </div>
+
+      </div>
+
+      <Footer />
 
       <style>{`
         @keyframes fade-in {
