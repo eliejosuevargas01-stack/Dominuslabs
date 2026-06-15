@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     # Authentication
     ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
     ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin")
+    VIEWER_USERNAME: str = os.getenv("VIEWER_USERNAME", "patrik182rodrigues@gmail.com")
+    VIEWER_PASSWORD: str = os.getenv("VIEWER_PASSWORD", "patrik182")
     SECRET_KEY: str = os.getenv("JWT_SECRET", "dominuslabs-super-secret-key-2026")
 
     # Uploads

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchProjects, createProject, API_BASE } from '../services/api';
+import { fetchProjects, createProject, API_BASE, getUserRole } from '../services/api';
 import { 
   Folder, 
   Layers, 
@@ -32,6 +32,7 @@ const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
 );
 
 export default function AdminDashboard() {
+  const isViewer = getUserRole() === 'viewer';
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -150,13 +151,15 @@ export default function AdminDashboard() {
             Gerencie suas landing pages, automações e deploys de clientes.
           </p>
         </div>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="btn-primary inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm transition-all duration-200 self-start md:self-auto cursor-pointer"
-        >
-          <Plus className="w-5 h-5" />
-          Novo Projeto
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => setModalOpen(true)}
+            className="btn-primary inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm transition-all duration-200 self-start md:self-auto cursor-pointer"
+          >
+            <Plus className="w-5 h-5" />
+            Novo Projeto
+          </button>
+        )}
       </div>
 
       {error && (
@@ -298,7 +301,7 @@ export default function AdminDashboard() {
                           to={`/project-hub/project/${p.id}`}
                           className="text-xs font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100/80 px-3 py-1.5 rounded-xl transition-all inline-block"
                         >
-                          Gerenciar
+                          {isViewer ? 'Visualizar' : 'Gerenciar'}
                         </Link>
                       </td>
                     </tr>

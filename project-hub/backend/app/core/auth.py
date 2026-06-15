@@ -82,3 +82,24 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
             detail="Token de acesso inválido (enviado token de atualização)"
         )
     return payload.get("sub", "")
+
+def check_admin_role(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
+    token = credentials.credentials
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=401,
+            detail="Token de autenticação inválido ou expirado"
+        )
+    if payload.get("type") == "refresh":
+        raise HTTPException(
+            status_code=401,
+            detail="Token de acesso inválido (enviado token de atualização)"
+        )
+    role = payload.get("role", "admin")
+    if role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Acesso negado: apenas administradores podem realizar esta operação"
+        )
+    return payload.get("sub", "")
