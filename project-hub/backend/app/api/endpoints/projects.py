@@ -12,7 +12,7 @@ from app.repositories.task_repo import task_repo
 from app.repositories.asset_repo import asset_repo
 from app.repositories.log_repo import log_repo
 from app.services.project_service import project_service
-from app.core.auth import get_current_user, check_admin_role
+from app.core.auth import get_current_user, check_project_create_permission, check_project_edit_permission
 from pydantic import BaseModel
 
 class PublicProjectDetail(BaseModel):
@@ -33,7 +33,7 @@ def read_projects(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
     return project_repo.get_all(db, skip=skip, limit=limit)
 
 @router.post("/", response_model=Project)
-def create_project(project_in: ProjectCreate, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+def create_project(project_in: ProjectCreate, db: Session = Depends(get_db), current_user: str = Depends(check_project_create_permission)):
     return project_repo.create(db, obj_in=project_in)
 
 @router.get("/{project_id}", response_model=Project)
@@ -44,7 +44,7 @@ def read_project(project_id: int, db: Session = Depends(get_db), current_user: s
     return project
 
 @router.put("/{project_id}", response_model=Project)
-def update_project(project_id: int, project_in: ProjectUpdate, db: Session = Depends(get_db), current_user: str = Depends(check_admin_role)):
+def update_project(project_id: int, project_in: ProjectUpdate, db: Session = Depends(get_db), current_user: str = Depends(check_project_edit_permission)):
     project = project_repo.get(db, id=project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -83,13 +83,13 @@ def read_tasks(project_id: int, db: Session = Depends(get_db), current_user: str
     return task_repo.get_by_project(db, project_id)
 
 @router.post("/{project_id}/tasks", response_model=ProjectTask)
-def create_task(project_id: int, task_in: ProjectTaskCreate, db: Session = Depends(get_db), current_user: str = Depends(check_admin_role)):
+def create_task(project_id: int, task_in: ProjectTaskCreate, db: Session = Depends(get_db), current_user: str = Depends(check_project_edit_permission)):
     if task_in.project_id != project_id:
         raise HTTPException(status_code=400, detail="Project ID mismatch")
     return task_repo.create(db, obj_in=task_in)
 
 @router.put("/tasks/{task_id}", response_model=ProjectTask)
-def update_task(task_id: int, task_in: ProjectTaskUpdate, db: Session = Depends(get_db), current_user: str = Depends(check_admin_role)):
+def update_task(task_id: int, task_in: ProjectTaskUpdate, db: Session = Depends(get_db), current_user: str = Depends(check_project_edit_permission)):
     from app.models.task import ProjectTask, TaskStatus
     task = db.query(ProjectTask).filter(ProjectTask.id == task_id).first()
     if not task:

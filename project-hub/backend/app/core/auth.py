@@ -6,7 +6,10 @@ import hashlib
 import time
 from fastapi import HTTPException, Security, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
 from app.core.config import settings
+from app.core.database import get_db
+from app.models.user import User
 
 SECRET_KEY = settings.SECRET_KEY
 security = HTTPBearer()
@@ -83,7 +86,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
         )
     return payload.get("sub", "")
 
-def check_admin_role(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
+def check_admin_role(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
     token = credentials.credentials
     payload = decode_access_token(token)
     if not payload:
@@ -91,15 +94,63 @@ def check_admin_role(credentials: HTTPAuthorizationCredentials = Security(securi
             status_code=401,
             detail="Token de autenticação inválido ou expirado"
         )
-    if payload.get("type") == "refresh":
-        raise HTTPException(
-            status_code=401,
-            detail="Token de acesso inválido (enviado token de atualização)"
-        )
-    role = payload.get("role", "admin")
-    if role != "admin":
+    email = payload.get("sub", "")
+    user = db.query(User).filter(User.email == email).first()
+    if not user or user.role != "admin":
         raise HTTPException(
             status_code=403,
             detail="Acesso negado: apenas administradores podem realizar esta operação"
         )
-    return payload.get("sub", "")
+    return email
+
+def check_project_create_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+    token = credentials.credentials
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
+    email = payload.get("sub", "")
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=403, detail="Usuário não encontrado.")
+    if user.role != "admin" and not user.can_create_projects:
+        raise HTTPException(status_code=403, detail="Acesso negado: você não tem permissão para criar projetos.")
+    return email
+
+def check_project_edit_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+    token = credentials.credentials
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
+    email = payload.get("sub", "")
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=403, detail="Usuário não encontrado.")
+    if user.role != "admin" and not user.can_edit_projects:
+        raise HTTPException(status_code=403, detail="Acesso negado: você não tem permissão para gerenciar/editar projetos.")
+    return email
+
+def check_crm_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+    token = credentials.credentials
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
+    email = payload.get("sub", "")
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=403, detail="Usuário não encontrado.")
+    if user.role != "admin" and not user.can_manage_crm:
+        raise HTTPException(status_code=403, detail="Acesso negado: você não tem permissão para gerenciar o CRM.")
+    return email
+
+def check_scrapper_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+    token = credentials.credentials
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
+    email = payload.get("sub", "")
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=403, detail="Usuário não encontrado.")
+    if user.role != "admin" and not user.can_use_scrapper:
+        raise HTTPException(status_code=403, detail="Acesso negado: você não tem permissão para usar o Scrapper.")
+    return email

@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.schemas.asset import ProjectAsset, ProjectAssetCreate
 from app.repositories.asset_repo import asset_repo
 from app.repositories.project_repo import project_repo
-from app.core.auth import get_current_user, check_admin_role
+from app.core.auth import get_current_user, check_project_edit_permission
 
 router = APIRouter()
 
@@ -28,7 +28,7 @@ def upload_file(
     project_id: int = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: str = Depends(check_admin_role)
+    current_user: str = Depends(check_project_edit_permission)
 ):
     # Check if project exists
     project = project_repo.get(db, id=project_id)

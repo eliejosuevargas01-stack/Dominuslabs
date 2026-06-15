@@ -14,6 +14,7 @@ from app.models.asset import ProjectAsset
 from app.models.task import ProjectTask
 from app.models.logs import CommitLog, DeployLog
 from app.models.feedback import Feedback
+from app.models.user import User
 
 # Create persistent upload folders and database tables
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "images"), exist_ok=True)
@@ -22,6 +23,58 @@ os.makedirs(os.path.join(settings.UPLOAD_DIR, "audio"), exist_ok=True)
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "documents"), exist_ok=True)
 
 Base.metadata.create_all(bind=engine)
+
+# Seed database users
+def seed_database_users():
+    from app.core.database import SessionLocal
+    from app.models.user import User
+    from app.core.security import get_password_hash
+    db = SessionLocal()
+    try:
+        # Seed main admin
+        admin_email = settings.ADMIN_USERNAME
+        if "@" not in admin_email:
+            admin_email = f"{settings.ADMIN_USERNAME}@dominuslabs.online"
+            
+        existing_admin = db.query(User).filter(User.email == admin_email).first()
+        if not existing_admin:
+            admin_user = User(
+                email=admin_email,
+                hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+                role="admin",
+                can_create_projects=True,
+                can_edit_projects=True,
+                can_manage_crm=True,
+                can_use_scrapper=True
+            )
+            db.add(admin_user)
+            
+        # Seed default viewer / patrik user
+        viewer_email = settings.VIEWER_USERNAME
+        if "@" not in viewer_email:
+            viewer_email = "patrik182rodrigues@gmail.com"
+            
+        existing_viewer = db.query(User).filter(User.email == viewer_email).first()
+        if not existing_viewer:
+            viewer_user = User(
+                email=viewer_email,
+                hashed_password=get_password_hash(settings.VIEWER_PASSWORD),
+                role="custom",
+                can_create_projects=True,
+                can_edit_projects=False,
+                can_manage_crm=True,
+                can_use_scrapper=True
+            )
+            db.add(viewer_user)
+            
+        db.commit()
+    except Exception as e:
+        print(f"Error seeding database: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+seed_database_users()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

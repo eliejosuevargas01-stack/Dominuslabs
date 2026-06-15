@@ -949,6 +949,8 @@ class N8NService:
 
         # Match Evolution API payload structure as well as direct params
         outgoing_payload = {
+            "jid": cleaned_phone,
+            "text": message_text,
             "number": cleaned_phone,
             "body": message_text,
             "phone": phone,
@@ -959,17 +961,44 @@ class N8NService:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.post(url, json=outgoing_payload, timeout=30.0)
-                response.raise_for_status()
+                if response.status_code >= 400:
+                    # Try to extract detailed error message from response body
+                    error_msg = f"HTTP {response.status_code}"
+                    try:
+                        resp_data = response.json()
+                        if isinstance(resp_data, dict):
+                            error_msg = resp_data.get("message") or resp_data.get("error") or response.text
+                    except Exception:
+                        error_msg = response.text or error_msg
+                    raise ValueError(error_msg)
+                
                 try:
                     res_json = clean_n8n_response(response.json())
-                    if isinstance(res_json, dict) and "message" in res_json:
-                        return res_json
+                    msg_data = res_json.get("message") if isinstance(res_json, dict) else None
+                    if isinstance(msg_data, dict):
+                        # Extract timestamp safely
+                        ts_val = msg_data.get("timestamp")
+                        iso_ts = new_msg["timestamp"]
+                        if ts_val:
+                            try:
+                                iso_ts = datetime.fromtimestamp(float(ts_val)).isoformat() + "Z"
+                            except Exception:
+                                pass
+                        return {
+                            "id": msg_data.get("id") or new_msg["id"],
+                            "sender": "user",
+                            "message": msg_data.get("text") or message_text,
+                            "channel": "whatsapp",
+                            "timestamp": iso_ts
+                        }
                 except Exception:
                     pass
                 return new_msg
+            except ValueError:
+                raise
             except Exception as e:
                 logger.error(f"Error calling SEND whatsapp message webhook: {e}")
-                return new_msg
+                raise ValueError(f"Falha de conexão com a API do WhatsApp: {str(e)}")
 
     @staticmethod
     async def create_activity(lead_id: str, event_type: str, metadata: dict) -> dict:
