@@ -10,6 +10,38 @@ import {
   Laptop
 } from 'lucide-react';
 
+const LinkedinIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+    <rect x="2" y="9" width="4" height="12" />
+    <circle cx="4" cy="4" r="2" />
+  </svg>
+);
+
+const InstagramIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth="2"
+    fill="none"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+  </svg>
+);
+
 interface FooterProps {
   onTabSelect?: (tab: 'completed' | 'ongoing') => void;
 }
@@ -52,12 +84,36 @@ export default function Footer({ onTabSelect }: FooterProps) {
             </p>
             
             {/* Server Status Indicator */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              Sistemas Online & Operacionais
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                Sistemas Online & Operacionais
+              </div>
+
+              {/* Social Profiles */}
+              <div className="flex items-center gap-2">
+                <a 
+                  href="https://www.linkedin.com/in/eliezer-josue-vargas-gamboa-1b2074417/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="p-2 bg-slate-900 hover:bg-violet-900/30 hover:text-white border border-slate-800 hover:border-violet-500/50 rounded-xl transition-all duration-300"
+                  title="LinkedIn de Eliezer"
+                >
+                  <LinkedinIcon className="w-3.5 h-3.5" />
+                </a>
+                <a 
+                  href="https://www.instagram.com/eliejosuevargas01/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="p-2 bg-slate-900 hover:bg-pink-900/30 hover:text-white border border-slate-800 hover:border-pink-500/50 rounded-xl transition-all duration-300"
+                  title="Instagram de Eliezer"
+                >
+                  <InstagramIcon className="w-3.5 h-3.5" />
+                </a>
+              </div>
             </div>
           </div>
 
