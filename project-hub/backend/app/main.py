@@ -1,10 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, FileResponse
+from sqlalchemy.orm import Session
 import os
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.core.database import Base, engine
+from app.core.database import Base, engine, get_db
 
 # Import all models to ensure they are registered on Base.metadata
 from app.models.project import Project
@@ -39,9 +41,45 @@ if settings.BACKEND_CORS_ORIGINS:
     )
 
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+@app.get("/project/{public_token}")
+async def serve_project_with_meta(public_token: str, db: Session = Depends(get_db)):
+    from app.models.project import Project
+    project = db.query(Project).filter(Project.public_token == public_token).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    static_dir = os.getenv("STATIC_DIR", "/app/static")
+    index_file = os.path.join(static_dir, "index.html")
+    
+    title = f"Acompanhamento: {project.name}"
+    description = f"Portal de acompanhamento do projeto {project.name} ({project.project_type}) para o cliente {project.client_name}. Confira o status e progresso do desenvolvimento."
+    
+    meta_tags = f"""
+    <title>{title}</title>
+    <meta name="description" content="{description}">
+    <meta property="og:title" content="{title}">
+    <meta property="og:description" content="{description}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://dominuslabs.online/project/{public_token}">
+    <meta property="og:image" content="https://dominuslabs.online/logo.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{title}">
+    <meta name="twitter:description" content="{description}">
+    <meta name="twitter:image" content="https://dominuslabs.online/logo.png">
+    """
+    
+    if os.path.exists(index_file):
+        with open(index_file, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        if "<head>" in html_content:
+            html_content = html_content.replace("<head>", f"<head>{meta_tags}")
+        return HTMLResponse(content=html_content)
+        
+    mock_html = f"<html><head>{meta_tags}</head><body>Welcome to Dominuslabs Project Hub (Dev/Test Mode)</body></html>"
+    return HTMLResponse(content=mock_html)
 
 # Serve frontend static files in production (single container deployment)
 static_dir = os.getenv("STATIC_DIR", "/app/static")

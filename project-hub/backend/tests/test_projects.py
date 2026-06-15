@@ -150,3 +150,32 @@ def test_webhook_processing(client):
     commits = commits_res.json()
     assert len(commits) == 1
     assert commits[0]["commit_hash"] == "abc123hash"
+
+def test_project_rich_preview(client):
+    login_res = client.post(
+        "/api/v1/auth/login",
+        json={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD}
+    )
+    token = login_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    project_payload = {
+        "name": "Super WhatsApp Project",
+        "client_name": "VIP Client Name",
+        "project_type": "Automação",
+        "value": 2500.0,
+        "status": "IN_PROGRESS"
+    }
+    create_res = client.post("/api/v1/projects/", json=project_payload, headers=headers)
+    project_data = create_res.json()
+    public_token = project_data["public_token"]
+
+    res = client.get(f"/project/{public_token}")
+    assert res.status_code == 200
+    html = res.text
+    
+    assert "<title>Acompanhamento: Super WhatsApp Project</title>" in html
+    assert 'meta property="og:title" content="Acompanhamento: Super WhatsApp Project"' in html
+    assert 'meta property="og:description" content="Portal de acompanhamento do projeto Super WhatsApp Project (Automação) para o cliente VIP Client Name. Confira o status e progresso do desenvolvimento."' in html
+    assert f'meta property="og:url" content="https://dominuslabs.online/project/{public_token}"' in html
+    assert 'meta property="og:image" content="https://dominuslabs.online/logo.png"' in html
