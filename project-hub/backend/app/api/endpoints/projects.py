@@ -33,7 +33,7 @@ def read_projects(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
     return project_repo.get_all(db, skip=skip, limit=limit)
 
 @router.post("/", response_model=Project)
-def create_project(project_in: ProjectCreate, db: Session = Depends(get_db), current_user: str = Depends(check_admin_role)):
+def create_project(project_in: ProjectCreate, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     return project_repo.create(db, obj_in=project_in)
 
 @router.get("/{project_id}", response_model=Project)

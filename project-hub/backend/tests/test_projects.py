@@ -261,7 +261,7 @@ def test_viewer_role_permissions(client):
     res = client.get("/api/v1/projects/", headers=headers)
     assert res.status_code == 200
 
-    # 3. Verify creating a project fails with 403
+    # 3. Verify creating a project succeeds for viewer
     project_payload = {
         "name": "Viewer Try Project",
         "client_name": "Viewer Client",
@@ -270,7 +270,7 @@ def test_viewer_role_permissions(client):
         "status": "IN_PROGRESS"
     }
     res = client.post("/api/v1/projects/", json=project_payload, headers=headers)
-    assert res.status_code == 403
+    assert res.status_code == 200
 
     # 4. Verify editing/updating a project fails with 403
     res = client.put("/api/v1/projects/1", json={"name": "Hacked"}, headers=headers)

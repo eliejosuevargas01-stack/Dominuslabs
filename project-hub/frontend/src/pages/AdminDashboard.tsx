@@ -151,15 +151,13 @@ export default function AdminDashboard() {
             Gerencie suas landing pages, automações e deploys de clientes.
           </p>
         </div>
-        {!isViewer && (
-          <button
-            onClick={() => setModalOpen(true)}
-            className="btn-primary inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm transition-all duration-200 self-start md:self-auto cursor-pointer"
-          >
-            <Plus className="w-5 h-5" />
-            Novo Projeto
-          </button>
-        )}
+        <button
+          onClick={() => setModalOpen(true)}
+          className="btn-primary inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm transition-all duration-200 self-start md:self-auto cursor-pointer"
+        >
+          <Plus className="w-5 h-5" />
+          Novo Projeto
+        </button>
       </div>
 
       {error && (
