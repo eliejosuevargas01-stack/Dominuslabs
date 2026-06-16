@@ -186,10 +186,11 @@ export default function ScrapperView() {
                 <label className="block text-sm font-bold text-slate-700">
                   Target Platform (Opcional)
                 </label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { id: '', label: 'Qualquer' },
                     { id: 'whatsapp', label: 'WhatsApp' },
+                    { id: 'instagram', label: 'Instagram' },
                     { id: 'site_externo', label: 'Site Externo' }
                   ].map((platform) => {
                     const selected = targetPlatform === platform.id;
