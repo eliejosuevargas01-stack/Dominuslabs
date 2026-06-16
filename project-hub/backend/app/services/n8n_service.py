@@ -684,9 +684,9 @@ class N8NService:
         }
         if "target_platform" in payload and payload["target_platform"]:
             outgoing_payload["target_platform"] = payload["target_platform"]
-            # If target_platform is whatsapp, also set contact_channel to whatsapp for maximum N8N compatibility
-            if payload["target_platform"] == "whatsapp":
-                outgoing_payload["contact_channel"] = "whatsapp"
+            # If target_platform is whatsapp or instagram, also set contact_channel for maximum N8N compatibility
+            if payload["target_platform"] in ("whatsapp", "instagram"):
+                outgoing_payload["contact_channel"] = payload["target_platform"]
         if "contact_channel" in payload and payload["contact_channel"]:
             outgoing_payload["contact_channel"] = payload["contact_channel"]
         if "objective" in payload and payload["objective"]:
