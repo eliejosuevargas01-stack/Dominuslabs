@@ -206,7 +206,12 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     elif email:
         origin = "E-mail"
     else:
-        origin = "Outro"
+        origin = "Instagram"
+        # Fallback to Instagram: generate a slugified username based on the company name
+        import unicodedata
+        import re
+        clean_name = unicodedata.normalize('NFKD', company_name).encode('ASCII', 'ignore').decode('ASCII')
+        instagram = re.sub(r'[^a-zA-Z0-9_.]', '', clean_name.replace(" ", "").lower())
 
     has_messages = False
     if lead_id in MOCK_CONVERSATIONS and len(MOCK_CONVERSATIONS[lead_id]) > 0:
