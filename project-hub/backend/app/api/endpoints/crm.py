@@ -31,7 +31,7 @@ async def update_lead(lead_id: str, lead_in: LeadUpdate, current_user: str = Dep
     """
     Update a lead's profile details.
     """
-    result = await n8n_service.update_lead(lead_id, lead_in.model_dump())
+    result = await n8n_service.update_lead(lead_id, lead_in.model_dump(), current_user=current_user)
     return result
 
 @router.delete("/leads/{lead_id}")

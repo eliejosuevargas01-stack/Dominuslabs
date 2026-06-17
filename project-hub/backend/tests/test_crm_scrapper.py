@@ -35,6 +35,9 @@ def test_crm_endpoints(client):
     updated_lead = res.json()
     assert updated_lead["company_name"] == "Clínica Sorriso Atualizada"
     assert updated_lead["status"] == "Negociando/Objeção"
+    expected_email = settings.ADMIN_USERNAME if "@" in settings.ADMIN_USERNAME else f"{settings.ADMIN_USERNAME}@dominuslabs.online"
+    assert updated_lead["alterado_por"] == expected_email
+    assert updated_lead["updated_by"] == expected_email
 
     # Test get conversation messages
     res = client.get(f"/api/v1/crm/conversations/{lead_id}", headers=headers)

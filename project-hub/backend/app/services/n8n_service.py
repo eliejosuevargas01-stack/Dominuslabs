@@ -670,7 +670,8 @@ def sanitize_outgoing_payload(payload: dict) -> dict:
     whitelist = {
         "lead_id", "origem", "data_coleta", "nicho", "status", "empresa_nome",
         "telefone_contato", "email_contato", "localizacao", "score", "temperatura",
-        "payload", "created_at", "updated_at", "proposta_inicial", "lid"
+        "payload", "created_at", "updated_at", "proposta_inicial", "lid",
+        "alterado_por", "updated_by"
     }
     
     sanitized = {}
@@ -764,7 +765,7 @@ class N8NService:
         return mapped_leads
 
     @staticmethod
-    async def update_lead(lead_id: str, payload: dict) -> dict:
+    async def update_lead(lead_id: str, payload: dict, current_user: str = None) -> dict:
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
 
         # Try to find in cache
@@ -803,6 +804,10 @@ class N8NService:
 
         # Update the raw lead copy
         outgoing_payload = update_raw_lead(raw_lead, payload)
+
+        if current_user:
+            outgoing_payload["alterado_por"] = current_user
+            outgoing_payload["updated_by"] = current_user
 
         # Sanitize outgoing payload to contain ONLY Portuguese keys
         outgoing_payload = sanitize_outgoing_payload(outgoing_payload)
@@ -844,13 +849,20 @@ class N8NService:
                 lead["reputacao_google"] = reconstructed_reputacao
                 lead["oportunidades_identificadas"] = reconstructed_oportunidades
                 lead["last_interaction"] = datetime.utcnow().isoformat() + "Z"
+                if current_user:
+                    lead["alterado_por"] = current_user
+                    lead["updated_by"] = current_user
                 MOCK_LEADS[i] = lead
                 break
 
         if not url:
             logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead updated locally in-memory.")
             updated_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
-            return map_n8n_lead(updated_lead) if updated_lead else map_n8n_lead({"id": lead_id, **payload})
+            mapped = map_n8n_lead(updated_lead) if updated_lead else map_n8n_lead({"id": lead_id, **payload})
+            if current_user:
+                mapped["alterado_por"] = current_user
+                mapped["updated_by"] = current_user
+            return mapped
 
         # Append action parameter to CRM N8N query parameters
         sep = "&" if "?" in url else "?"
@@ -862,18 +874,30 @@ class N8NService:
                 response.raise_for_status()
                 res_data = clean_n8n_response(response.json())
                 if isinstance(res_data, dict) and ("company_name" in res_data or "nome_empresa" in res_data or "empresa_nome" in res_data):
-                    return map_n8n_lead(res_data)
-
-                fallback_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
-                if fallback_lead:
-                    return map_n8n_lead(fallback_lead)
-                return map_n8n_lead({"id": lead_id, **payload})
+                    mapped = map_n8n_lead(res_data)
+                else:
+                    fallback_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
+                    if fallback_lead:
+                        mapped = map_n8n_lead(fallback_lead)
+                    else:
+                        mapped = map_n8n_lead({"id": lead_id, **payload})
+                
+                if current_user:
+                    mapped["alterado_por"] = current_user
+                    mapped["updated_by"] = current_user
+                return mapped
             except Exception as e:
                 logger.error(f"Error calling UPDATE lead webhook: {e}")
                 fallback_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
                 if fallback_lead:
-                    return map_n8n_lead(fallback_lead)
-                return map_n8n_lead({"id": lead_id, **payload})
+                    mapped = map_n8n_lead(fallback_lead)
+                else:
+                    mapped = map_n8n_lead({"id": lead_id, **payload})
+                    
+                if current_user:
+                    mapped["alterado_por"] = current_user
+                    mapped["updated_by"] = current_user
+                return mapped
 
     @staticmethod
     async def delete_lead(lead_id: str) -> dict:
