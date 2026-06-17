@@ -29,4 +29,11 @@ class ProjectRepository:
         db.refresh(db_obj)
         return db_obj
 
+    def remove(self, db: Session, id: int):
+        db_obj = db.query(Project).filter(Project.id == id).first()
+        if db_obj:
+            db.delete(db_obj)
+            db.commit()
+        return db_obj
+
 project_repo = ProjectRepository()

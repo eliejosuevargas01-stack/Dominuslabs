@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchProjects, createProject, API_BASE, getUserRole } from '../services/api';
+import { fetchProjects, createProject, API_BASE, getUserRole, deleteProject } from '../services/api';
 import { 
   Folder, 
   Layers, 
@@ -12,7 +12,8 @@ import {
   Globe, 
   Loader2, 
   X,
-  FileCode2
+  FileCode2,
+  Trash2
 } from 'lucide-react';
 
 const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -33,9 +34,24 @@ const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default function AdminDashboard() {
   const isViewer = getUserRole() === 'viewer';
+  const isAdmin = getUserRole() === 'admin';
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const handleDeleteProject = async (id: number, name: string) => {
+    if (!window.confirm(`Tem certeza que deseja excluir o projeto "${name}"? Esta ação não pode ser desfeita e removerá todas as tarefas, deploys e commits associados.`)) {
+      return;
+    }
+    try {
+      setError('');
+      await deleteProject(id);
+      loadDashboardData();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Erro ao excluir o projeto.');
+    }
+  };
   
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -295,12 +311,23 @@ export default function AdminDashboard() {
                         </div>
                       </td>
                       <td className="p-4 pr-6 text-right">
-                        <Link
-                          to={`/project-hub/project/${p.id}`}
-                          className="text-xs font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100/80 px-3 py-1.5 rounded-xl transition-all inline-block"
-                        >
-                          {isViewer ? 'Visualizar' : 'Gerenciar'}
-                        </Link>
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            to={`/project-hub/project/${p.id}`}
+                            className="text-xs font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100/80 px-3 py-1.5 rounded-xl transition-all inline-block"
+                          >
+                            {isViewer ? 'Visualizar' : 'Gerenciar'}
+                          </Link>
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleDeleteProject(p.id, p.name)}
+                              className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center border border-transparent hover:border-rose-100"
+                              title="Excluir Projeto"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
