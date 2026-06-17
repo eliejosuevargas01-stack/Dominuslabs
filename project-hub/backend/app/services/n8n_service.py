@@ -3,6 +3,7 @@ import logging
 import json
 import copy
 import re
+import time
 from typing import List, Dict, Any
 from app.core.config import settings
 from datetime import datetime
@@ -695,6 +696,19 @@ def sanitize_outgoing_payload(payload: dict) -> dict:
     return sanitized
 
 class N8NService:
+    # Leads cache state
+    _leads_cache = None
+    _leads_cache_time = 0.0
+    _leads_cache_url = None
+    CACHE_TTL = 10.0  # seconds
+
+    @staticmethod
+    def invalidate_leads_cache():
+        N8NService._leads_cache = None
+        N8NService._leads_cache_time = 0.0
+        N8NService._leads_cache_url = None
+        logger.info("CRM Leads Cache explicitly invalidated.")
+
     @staticmethod
     async def run_scrapper(payload: dict, platform: str = "meta_ads") -> dict:
         fallback_url = settings.SCRAPPER_META_WEBHOOK_URL if platform == "meta_ads" else settings.SCRAPPER_MAPS_WEBHOOK_URL
@@ -730,11 +744,21 @@ class N8NService:
     @staticmethod
     async def get_leads() -> List[dict]:
         url = settings.CRM_GET_LEADS_WEBHOOK_URL
+        # Check cache
+        if N8NService._leads_cache is not None:
+            if time.time() - N8NService._leads_cache_time < N8NService.CACHE_TTL:
+                if N8NService._leads_cache_url == url:
+                    logger.info("Returning CRM Leads from in-memory cache.")
+                    return N8NService._leads_cache
+
         if not url:
             logger.info("CRM_GET_LEADS_WEBHOOK_URL not configured. Returning mock leads.")
             mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
             mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
             mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
+            N8NService._leads_cache = mapped_mock
+            N8NService._leads_cache_time = time.time()
+            N8NService._leads_cache_url = url
             return mapped_mock
 
         sep = "&" if "?" in url else "?"
@@ -757,15 +781,22 @@ class N8NService:
             mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
             mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
             mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
+            N8NService._leads_cache = mapped_mock
+            N8NService._leads_cache_time = time.time()
+            N8NService._leads_cache_url = url
             return mapped_mock
 
         mapped_leads = [map_n8n_lead(l) for l in raw_leads if isinstance(l, dict)]
         mapped_leads.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
         mapped_leads.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
+        N8NService._leads_cache = mapped_leads
+        N8NService._leads_cache_time = time.time()
+        N8NService._leads_cache_url = url
         return mapped_leads
 
     @staticmethod
     async def update_lead(lead_id: str, payload: dict, current_user: str = None) -> dict:
+        N8NService.invalidate_leads_cache()
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
 
         # Try to find in cache
@@ -901,6 +932,7 @@ class N8NService:
 
     @staticmethod
     async def delete_lead(lead_id: str) -> dict:
+        N8NService.invalidate_leads_cache()
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
 
         # Remove from mock lists (MOCK_LEADS, RAW_LEADS_CACHE, MOCK_CONVERSATIONS, MOCK_ACTIVITIES)
@@ -1052,6 +1084,7 @@ class N8NService:
 
         # Helper to update local mock lists upon successful send
         def update_local_mock_state(msg_id: str, text: str, timestamp: str):
+            N8NService.invalidate_leads_cache()
             msg = {
                 "id": msg_id,
                 "sender": "user",
@@ -1119,6 +1152,7 @@ class N8NService:
                     raise ValueError(error_msg)
                 
                 # Success path
+                N8NService.invalidate_leads_cache()
                 msg_id = default_id
                 msg_text = message_text
                 msg_ts = default_ts
