@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Users, UserCheck, MessageSquare, Send, Check, 
   Clipboard, Search, Loader2, 
-  Sparkles, MessageCircle, AlertCircle, FileText
+  Sparkles, MessageCircle, AlertCircle, FileText,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { API_BASE, fetchWithAuth } from '../services/api';
 
@@ -416,7 +417,23 @@ export default function CrmView() {
       const bDate = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
       return bDate - aDate;
     });
-  }, [leads, statusFilter, originFilter, segmentFilter, falhaFilter, searchTerm]);
+  }, [leads, statusFilter, originFilter, segmentFilter, falhaFilter, searchTerm, kpiFilter]);
+
+  // Pagination state and computation
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
+  const totalPages = Math.ceil(filteredLeads.length / itemsPerPage);
+
+  const paginatedLeads = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredLeads.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredLeads, currentPage]);
+
+  // Reset pagination to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, originFilter, segmentFilter, falhaFilter, searchTerm, kpiFilter]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -651,47 +668,110 @@ export default function CrmView() {
                 Nenhum lead encontrado com os filtros selecionados.
               </div>
             ) : (
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-violet-100/50 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    <th className="py-3 px-2 max-w-[80px]">ID</th>
-                    <th className="py-3 px-2">Empresa</th>
-                    <th className="py-3 px-2">Segmento</th>
-                    <th className="py-3 px-2">Falha Encontrada</th>
-                    <th className="py-3 px-2">WhatsApp</th>
-                    <th className="py-3 px-2">Status</th>
-                    <th className="py-3 px-2">Método de Contato</th>
-                    <th className="py-3 px-2">Última Interação</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-violet-100/30 text-xs font-medium text-slate-600">
-                  {filteredLeads.map((lead) => {
-                    const isSelected = selectedLead?.id === lead.id;
-                    return (
-                      <tr 
-                        key={lead.id} 
-                        onClick={() => handleSelectLead(lead)}
-                        className={`hover:bg-violet-50/30 cursor-pointer transition-colors ${
-                          isSelected ? 'bg-purple-50/50 font-semibold' : ''
-                        }`}
+              <>
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-violet-100/50 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="py-3 px-2 max-w-[80px]">ID</th>
+                      <th className="py-3 px-2">Empresa</th>
+                      <th className="py-3 px-2">Segmento</th>
+                      <th className="py-3 px-2">Falha Encontrada</th>
+                      <th className="py-3 px-2">WhatsApp</th>
+                      <th className="py-3 px-2">Status</th>
+                      <th className="py-3 px-2">Método de Contato</th>
+                      <th className="py-3 px-2">Última Interação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-violet-100/30 text-xs font-medium text-slate-600">
+                    {paginatedLeads.map((lead) => {
+                      const isSelected = selectedLead?.id === lead.id;
+                      return (
+                        <tr 
+                          key={lead.id} 
+                          onClick={() => handleSelectLead(lead)}
+                          className={`hover:bg-violet-50/30 cursor-pointer transition-colors ${
+                            isSelected ? 'bg-purple-50/50 font-semibold' : ''
+                          }`}
+                        >
+                          <td className="py-3.5 px-2 text-slate-400 max-w-[80px] truncate" title={lead.id}>#{lead.id}</td>
+                          <td className="py-3.5 px-2 text-slate-800">{lead.company_name}</td>
+                          <td className="py-3.5 px-2 text-slate-500">{lead.segmento || '-'}</td>
+                          <td className="py-3.5 px-2 text-slate-500">{lead.falha_identificada || '-'}</td>
+                          <td className="py-3.5 px-2">{lead.whatsapp || '-'}</td>
+                          <td className="py-3.5 px-2">
+                            <span className={`px-2 py-0.5 rounded-full border text-[10px] uppercase font-bold tracking-wide ${getStatusColor(lead.status)}`}>
+                              {lead.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-2 text-slate-500">{lead.origin}</td>
+                          <td className="py-3.5 px-2 text-slate-400">{formatDate(lead.last_interaction)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                {/* Pagination Controls */}
+                {filteredLeads.length > itemsPerPage && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 pt-4 border-t border-violet-100/30 text-xs font-semibold text-slate-500">
+                    <div>
+                      Exibindo <span className="font-bold text-slate-700">{Math.min((currentPage - 1) * itemsPerPage + 1, filteredLeads.length)}</span> a{' '}
+                      <span className="font-bold text-slate-700">{Math.min(currentPage * itemsPerPage, filteredLeads.length)}</span> de{' '}
+                      <span className="font-bold text-slate-700">{filteredLeads.length}</span> leads
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="p-2 rounded-xl border border-violet-100 bg-white/50 hover:bg-violet-50 text-slate-600 disabled:opacity-40 disabled:hover:bg-white/50 transition-all cursor-pointer flex items-center justify-center animate-transition"
                       >
-                        <td className="py-3.5 px-2 text-slate-400 max-w-[80px] truncate" title={lead.id}>#{lead.id}</td>
-                        <td className="py-3.5 px-2 text-slate-800">{lead.company_name}</td>
-                        <td className="py-3.5 px-2 text-slate-500">{lead.segmento || '-'}</td>
-                        <td className="py-3.5 px-2 text-slate-500">{lead.falha_identificada || '-'}</td>
-                        <td className="py-3.5 px-2">{lead.whatsapp || '-'}</td>
-                        <td className="py-3.5 px-2">
-                          <span className={`px-2 py-0.5 rounded-full border text-[10px] uppercase font-bold tracking-wide ${getStatusColor(lead.status)}`}>
-                            {lead.status}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-2 text-slate-500">{lead.origin}</td>
-                        <td className="py-3.5 px-2 text-slate-400">{formatDate(lead.last_interaction)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+                        const isCurrent = page === currentPage;
+                        const isNear = Math.abs(page - currentPage) <= 1;
+                        const isFirstOrLast = page === 1 || page === totalPages;
+                        
+                        if (!isNear && !isFirstOrLast) {
+                          if (page === 2 && currentPage > 3) {
+                            return <span key="ellipsis-start" className="px-1 text-slate-400 select-none">...</span>;
+                          }
+                          if (page === totalPages - 1 && currentPage < totalPages - 2) {
+                            return <span key="ellipsis-end" className="px-1 text-slate-400 select-none">...</span>;
+                          }
+                          return null;
+                        }
+                        
+                        return (
+                          <button
+                            key={page}
+                            type="button"
+                            onClick={() => setCurrentPage(page)}
+                            className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                              isCurrent
+                                ? 'border-purple-600 bg-purple-600 text-white shadow-md shadow-purple-200'
+                                : 'border-violet-100 bg-white/50 hover:bg-violet-50 text-slate-600'
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        );
+                      })}
+
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        className="p-2 rounded-xl border border-violet-100 bg-white/50 hover:bg-violet-50 text-slate-600 disabled:opacity-40 disabled:hover:bg-white/50 transition-all cursor-pointer flex items-center justify-center animate-transition"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
