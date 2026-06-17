@@ -273,4 +273,35 @@ def test_n8n_raw_mapping_service():
     assert "localizacao" not in outgoing
 
 
+def test_crm_chat_update_sse_webhook(client):
+    # Test update-chat endpoint with no active listeners
+    res = client.post("/api/v1/webhooks/crm/update-chat", json={"lead_id": "test_lead_no_listener"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "ignored"
+
+    # Add a mock queue listener manually to lead_listeners to mock an active session
+    from app.api.endpoints.webhooks import lead_listeners
+    import asyncio
+    queue = asyncio.Queue()
+    lead_listeners["test_lead_listener"] = [("admin@dominuslabs.online", queue)]
+
+    # Mock the n8n_service.get_messages call
+    from unittest.mock import patch
+    with patch("app.services.n8n_service.n8n_service.get_messages") as mock_get_messages:
+        mock_get_messages.return_value = []
+        
+        # Test update-chat endpoint with active listener
+        res = client.post("/api/v1/webhooks/crm/update-chat", json={"lead_id": "test_lead_listener"})
+        assert res.status_code == 200
+        assert res.json()["status"] == "success"
+        assert res.json()["notified_sessions"] == 1
+        
+        # Verify event "reload" was pushed to the queue
+        assert queue.get_nowait() == "reload"
+
+    # Clean up
+    if "test_lead_listener" in lead_listeners:
+        del lead_listeners["test_lead_listener"]
+
+
 

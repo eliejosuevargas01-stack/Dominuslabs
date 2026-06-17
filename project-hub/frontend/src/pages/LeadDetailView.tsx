@@ -39,6 +39,21 @@ export default function LeadDetailView() {
     'Perdido (Loss)'
   ];
 
+  const fetchLeadMessages = async (showLoading = false) => {
+    if (showLoading) setLoadingMessages(true);
+    try {
+      const msgRes = await fetchWithAuth(`${API_BASE}/crm/conversations/${id}`);
+      if (msgRes.ok) {
+        const msgData = await msgRes.json();
+        setMessages(msgData);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar mensagens do lead:', err);
+    } finally {
+      if (showLoading) setLoadingMessages(false);
+    }
+  };
+
   const fetchLeadData = async () => {
     setLoading(true);
     setError(null);
@@ -51,13 +66,7 @@ export default function LeadDetailView() {
       setEditingLead({ ...leadData });
 
       // 2. Fetch messages for the lead
-      setLoadingMessages(true);
-      const msgRes = await fetchWithAuth(`${API_BASE}/crm/conversations/${id}`);
-      if (msgRes.ok) {
-        const msgData = await msgRes.json();
-        setMessages(msgData);
-      }
-      setLoadingMessages(false);
+      await fetchLeadMessages(true);
     } catch (err: any) {
       setError(err.message || 'Erro ao carregar o lead.');
     } finally {
@@ -67,6 +76,29 @@ export default function LeadDetailView() {
 
   useEffect(() => {
     fetchLeadData();
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const token = localStorage.getItem("admin_token");
+    if (!token) return;
+
+    const sseUrl = `${API_BASE}/webhooks/events/leads/${id}?token=${encodeURIComponent(token)}`;
+    const eventSource = new EventSource(sseUrl);
+
+    eventSource.onmessage = (event) => {
+      if (event.data === 'reload') {
+        fetchLeadMessages(false);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('SSE Error:', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, [id]);
 
   // Scroll to bottom of chat

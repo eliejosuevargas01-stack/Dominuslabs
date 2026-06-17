@@ -10,9 +10,78 @@ from app.services.webhook_service import webhook_service
 
 router = APIRouter()
 
+from pydantic import BaseModel
+
+class LeadChatUpdateRequest(BaseModel):
+    lead_id: str
+
 # In-memory queues for Server-Sent Events (SSE)
 project_listeners = {}  # {public_token: [asyncio.Queue]}
 global_listeners = []   # [asyncio.Queue]
+lead_listeners = {}     # {lead_id: [(user_email, queue)]}
+
+async def notify_lead_listeners(lead_id: str, event: str = "reload"):
+    if lead_id in lead_listeners:
+        for user_email, queue in list(lead_listeners[lead_id]):
+            await queue.put(event)
+
+@router.get("/events/leads/{lead_id}")
+async def lead_events(lead_id: str, token: str, request: Request):
+    from app.core.auth import decode_access_token
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
+    
+    user_email = payload.get("sub", "unknown")
+    queue = asyncio.Queue()
+    
+    if lead_id not in lead_listeners:
+        lead_listeners[lead_id] = []
+    lead_listeners[lead_id].append((user_email, queue))
+    
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=20.0)
+                    yield f"data: {event}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if lead_id in lead_listeners:
+                # Remove current queue tuple
+                lead_listeners[lead_id] = [item for item in lead_listeners[lead_id] if item[1] != queue]
+                if not lead_listeners[lead_id]:
+                    del lead_listeners[lead_id]
+                    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@router.post("/crm/update-chat")
+async def update_chat_webhook(payload: LeadChatUpdateRequest):
+    lead_id = payload.lead_id
+    
+    # Check if there are active listeners for this lead
+    if lead_id not in lead_listeners or not lead_listeners[lead_id]:
+        return {
+            "status": "ignored",
+            "reason": f"No active listeners for lead {lead_id}"
+        }
+    
+    from app.services.n8n_service import n8n_service
+    # Fetch messages to update cache/db
+    await n8n_service.get_messages(lead_id)
+    
+    # Notify listeners to reload chat
+    await notify_lead_listeners(lead_id, "reload")
+    
+    return {
+        "status": "success",
+        "notified_sessions": len(lead_listeners[lead_id])
+    }
 
 async def notify_listeners(public_token: str):
     # Notify specific project listeners
