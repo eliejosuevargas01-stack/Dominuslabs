@@ -61,9 +61,42 @@ async def lead_events(lead_id: str, token: str, request: Request):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.post("/crm/update-chat")
-async def update_chat_webhook(payload: LeadChatUpdateRequest):
-    lead_id = payload.lead_id
+async def update_chat_webhook_post(request: Request, lead_id: str = None):
+    resolved_lead_id = lead_id
+    if not resolved_lead_id:
+        try:
+            body = await request.json()
+            resolved_lead_id = body.get("lead_id")
+        except Exception:
+            pass
+            
+    if not resolved_lead_id:
+        raise HTTPException(status_code=400, detail="Missing lead_id parameter")
     
+    # Check if there are active listeners for this lead
+    if resolved_lead_id not in lead_listeners or not lead_listeners[resolved_lead_id]:
+        return {
+            "status": "ignored",
+            "reason": f"No active listeners for lead {resolved_lead_id}"
+        }
+    
+    from app.services.n8n_service import n8n_service
+    # Fetch messages to update cache/db
+    await n8n_service.get_messages(resolved_lead_id)
+    
+    # Notify listeners to reload chat
+    await notify_lead_listeners(resolved_lead_id, "reload")
+    
+    return {
+        "status": "success",
+        "notified_sessions": len(lead_listeners[resolved_lead_id])
+    }
+
+@router.get("/crm/update-chat")
+async def update_chat_webhook_get(lead_id: str):
+    if not lead_id:
+        raise HTTPException(status_code=400, detail="Missing lead_id parameter")
+        
     # Check if there are active listeners for this lead
     if lead_id not in lead_listeners or not lead_listeners[lead_id]:
         return {

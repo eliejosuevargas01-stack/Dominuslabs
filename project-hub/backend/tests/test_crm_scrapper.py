@@ -290,13 +290,25 @@ def test_crm_chat_update_sse_webhook(client):
     with patch("app.services.n8n_service.n8n_service.get_messages") as mock_get_messages:
         mock_get_messages.return_value = []
         
-        # Test update-chat endpoint with active listener
+        # Test 1: POST update-chat endpoint with active listener (JSON body payload)
         res = client.post("/api/v1/webhooks/crm/update-chat", json={"lead_id": "test_lead_listener"})
         assert res.status_code == 200
         assert res.json()["status"] == "success"
         assert res.json()["notified_sessions"] == 1
-        
-        # Verify event "reload" was pushed to the queue
+        assert queue.get_nowait() == "reload"
+
+        # Test 2: POST update-chat endpoint with active listener (query param payload)
+        res = client.post("/api/v1/webhooks/crm/update-chat?lead_id=test_lead_listener")
+        assert res.status_code == 200
+        assert res.json()["status"] == "success"
+        assert res.json()["notified_sessions"] == 1
+        assert queue.get_nowait() == "reload"
+
+        # Test 3: GET update-chat endpoint with active listener (query param)
+        res = client.get("/api/v1/webhooks/crm/update-chat?lead_id=test_lead_listener")
+        assert res.status_code == 200
+        assert res.json()["status"] == "success"
+        assert res.json()["notified_sessions"] == 1
         assert queue.get_nowait() == "reload"
 
     # Clean up
