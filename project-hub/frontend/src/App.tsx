@@ -8,6 +8,7 @@ import Showcase from './pages/Showcase';
 import Sidebar from './components/Sidebar';
 import ScrapperView from './pages/ScrapperView';
 import CrmView from './pages/CrmView';
+import LeadDetailView from './pages/LeadDetailView';
 import { LogOut } from 'lucide-react';
 import './App.css';
 import './index.css';
@@ -163,6 +164,16 @@ function App() {
               <ProtectedRoute>
                 <DashboardLayout>
                   <CrmView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/crm/leads/:id" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <LeadDetailView />
                 </DashboardLayout>
               </ProtectedRoute>
             } 
