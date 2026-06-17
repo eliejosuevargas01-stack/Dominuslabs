@@ -547,6 +547,18 @@ export default function LeadDetailView() {
               />
             </div>
 
+            {/* Signature / Audit Trail */}
+            {(lead.created_by || lead.updated_by || lead.alterado_por || editingLead.created_by || editingLead.updated_by || editingLead.alterado_por) && (
+              <div className="text-[10px] text-slate-400 font-semibold flex items-center justify-between gap-4 pt-2.5 pb-1 border-t border-dashed border-slate-200">
+                {(lead.created_by || editingLead.created_by) && (
+                  <span>Criado por: <span className="text-slate-500 font-bold">{lead.created_by || editingLead.created_by}</span></span>
+                )}
+                {(lead.updated_by || lead.alterado_por || editingLead.updated_by || editingLead.alterado_por) && (
+                  <span className="ml-auto">Última alteração: <span className="text-slate-500 font-bold">{lead.updated_by || lead.alterado_por || editingLead.updated_by || editingLead.alterado_por}</span></span>
+                )}
+              </div>
+            )}
+
             {/* Form Actions */}
             <div className="flex items-center justify-between gap-4 pt-4 border-t border-slate-100/50">
               <div className="flex-grow">
