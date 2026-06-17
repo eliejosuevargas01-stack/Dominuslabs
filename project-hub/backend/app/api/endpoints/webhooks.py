@@ -19,11 +19,18 @@ class LeadChatUpdateRequest(BaseModel):
 project_listeners = {}  # {public_token: [asyncio.Queue]}
 global_listeners = []   # [asyncio.Queue]
 lead_listeners = {}     # {lead_id: [(user_email, queue)]}
+crm_chat_listeners = [] # [(user_email, queue)]
 
 async def notify_lead_listeners(lead_id: str, event: str = "reload"):
     if lead_id in lead_listeners:
         for user_email, queue in list(lead_listeners[lead_id]):
             await queue.put(event)
+
+async def notify_crm_chat_listeners(lead_id: str):
+    import json
+    payload = json.dumps({"lead_id": lead_id, "event": "reload"})
+    for user_email, queue in list(crm_chat_listeners):
+        await queue.put(payload)
 
 @router.get("/events/leads/{lead_id}")
 async def lead_events(lead_id: str, token: str, request: Request):
@@ -60,6 +67,36 @@ async def lead_events(lead_id: str, token: str, request: Request):
                     
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+@router.get("/events/crm-chats")
+async def crm_chats_events(token: str, request: Request):
+    from app.core.auth import decode_access_token
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
+    
+    user_email = payload.get("sub", "unknown")
+    queue = asyncio.Queue()
+    
+    crm_chat_listeners.append((user_email, queue))
+    
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=20.0)
+                    yield f"data: {event}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if (user_email, queue) in crm_chat_listeners:
+                crm_chat_listeners.remove((user_email, queue))
+                    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 @router.post("/crm/update-chat")
 async def update_chat_webhook_post(request: Request, lead_id: str = None):
     resolved_lead_id = lead_id
@@ -73,23 +110,17 @@ async def update_chat_webhook_post(request: Request, lead_id: str = None):
     if not resolved_lead_id:
         raise HTTPException(status_code=400, detail="Missing lead_id parameter")
     
-    # Check if there are active listeners for this lead
-    if resolved_lead_id not in lead_listeners or not lead_listeners[resolved_lead_id]:
-        return {
-            "status": "ignored",
-            "reason": f"No active listeners for lead {resolved_lead_id}"
-        }
-    
     from app.services.n8n_service import n8n_service
     # Fetch messages to update cache/db
     await n8n_service.get_messages(resolved_lead_id)
     
     # Notify listeners to reload chat
     await notify_lead_listeners(resolved_lead_id, "reload")
+    await notify_crm_chat_listeners(resolved_lead_id)
     
     return {
         "status": "success",
-        "notified_sessions": len(lead_listeners[resolved_lead_id])
+        "notified_sessions": len(lead_listeners.get(resolved_lead_id, [])) + len(crm_chat_listeners)
     }
 
 @router.get("/crm/update-chat")
@@ -97,23 +128,17 @@ async def update_chat_webhook_get(lead_id: str):
     if not lead_id:
         raise HTTPException(status_code=400, detail="Missing lead_id parameter")
         
-    # Check if there are active listeners for this lead
-    if lead_id not in lead_listeners or not lead_listeners[lead_id]:
-        return {
-            "status": "ignored",
-            "reason": f"No active listeners for lead {lead_id}"
-        }
-    
     from app.services.n8n_service import n8n_service
     # Fetch messages to update cache/db
     await n8n_service.get_messages(lead_id)
     
     # Notify listeners to reload chat
     await notify_lead_listeners(lead_id, "reload")
+    await notify_crm_chat_listeners(lead_id)
     
     return {
         "status": "success",
-        "notified_sessions": len(lead_listeners[lead_id])
+        "notified_sessions": len(lead_listeners.get(lead_id, [])) + len(crm_chat_listeners)
     }
 
 async def notify_listeners(public_token: str):
@@ -448,6 +473,10 @@ async def whatsapp_inbound_webhook(request: Request):
                 lead["status"] = "RESPONDED" # Toggle status to responded
             break
             
+    # Notify listeners in real time
+    await notify_lead_listeners(lead_id, "reload")
+    await notify_crm_chat_listeners(lead_id)
+            
     return {"status": "success", "message": new_msg}
 
 @router.post("/inbound/instagram")
@@ -485,5 +514,9 @@ async def instagram_inbound_webhook(request: Request):
             if sender == "lead":
                 lead["status"] = "RESPONDED"
             break
+            
+    # Notify listeners in real time
+    await notify_lead_listeners(lead_id, "reload")
+    await notify_crm_chat_listeners(lead_id)
             
     return {"status": "success", "message": new_msg}

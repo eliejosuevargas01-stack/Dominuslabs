@@ -1037,6 +1037,24 @@ class N8NService:
             MOCK_ACTIVITIES[lead_id] = []
         MOCK_ACTIVITIES[lead_id].append(new_act)
 
+        # Resolve lid from cache or lead list if present
+        lid = None
+        if lead_id in RAW_LEADS_CACHE:
+            cached = RAW_LEADS_CACHE[lead_id]
+            lid = cached.get("lid") or cached.get("LID") or cached.get("Lid")
+        
+        if not lid:
+            try:
+                leads = await N8NService.get_leads()
+                lead_obj = next((l for l in leads if str(l.get("id")) == str(lead_id)), None)
+                if lead_obj:
+                    lid = lead_obj.get("lid")
+                    if not lid and lead_id in RAW_LEADS_CACHE:
+                        cached = RAW_LEADS_CACHE[lead_id]
+                        lid = cached.get("lid") or cached.get("LID") or cached.get("Lid")
+            except Exception:
+                pass
+
         if not url:
             logger.info("CRM_SEND_WHATSAPP_WEBHOOK_URL not configured. Message logged locally in-memory.")
             return new_msg
@@ -1051,6 +1069,8 @@ class N8NService:
             "message": message_text,
             "lead_id": lead_id
         }
+        if lid:
+            outgoing_payload["lid"] = lid
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
