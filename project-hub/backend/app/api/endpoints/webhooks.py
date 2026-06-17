@@ -111,6 +111,7 @@ async def update_chat_webhook_post(request: Request, lead_id: str = None):
         raise HTTPException(status_code=400, detail="Missing lead_id parameter")
     
     from app.services.n8n_service import n8n_service
+    n8n_service.invalidate_leads_cache()
     # Fetch messages to update cache/db
     await n8n_service.get_messages(resolved_lead_id)
     
@@ -129,6 +130,7 @@ async def update_chat_webhook_get(lead_id: str):
         raise HTTPException(status_code=400, detail="Missing lead_id parameter")
         
     from app.services.n8n_service import n8n_service
+    n8n_service.invalidate_leads_cache()
     # Fetch messages to update cache/db
     await n8n_service.get_messages(lead_id)
     
@@ -451,7 +453,8 @@ async def whatsapp_inbound_webhook(request: Request):
     if not lead_id or not message_text:
         return {"status": "ignored", "reason": "missing lead_id or message"}
         
-    from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS
+    from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS, n8n_service
+    n8n_service.invalidate_leads_cache()
     
     new_msg = {
         "id": f"msg_in_{int(datetime.utcnow().timestamp())}",
@@ -493,7 +496,8 @@ async def instagram_inbound_webhook(request: Request):
     if not lead_id or not message_text:
         return {"status": "ignored", "reason": "missing lead_id or message"}
         
-    from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS
+    from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS, n8n_service
+    n8n_service.invalidate_leads_cache()
     
     new_msg = {
         "id": f"msg_in_{int(datetime.utcnow().timestamp())}",
