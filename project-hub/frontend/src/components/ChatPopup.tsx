@@ -226,6 +226,7 @@ export default function ChatPopup() {
   };
 
   const filteredLeads = leads.filter(lead => 
+    lead.status?.toLowerCase() !== 'prospectado' &&
     lead.company_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
