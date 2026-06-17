@@ -992,6 +992,7 @@ class N8NService:
                                 existing_ids.add(mapped_msg.get("id"))
 
                 all_msgs.sort(key=lambda x: x.get("timestamp") or "")
+                MOCK_CONVERSATIONS[lead_id] = all_msgs
                 return all_msgs
             except Exception as e:
                 logger.error(f"Error calling GET messages webhook: {e}. Returning mock.")
