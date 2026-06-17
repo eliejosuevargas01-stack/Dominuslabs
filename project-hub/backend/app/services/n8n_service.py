@@ -1008,35 +1008,6 @@ class N8NService:
         # Clean phone number to digits-only for standard whatsapp api gateways
         cleaned_phone = "".join(c for c in phone if c.isdigit())
 
-        # Append message locally in mock conversations to show live updates
-        new_msg = {
-            "id": f"msg_{int(datetime.utcnow().timestamp())}",
-            "sender": "user",
-            "message": message_text,
-            "channel": "whatsapp",
-            "timestamp": datetime.utcnow().isoformat() + "Z"
-        }
-        if lead_id not in MOCK_CONVERSATIONS:
-            MOCK_CONVERSATIONS[lead_id] = []
-        MOCK_CONVERSATIONS[lead_id].append(new_msg)
-
-        # Update last interaction timestamp on lead
-        for lead in MOCK_LEADS:
-            if lead["id"] == lead_id:
-                lead["last_interaction"] = datetime.utcnow().isoformat() + "Z"
-                break
-
-        # Log event message_sent
-        new_act = {
-            "lead_id": lead_id,
-            "event_type": "message_sent",
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "metadata": {"message": message_text, "channel": "whatsapp"}
-        }
-        if lead_id not in MOCK_ACTIVITIES:
-            MOCK_ACTIVITIES[lead_id] = []
-        MOCK_ACTIVITIES[lead_id].append(new_act)
-
         # Resolve lid from cache or lead list if present
         lid = None
         if lead_id in RAW_LEADS_CACHE:
@@ -1055,9 +1026,43 @@ class N8NService:
             except Exception:
                 pass
 
+        # Helper to update local mock lists upon successful send
+        def update_local_mock_state(msg_id: str, text: str, timestamp: str):
+            msg = {
+                "id": msg_id,
+                "sender": "user",
+                "message": text,
+                "channel": "whatsapp",
+                "timestamp": timestamp
+            }
+            if lead_id not in MOCK_CONVERSATIONS:
+                MOCK_CONVERSATIONS[lead_id] = []
+            MOCK_CONVERSATIONS[lead_id].append(msg)
+
+            # Update last interaction timestamp on lead
+            for lead in MOCK_LEADS:
+                if lead["id"] == lead_id:
+                    lead["last_interaction"] = timestamp
+                    break
+
+            # Log event message_sent
+            act = {
+                "lead_id": lead_id,
+                "event_type": "message_sent",
+                "timestamp": timestamp,
+                "metadata": {"message": text, "channel": "whatsapp"}
+            }
+            if lead_id not in MOCK_ACTIVITIES:
+                MOCK_ACTIVITIES[lead_id] = []
+            MOCK_ACTIVITIES[lead_id].append(act)
+            return msg
+
+        default_id = f"msg_{int(datetime.utcnow().timestamp())}"
+        default_ts = datetime.utcnow().isoformat() + "Z"
+
         if not url:
             logger.info("CRM_SEND_WHATSAPP_WEBHOOK_URL not configured. Message logged locally in-memory.")
-            return new_msg
+            return update_local_mock_state(default_id, message_text, default_ts)
 
         # Match Evolution API payload structure as well as direct params
         outgoing_payload = {
@@ -1086,28 +1091,27 @@ class N8NService:
                         error_msg = response.text or error_msg
                     raise ValueError(error_msg)
                 
+                # Success path
+                msg_id = default_id
+                msg_text = message_text
+                msg_ts = default_ts
+                
                 try:
                     res_json = clean_n8n_response(response.json())
                     msg_data = res_json.get("message") if isinstance(res_json, dict) else None
                     if isinstance(msg_data, dict):
-                        # Extract timestamp safely
+                        msg_id = msg_data.get("id") or msg_id
+                        msg_text = msg_data.get("text") or msg_data.get("message") or msg_text
                         ts_val = msg_data.get("timestamp")
-                        iso_ts = new_msg["timestamp"]
                         if ts_val:
                             try:
-                                iso_ts = datetime.fromtimestamp(float(ts_val)).isoformat() + "Z"
+                                msg_ts = datetime.fromtimestamp(float(ts_val)).isoformat() + "Z"
                             except Exception:
                                 pass
-                        return {
-                            "id": msg_data.get("id") or new_msg["id"],
-                            "sender": "user",
-                            "message": msg_data.get("text") or message_text,
-                            "channel": "whatsapp",
-                            "timestamp": iso_ts
-                        }
                 except Exception:
                     pass
-                return new_msg
+                
+                return update_local_mock_state(msg_id, msg_text, msg_ts)
             except ValueError:
                 raise
             except Exception as e:
