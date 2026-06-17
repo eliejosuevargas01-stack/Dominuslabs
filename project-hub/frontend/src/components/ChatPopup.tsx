@@ -24,6 +24,15 @@ export default function ChatPopup() {
   
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Helper to sort leads by last interaction time descending
+  const sortLeadsByInteraction = (leadsList: any[]) => {
+    return [...leadsList].sort((a: any, b: any) => {
+      const t1 = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
+      const t2 = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
+      return t2 - t1;
+    });
+  };
+
   // Fetch CRM leads list
   const fetchLeads = async (silent = false) => {
     if (!silent) setLoadingLeads(true);
@@ -31,13 +40,23 @@ export default function ChatPopup() {
       const res = await fetchWithAuth(`${API_BASE}/crm/leads`);
       if (res.ok) {
         const data = await res.json();
-        // Sort leads by last interaction time
-        const sorted = data.sort((a: any, b: any) => {
-          const t1 = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
-          const t2 = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
-          return t2 - t1;
+        setLeads(prevLeads => {
+          const merged = data.map((fetchedLead: any) => {
+            const localLead = prevLeads.find(l => String(l.id) === String(fetchedLead.id));
+            if (localLead && localLead.last_interaction) {
+              if (!fetchedLead.last_interaction) {
+                return { ...fetchedLead, last_interaction: localLead.last_interaction };
+              }
+              const localTime = new Date(localLead.last_interaction).getTime();
+              const fetchedTime = new Date(fetchedLead.last_interaction).getTime();
+              if (localTime > fetchedTime) {
+                return { ...fetchedLead, last_interaction: localLead.last_interaction };
+              }
+            }
+            return fetchedLead;
+          });
+          return sortLeadsByInteraction(merged);
         });
-        setLeads(sorted);
       }
     } catch (err) {
       console.error('Erro ao buscar leads no popup:', err);
@@ -92,6 +111,17 @@ export default function ChatPopup() {
             setUnreadLeads(prev => ({ ...prev, [updatedLeadId]: true }));
             setHasNewUpdate(true);
           }
+          
+          // Instantly update local last_interaction and move to the top
+          setLeads(prevLeads => {
+            const updated = prevLeads.map(l => {
+              if (String(l.id) === updatedLeadId) {
+                return { ...l, last_interaction: new Date().toISOString() };
+              }
+              return l;
+            });
+            return sortLeadsByInteraction(updated);
+          });
           
           // 3. Silently update leads list to show last_interaction updates
           fetchLeads(true);
@@ -171,6 +201,20 @@ export default function ChatPopup() {
         const newMsg = await res.json();
         setMessages(prev => [...prev, newMsg]);
         setReplyText('');
+        
+        // Instantly move this lead to the top of the list
+        setLeads(prevLeads => {
+          const updated = prevLeads.map(l => {
+            if (String(l.id) === String(activeLeadId)) {
+              return { ...l, last_interaction: new Date().toISOString() };
+            }
+            return l;
+          });
+          return sortLeadsByInteraction(updated);
+        });
+
+        // Silently update leads list in background
+        fetchLeads(true);
       } else {
         throw new Error('Falha ao enviar mensagem');
       }
