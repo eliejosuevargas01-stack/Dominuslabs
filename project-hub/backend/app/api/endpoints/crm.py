@@ -56,7 +56,9 @@ async def send_whatsapp_message(payload: MessageSendPayload, current_user: str =
     Send an outbound WhatsApp message to the lead.
     """
     try:
-        message = await n8n_service.send_whatsapp_message(payload.model_dump())
+        data = payload.model_dump()
+        data["updated_by"] = current_user
+        message = await n8n_service.send_whatsapp_message(data)
         return message
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
