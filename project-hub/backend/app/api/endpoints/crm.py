@@ -15,12 +15,31 @@ async def read_leads(current_user: str = Depends(get_current_user)):
     leads = await n8n_service.get_leads()
     return leads
 
+@router.get("/leads/{lead_id}", response_model=Lead)
+async def read_lead(lead_id: str, current_user: str = Depends(get_current_user)):
+    """
+    Fetch a single lead by its ID.
+    """
+    leads = await n8n_service.get_leads()
+    lead = next((l for l in leads if str(l.get("id")) == str(lead_id)), None)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return lead
+
 @router.put("/leads/{lead_id}", response_model=Lead)
 async def update_lead(lead_id: str, lead_in: LeadUpdate, current_user: str = Depends(check_crm_permission)):
     """
     Update a lead's profile details.
     """
     result = await n8n_service.update_lead(lead_id, lead_in.model_dump())
+    return result
+
+@router.delete("/leads/{lead_id}")
+async def delete_lead(lead_id: str, current_user: str = Depends(check_crm_permission)):
+    """
+    Delete a lead.
+    """
+    result = await n8n_service.delete_lead(lead_id)
     return result
 
 @router.get("/conversations/{lead_id}", response_model=List[Message])

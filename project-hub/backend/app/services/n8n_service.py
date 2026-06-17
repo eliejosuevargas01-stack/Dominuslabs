@@ -2,6 +2,7 @@ import httpx
 import logging
 import json
 import copy
+import re
 from typing import List, Dict, Any
 from app.core.config import settings
 from datetime import datetime
@@ -361,6 +362,23 @@ def clean_n8n_response(res_data: Any) -> Any:
         return {}
     return res_data
 
+def parse_embedded_timestamp(text: str) -> tuple[str, str | None]:
+    """
+    Searches for [DD/MM/YYYY HH:MM:SS] at the end of the text.
+    Returns (cleaned_text, iso_timestamp_str).
+    """
+    if not text:
+        return text, None
+    pattern = r'\s*\[(\d{2})/(\d{2})/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})\]\s*$'
+    match = re.search(pattern, text)
+    if match:
+        day, month, year, hour, minute, second = match.groups()
+        cleaned_text = re.sub(pattern, '', text).strip()
+        # Output format: YYYY-MM-DDTHH:MM:SS
+        iso_ts = f"{year}-{month}-{day}T{hour}:{minute}:{second}"
+        return cleaned_text, iso_ts
+    return text, None
+
 def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
     mapped = []
     msg_id = str(msg.get("id", ""))
@@ -369,12 +387,13 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
 
     user_text = msg.get("mensagem_enviada")
     if user_text is not None and str(user_text).strip().lower() not in ("null", ""):
+        cleaned_text, embedded_ts = parse_embedded_timestamp(str(user_text).strip())
         mapped.append({
             "id": f"{msg_id}_user",
             "sender": "user",
-            "message": str(user_text).strip(),
+            "message": cleaned_text,
             "channel": lead_channel,
-            "timestamp": created_at
+            "timestamp": embedded_ts or created_at
         })
     elif msg.get("tipo") == "mensagem_enviada":
         mapped.append({
@@ -387,12 +406,13 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
 
     lead_text = msg.get("resposta")
     if lead_text is not None and str(lead_text).strip().lower() not in ("null", ""):
+        cleaned_text, embedded_ts = parse_embedded_timestamp(str(lead_text).strip())
         mapped.append({
             "id": f"{msg_id}_lead",
             "sender": "lead",
-            "message": str(lead_text).strip(),
+            "message": cleaned_text,
             "channel": lead_channel,
-            "timestamp": updated_at
+            "timestamp": embedded_ts or updated_at
         })
 
     return mapped
@@ -854,6 +874,51 @@ class N8NService:
                 if fallback_lead:
                     return map_n8n_lead(fallback_lead)
                 return map_n8n_lead({"id": lead_id, **payload})
+
+    @staticmethod
+    async def delete_lead(lead_id: str) -> dict:
+        url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
+
+        # Remove from mock lists (MOCK_LEADS, RAW_LEADS_CACHE, MOCK_CONVERSATIONS, MOCK_ACTIVITIES)
+        for i, lead in enumerate(MOCK_LEADS):
+            if str(lead.get("id")) == str(lead_id):
+                MOCK_LEADS.pop(i)
+                break
+        
+        for k in list(RAW_LEADS_CACHE.keys()):
+            if str(k) == str(lead_id):
+                del RAW_LEADS_CACHE[k]
+
+        for k in list(MOCK_CONVERSATIONS.keys()):
+            if str(k) == str(lead_id):
+                del MOCK_CONVERSATIONS[k]
+            
+        for k in list(MOCK_ACTIVITIES.keys()):
+            if str(k) == str(lead_id):
+                del MOCK_ACTIVITIES[k]
+
+        if not url:
+            logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead deleted locally in-memory.")
+            return {"status": "success", "message": "Lead deleted locally (MOCK Mode)", "id": lead_id}
+
+        # Append action parameter to CRM N8N query parameters (using same update URL)
+        sep = "&" if "?" in url else "?"
+        endpoint_url = f"{url}{sep}action=delete_lead&id={lead_id}"
+
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            try:
+                response = await client.delete(endpoint_url, timeout=30.0)
+                response.raise_for_status()
+                try:
+                    res_data = clean_n8n_response(response.json())
+                    if isinstance(res_data, dict):
+                        return res_data
+                except Exception:
+                    pass
+                return {"status": "success", "id": lead_id}
+            except Exception as e:
+                logger.error(f"Error calling DELETE lead webhook: {e}")
+                return {"status": "success", "message": f"Deleted locally. API Error: {str(e)}", "id": lead_id}
 
     @staticmethod
     async def get_messages(lead_id: str) -> List[dict]:
