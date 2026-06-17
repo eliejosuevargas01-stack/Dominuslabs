@@ -1100,6 +1100,9 @@ class N8NService:
         }
         if lid:
             outgoing_payload["lid"] = lid
+        if payload.get("updated_by"):
+            outgoing_payload["updated_by"] = payload["updated_by"]
+            outgoing_payload["alterado_por"] = payload["updated_by"]
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:

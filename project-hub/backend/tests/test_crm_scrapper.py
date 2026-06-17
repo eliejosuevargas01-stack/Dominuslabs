@@ -68,6 +68,13 @@ def test_crm_endpoints(client):
         assert msg_sent["sender"] == "user"
         assert msg_sent["message"] == "Olá, esta é uma mensagem de teste!"
 
+        # Verify webhook payload sent to N8N contains who updated/sent it
+        mock_post.assert_called_once()
+        called_args, called_kwargs = mock_post.call_args
+        sent_json = called_kwargs["json"]
+        assert sent_json["updated_by"] == expected_email
+        assert sent_json["alterado_por"] == expected_email
+
     # Test send whatsapp message (Failure propagation)
     with patch("httpx.AsyncClient.post") as mock_post:
         class MockFailedResponse:
