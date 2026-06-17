@@ -289,3 +289,46 @@ def test_viewer_role_permissions(client):
     files = {"file": ("test.txt", b"hello content", "text/plain")}
     res = client.post("/api/v1/uploads/", data=upload_payload, files=files, headers=headers)
     assert res.status_code == 403
+
+def test_delete_project_permissions(client):
+    # 1. Login as Admin
+    login_res = client.post(
+        "/api/v1/auth/login",
+        json={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD}
+    )
+    admin_token = login_res.json()["access_token"]
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # 2. Create a project to delete
+    project_payload = {
+        "name": "Delete Test Project",
+        "client_name": "Delete Client",
+        "project_type": "Landing Page",
+        "value": 1200.0,
+        "status": "NEW"
+    }
+    create_res = client.post("/api/v1/projects/", json=project_payload, headers=admin_headers)
+    assert create_res.status_code == 200
+    project_id = create_res.json()["id"]
+
+    # 3. Login as Viewer (custom role, not admin)
+    viewer_login = client.post(
+        "/api/v1/auth/login",
+        json={"username": settings.VIEWER_USERNAME, "password": settings.VIEWER_PASSWORD}
+    )
+    viewer_token = viewer_login.json()["access_token"]
+    viewer_headers = {"Authorization": f"Bearer {viewer_token}"}
+
+    # 4. Attempt to delete project as Viewer (should fail with 403)
+    delete_viewer_res = client.delete(f"/api/v1/projects/{project_id}", headers=viewer_headers)
+    assert delete_viewer_res.status_code == 403
+
+    # 5. Delete project as Admin (should succeed with 200)
+    delete_admin_res = client.delete(f"/api/v1/projects/{project_id}", headers=admin_headers)
+    assert delete_admin_res.status_code == 200
+    assert delete_admin_res.json()["status"] == "success"
+
+    # 6. Verify project is deleted (should return 404)
+    get_res = client.get(f"/api/v1/projects/{project_id}", headers=admin_headers)
+    assert get_res.status_code == 404
+

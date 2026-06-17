@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   fetchProject, 
   updateProject, 
@@ -9,7 +9,8 @@ import {
   fetchDeploys,
   fetchTasks,
   API_BASE,
-  getUserRole
+  getUserRole,
+  deleteProject
 } from '../services/api';
 import ProgressBar from '../components/ProgressBar';
 import TaskChecklist from '../components/TaskChecklist';
@@ -31,7 +32,8 @@ import {
   Download,
   X,
   Lock,
-  Sparkles
+  Sparkles,
+  Trash2
 } from 'lucide-react';
 
 const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -54,7 +56,9 @@ const API_BASE_URL = API_BASE;
 
 export default function AdminProjectView() {
   const isViewer = getUserRole() === 'viewer';
+  const isAdmin = getUserRole() === 'admin';
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [project, setProject] = useState<any>(null);
   const [assets, setAssets] = useState<any[]>([]);
   const [commits, setCommits] = useState<any[]>([]);
@@ -63,6 +67,24 @@ export default function AdminProjectView() {
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const handleDeleteProject = async () => {
+    if (!project || !id) return;
+    if (!window.confirm(`Tem certeza que deseja excluir o projeto "${project.name}"? Esta ação não pode ser desfeita e removerá todas as tarefas, deploys e commits associados.`)) {
+      return;
+    }
+    try {
+      setUpdating(true);
+      setError('');
+      await deleteProject(id);
+      navigate('/project-hub');
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Erro ao excluir o projeto.');
+    } finally {
+      setUpdating(false);
+    }
+  };
   
   // Edit modal
   const [editOpen, setEditOpen] = useState(false);
@@ -247,6 +269,16 @@ export default function AdminProjectView() {
           Voltar ao Dashboard
         </Link>
         <div className="flex items-center gap-3">
+          {isAdmin && (
+            <button
+              onClick={handleDeleteProject}
+              className="px-4 py-2 border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer transition-colors"
+              disabled={updating}
+            >
+              <Trash2 className="w-4 h-4" />
+              Excluir Projeto
+            </button>
+          )}
           {!isViewer && (
             <button
               onClick={() => setEditOpen(true)}

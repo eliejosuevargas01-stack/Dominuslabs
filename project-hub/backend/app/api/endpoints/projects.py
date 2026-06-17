@@ -12,7 +12,7 @@ from app.repositories.task_repo import task_repo
 from app.repositories.asset_repo import asset_repo
 from app.repositories.log_repo import log_repo
 from app.services.project_service import project_service
-from app.core.auth import get_current_user, check_project_create_permission, check_project_edit_permission
+from app.core.auth import get_current_user, check_project_create_permission, check_project_edit_permission, check_admin_role
 from pydantic import BaseModel
 
 class PublicProjectDetail(BaseModel):
@@ -49,6 +49,14 @@ def update_project(project_id: int, project_in: ProjectUpdate, db: Session = Dep
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project_repo.update(db, db_obj=project, obj_in=project_in)
+
+@router.delete("/{project_id}")
+def delete_project(project_id: int, db: Session = Depends(get_db), current_user: str = Depends(check_admin_role)):
+    project = project_repo.get(db, id=project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project_repo.remove(db, id=project_id)
+    return {"status": "success", "message": "Project deleted successfully"}
 
 @router.get("/public/{public_token}", response_model=PublicProjectDetail)
 def read_public_project(public_token: str, db: Session = Depends(get_db)):

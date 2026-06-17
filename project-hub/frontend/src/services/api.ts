@@ -143,6 +143,17 @@ export async function updateProject(id: string | number, data: any) {
   return res.json();
 }
 
+export async function deleteProject(id: string | number) {
+  const res = await fetchWithAuth(`${API_BASE}/projects/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to delete project");
+  }
+  return res.json();
+}
+
 export async function fetchPublicProject(publicToken: string) {
   // Public route - no auth headers needed
   const res = await fetch(`${API_BASE}/projects/public/${publicToken}`);
