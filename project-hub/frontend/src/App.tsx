@@ -10,6 +10,7 @@ import ScrapperView from './pages/ScrapperView';
 import CrmView from './pages/CrmView';
 import LeadDetailView from './pages/LeadDetailView';
 import { LogOut } from 'lucide-react';
+import ChatPopup from './components/ChatPopup';
 import './App.css';
 import './index.css';
 
@@ -106,6 +107,7 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      <ChatPopup />
     </div>
   );
 }

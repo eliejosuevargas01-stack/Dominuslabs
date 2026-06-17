@@ -277,7 +277,8 @@ def test_crm_chat_update_sse_webhook(client):
     # Test update-chat endpoint with no active listeners
     res = client.post("/api/v1/webhooks/crm/update-chat", json={"lead_id": "test_lead_no_listener"})
     assert res.status_code == 200
-    assert res.json()["status"] == "ignored"
+    assert res.json()["status"] == "success"
+    assert res.json()["notified_sessions"] == 0
 
     # Add a mock queue listener manually to lead_listeners to mock an active session
     from app.api.endpoints.webhooks import lead_listeners
@@ -314,6 +315,34 @@ def test_crm_chat_update_sse_webhook(client):
     # Clean up
     if "test_lead_listener" in lead_listeners:
         del lead_listeners["test_lead_listener"]
+
+
+def test_crm_chat_update_global_sse(client):
+    # Add a mock queue listener manually to crm_chat_listeners
+    from app.api.endpoints.webhooks import crm_chat_listeners
+    import asyncio
+    queue = asyncio.Queue()
+    crm_chat_listeners.append(("admin@dominuslabs.online", queue))
+
+    # Mock the n8n_service.get_messages call
+    from unittest.mock import patch
+    with patch("app.services.n8n_service.n8n_service.get_messages") as mock_get_messages:
+        mock_get_messages.return_value = []
+        
+        # Test update-chat endpoint
+        res = client.post("/api/v1/webhooks/crm/update-chat?lead_id=test_global_update")
+        assert res.status_code == 200
+        
+        # Verify event was pushed to global listeners queue
+        event_data = queue.get_nowait()
+        import json
+        event_dict = json.loads(event_data)
+        assert event_dict["lead_id"] == "test_global_update"
+        assert event_dict["event"] == "reload"
+
+    # Clean up
+    if ("admin@dominuslabs.online", queue) in crm_chat_listeners:
+        crm_chat_listeners.remove(("admin@dominuslabs.online", queue))
 
 
 
