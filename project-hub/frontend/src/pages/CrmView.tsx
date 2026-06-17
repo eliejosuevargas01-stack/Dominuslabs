@@ -91,13 +91,8 @@ export default function CrmView() {
         });
       }
 
-      // Sort leads: those with sent messages first, then by last_interaction descending
+      // Sort leads: by last_interaction descending
       const sortedLeads = [...leadsData].sort((a: any, b: any) => {
-        const aSent = a.mensagem_enviada ? 1 : 0;
-        const bSent = b.mensagem_enviada ? 1 : 0;
-        if (aSent !== bSent) {
-          return bSent - aSent; // mensagem_enviada first
-        }
         const aDate = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
         const bDate = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
         return bDate - aDate;
@@ -163,13 +158,8 @@ export default function CrmView() {
       return matchesStatus && matchesOrigin && matchesSegment && matchesFalha && matchesSearch && matchesKpi;
     });
 
-    // Sort: leads with user messages sent first, then by last_interaction descending
+    // Sort: by last_interaction descending
     return filtered.sort((a, b) => {
-      const aSent = a.mensagem_enviada ? 1 : 0;
-      const bSent = b.mensagem_enviada ? 1 : 0;
-      if (aSent !== bSent) {
-        return bSent - aSent; // mensagem_enviada first
-      }
       const aDate = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
       const bDate = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
       return bDate - aDate;
