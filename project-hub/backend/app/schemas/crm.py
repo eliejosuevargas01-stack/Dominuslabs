@@ -16,6 +16,8 @@ class LeadBase(BaseModel):
     segmento: Optional[str] = ""
     solucao_recomendada: Optional[str] = ""
     id_anuncio_meta: Optional[str] = None
+    alterado_por: Optional[str] = None
+    updated_by: Optional[str] = None
 
     model_config = ConfigDict(extra="allow")
 
