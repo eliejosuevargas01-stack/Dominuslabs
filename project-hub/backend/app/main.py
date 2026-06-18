@@ -24,6 +24,25 @@ os.makedirs(os.path.join(settings.UPLOAD_DIR, "documents"), exist_ok=True)
 
 Base.metadata.create_all(bind=engine)
 
+# Automatic database migration for whatsapp_token column
+try:
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        db_type = engine.url.drivername
+        if "sqlite" in db_type:
+            from sqlalchemy import inspect
+            inspector = inspect(engine)
+            columns = [c["name"] for c in inspector.get_columns("users")]
+            if "whatsapp_token" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN whatsapp_token VARCHAR;"))
+                conn.commit()
+        else:
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_token VARCHAR(255) UNIQUE;"))
+            conn.commit()
+        print("Database migration: whatsapp_token column checked/added successfully.")
+except Exception as e:
+    print(f"Database migration warning/error: {e}")
+
 # Seed database users
 def seed_database_users():
     from app.core.database import SessionLocal
