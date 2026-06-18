@@ -9,6 +9,7 @@ import Sidebar from './components/Sidebar';
 import ScrapperView from './pages/ScrapperView';
 import CrmView from './pages/CrmView';
 import LeadDetailView from './pages/LeadDetailView';
+import ConnectionsView from './pages/ConnectionsView';
 import { LogOut } from 'lucide-react';
 import ChatPopup from './components/ChatPopup';
 import './App.css';
@@ -166,6 +167,26 @@ function App() {
               <ProtectedRoute>
                 <DashboardLayout>
                   <CrmView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/connections" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <ConnectionsView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/cases-dashboard" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Showcase isDashboard={true} />
                 </DashboardLayout>
               </ProtectedRoute>
             } 

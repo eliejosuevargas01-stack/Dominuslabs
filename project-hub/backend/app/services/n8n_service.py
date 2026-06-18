@@ -1136,6 +1136,8 @@ class N8NService:
         if payload.get("updated_by"):
             outgoing_payload["updated_by"] = payload["updated_by"]
             outgoing_payload["alterado_por"] = payload["updated_by"]
+        if payload.get("whatsapp_token"):
+            outgoing_payload["whatsapp_token"] = payload["whatsapp_token"]
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:

@@ -71,6 +71,9 @@ export async function fetchWithAuth(
             if (refreshData.refresh_token) {
               localStorage.setItem("admin_refresh_token", refreshData.refresh_token);
             }
+            if (refreshData.whatsapp_token) {
+              localStorage.setItem("whatsapp_token", refreshData.whatsapp_token);
+            }
 
             // Retry the original request with the new token
             mergedHeaders["Authorization"] = `Bearer ${refreshData.access_token}`;
@@ -91,6 +94,7 @@ export async function fetchWithAuth(
 
     localStorage.removeItem("admin_token");
     localStorage.removeItem("admin_refresh_token");
+    localStorage.removeItem("whatsapp_token");
     if (typeof window !== "undefined") {
       window.location.href = "/login";
     }
@@ -259,4 +263,108 @@ export function getUserRole(): string {
     console.error("Failed to decode token", e);
     return "";
   }
+}
+
+export async function fetchWhatsappSessions() {
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions`);
+  if (!res.ok) throw new Error("Falha ao buscar conexões.");
+  return res.json();
+}
+
+export async function createWhatsappSession(name: string) {
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao criar conexão.");
+  }
+  return res.json();
+}
+
+export async function connectWhatsappSession(sessionId: string) {
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}/connect`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao solicitar código QR.");
+  }
+  return res.json();
+}
+
+export async function getWhatsappSessionStatus(sessionId: string) {
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}`);
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao consultar status da sessão.");
+  }
+  return res.json();
+}
+
+export async function getWhatsappSessionSettings(sessionId: string) {
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}/settings`);
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao buscar configurações da sessão.");
+  }
+  return res.json();
+}
+
+export async function updateWhatsappSessionSettings(sessionId: string, settingsData: any) {
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}/settings`, {
+    method: "PUT",
+    body: JSON.stringify(settingsData),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao atualizar configurações da sessão.");
+  }
+  return res.json();
+}
+
+export async function disconnectWhatsappSession(sessionId: string) {
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}/disconnect`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao desconectar sessão.");
+  }
+  return res.json();
+}
+
+export async function deleteWhatsappSession(sessionId: string) {
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao excluir sessão.");
+  }
+  return res.json();
+}
+
+export async function loginInstagramProxy(payload: { username: string; password: string }) {
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/instagram/login`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao conectar Instagram.");
+  }
+  return res.json();
+}
+
+export async function logoutInstagramProxy(username: string) {
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/instagram/sessions/${username}/logout`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao desconectar Instagram.");
+  }
+  return res.json();
 }

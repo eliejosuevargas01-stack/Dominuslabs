@@ -16,4 +16,6 @@ class User(Base):
     can_manage_crm = Column(Boolean, default=True, nullable=False)
     can_use_scrapper = Column(Boolean, default=True, nullable=False)
     
+    whatsapp_token = Column(String, unique=True, nullable=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

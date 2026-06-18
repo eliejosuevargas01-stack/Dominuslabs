@@ -9,6 +9,7 @@ class UserBase(BaseModel):
     can_edit_projects: bool = False
     can_manage_crm: bool = True
     can_use_scrapper: bool = True
+    whatsapp_token: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
