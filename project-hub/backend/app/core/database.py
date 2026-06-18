@@ -7,7 +7,9 @@ is_sqlite = settings.SQLALCHEMY_DATABASE_URI.startswith("sqlite")
 connect_args = {"check_same_thread": False} if is_sqlite else {}
 
 engine = create_engine(
-    settings.SQLALCHEMY_DATABASE_URI, connect_args=connect_args
+    settings.SQLALCHEMY_DATABASE_URI, 
+    connect_args=connect_args,
+    pool_pre_ping=True
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
