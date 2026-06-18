@@ -29,6 +29,7 @@ def seed_database_users():
     from app.core.database import SessionLocal
     from app.models.user import User
     from app.core.security import get_password_hash
+    import secrets
     db = SessionLocal()
     try:
         # Seed main admin
@@ -45,9 +46,13 @@ def seed_database_users():
                 can_create_projects=True,
                 can_edit_projects=True,
                 can_manage_crm=True,
-                can_use_scrapper=True
+                can_use_scrapper=True,
+                whatsapp_token=f"wa_tok_{secrets.token_hex(16)}"
             )
             db.add(admin_user)
+        else:
+            if not existing_admin.whatsapp_token:
+                existing_admin.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
             
         # Seed default viewer / patrik user
         viewer_email = settings.VIEWER_USERNAME
@@ -63,9 +68,13 @@ def seed_database_users():
                 can_create_projects=True,
                 can_edit_projects=False,
                 can_manage_crm=True,
-                can_use_scrapper=True
+                can_use_scrapper=True,
+                whatsapp_token=f"wa_tok_{secrets.token_hex(16)}"
             )
             db.add(viewer_user)
+        else:
+            if not existing_viewer.whatsapp_token:
+                existing_viewer.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
             
         db.commit()
     except Exception as e:

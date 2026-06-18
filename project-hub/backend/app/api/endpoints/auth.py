@@ -29,6 +29,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             detail="Usuário ou senha incorretos"
         )
     
+    import secrets
+    if not user.whatsapp_token:
+        user.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
+        db.commit()
+        db.refresh(user)
+    
     token_data = {
         "sub": user.email,
         "role": user.role,
@@ -43,7 +49,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
+        "whatsapp_token": user.whatsapp_token
     }
 
 @router.post("/refresh")
@@ -63,6 +70,12 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
             detail="Usuário não encontrado."
         )
         
+    import secrets
+    if not user.whatsapp_token:
+        user.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
+        db.commit()
+        db.refresh(user)
+        
     token_data = {
         "sub": user.email,
         "role": user.role,
@@ -77,5 +90,6 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     return {
         "access_token": new_access_token,
         "refresh_token": new_refresh_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
+        "whatsapp_token": user.whatsapp_token
     }

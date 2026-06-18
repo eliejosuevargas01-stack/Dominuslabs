@@ -50,14 +50,27 @@ async def read_conversation_messages(lead_id: str, current_user: str = Depends(g
     messages = await n8n_service.get_messages(lead_id)
     return messages
 
+from sqlalchemy.orm import Session
+from app.core.database import get_db
+from app.models.user import User
+
 @router.post("/messages/send", response_model=Message)
-async def send_whatsapp_message(payload: MessageSendPayload, current_user: str = Depends(check_crm_permission)):
+async def send_whatsapp_message(
+    payload: MessageSendPayload,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(check_crm_permission)
+):
     """
     Send an outbound WhatsApp message to the lead.
     """
     try:
+        user = db.query(User).filter(User.email == current_user).first()
+        token = user.whatsapp_token if user else None
+        
         data = payload.model_dump()
         data["updated_by"] = current_user
+        data["whatsapp_token"] = token
+        
         message = await n8n_service.send_whatsapp_message(data)
         return message
     except ValueError as e:

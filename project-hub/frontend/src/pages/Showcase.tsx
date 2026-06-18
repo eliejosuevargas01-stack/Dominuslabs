@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-export default function Showcase() {
+export default function Showcase({ isDashboard = false }: { isDashboard?: boolean }) {
   const [data, setData] = useState<{ projects: any[]; testimonials: any[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -39,12 +39,14 @@ export default function Showcase() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-slate-50 relative overflow-hidden">
+      <div className={isDashboard ? "flex flex-col items-center justify-center min-h-[300px]" : "flex flex-col items-center justify-center min-h-screen gap-4 bg-slate-50 relative overflow-hidden"}>
         {/* Background Animation Bubbles */}
-        <div className="animated-bg">
-          <div className="bg-bubble-1"></div>
-          <div className="bg-bubble-2"></div>
-        </div>
+        {!isDashboard && (
+          <div className="animated-bg">
+            <div className="bg-bubble-1"></div>
+            <div className="bg-bubble-2"></div>
+          </div>
+        )}
         <Loader2 className="w-10 h-10 text-violet-600 animate-spin z-10" />
         <p className="text-slate-500 font-medium z-10">Carregando cases de sucesso...</p>
       </div>
@@ -53,7 +55,7 @@ export default function Showcase() {
 
   if (error || !data) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-slate-50 relative overflow-hidden">
+      <div className={isDashboard ? "flex flex-col items-center justify-center p-4" : "flex flex-col items-center justify-center min-h-screen p-4 bg-slate-50 relative overflow-hidden"}>
         <div className="max-w-md w-full text-center glass-card p-8 border-rose-100 z-10">
           <FolderCheck className="w-12 h-12 text-rose-400 mx-auto mb-4" />
           <h3 className="text-lg font-bold text-slate-800">Ops! Algo deu errado</h3>
@@ -73,28 +75,32 @@ export default function Showcase() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50/50 relative overflow-hidden flex flex-col justify-between">
+    <div className={isDashboard ? "relative z-10 w-full" : "min-h-screen bg-slate-50/50 relative overflow-hidden flex flex-col justify-between"}>
       {/* Background Animation Bubbles */}
-      <div className="animated-bg">
-        <div className="bg-bubble-1"></div>
-        <div className="bg-bubble-2"></div>
-        <div className="bg-bubble-3"></div>
-      </div>
+      {!isDashboard && (
+        <div className="animated-bg">
+          <div className="bg-bubble-1"></div>
+          <div className="bg-bubble-2"></div>
+          <div className="bg-bubble-3"></div>
+        </div>
+      )}
 
-      <div className="max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-8 relative z-10 flex-1">
+      <div className={isDashboard ? "w-full space-y-6" : "max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-8 relative z-10 flex-1"}>
         
         {/* Navigation / Brand Header */}
-        <header className="flex items-center justify-between pb-12">
-          <Link to="/" className="flex items-center gap-2 group">
-            <img src="/logo.png" alt="Dominus Labs" className="w-9 h-9 rounded-xl object-contain shadow-md group-hover:scale-105 transition-transform" />
-            <span className="font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-violet-800 via-indigo-700 to-emerald-600 bg-clip-text text-transparent">
-              Dominuslabs
+        {!isDashboard && (
+          <header className="flex items-center justify-between pb-12">
+            <Link to="/" className="flex items-center gap-2 group">
+              <img src="/logo.png" alt="Dominus Labs" className="w-9 h-9 rounded-xl object-contain shadow-md group-hover:scale-105 transition-transform" />
+              <span className="font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-violet-800 via-indigo-700 to-emerald-600 bg-clip-text text-transparent">
+                Dominuslabs
+              </span>
+            </Link>
+            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-violet-100/70 text-violet-800 border border-violet-200/40">
+              Cases de Sucesso
             </span>
-          </Link>
-          <span className="text-xs font-semibold px-3 py-1 rounded-full bg-violet-100/70 text-violet-800 border border-violet-200/40">
-            Cases de Sucesso
-          </span>
-        </header>
+          </header>
+        )}
 
         {/* Hero Section */}
         <section className="text-center max-w-3xl mx-auto space-y-4 pb-16">
@@ -268,31 +274,33 @@ export default function Showcase() {
         </section>
 
         {/* Dynamic CTA Footer Section */}
-        <section className="pt-24 text-center">
-          <div className="glass-card p-8 sm:p-12 max-w-4xl mx-auto bg-gradient-to-br from-violet-700 to-indigo-900 text-white border-violet-600/30 flex flex-col items-center space-y-6 shadow-xl relative overflow-hidden">
-            <div className="absolute -top-10 -left-10 w-40 h-40 bg-white/5 rounded-full blur-xl"></div>
-            <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-xl"></div>
+        {!isDashboard && (
+          <section className="pt-24 text-center">
+            <div className="glass-card p-8 sm:p-12 max-w-4xl mx-auto bg-gradient-to-br from-violet-700 to-indigo-900 text-white border-violet-600/30 flex flex-col items-center space-y-6 shadow-xl relative overflow-hidden">
+              <div className="absolute -top-10 -left-10 w-40 h-40 bg-white/5 rounded-full blur-xl"></div>
+              <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-xl"></div>
 
-            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Quer automatizar e escalar seu negócio?</h2>
-            <p className="text-violet-200 text-sm sm:text-base max-w-xl font-medium">
-              Entre em contato conosco hoje mesmo para desenharmos juntos a solução perfeita de landing pages, integrações, CRMs ou automações.
-            </p>
-            <a
-              href="https://wa.me/5500000000000"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 bg-white text-violet-800 hover:bg-violet-50 px-6 py-3 rounded-2xl font-extrabold text-sm shadow-md transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
-            >
-              Falar com Eliezer
-              <ArrowRight className="w-4 h-4 text-violet-800" />
-            </a>
-          </div>
-        </section>
+              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Quer automatizar e escalar seu negócio?</h2>
+              <p className="text-violet-200 text-sm sm:text-base max-w-xl font-medium">
+                Entre em contato conosco hoje mesmo para desenharmos juntos a solução perfeita de landing pages, integrações, CRMs ou automações.
+              </p>
+              <a
+                href="https://wa.me/5500000000000"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-white text-violet-800 hover:bg-violet-50 px-6 py-3 rounded-2xl font-extrabold text-sm shadow-md transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+              >
+                Falar com Eliezer
+                <ArrowRight className="w-4 h-4 text-violet-800" />
+              </a>
+            </div>
+          </section>
+        )}
 
       </div>
 
       {/* Footer */}
-      <Footer onTabSelect={setActiveTab} />
+      {!isDashboard && <Footer onTabSelect={setActiveTab} />}
     </div>
   );
 }
