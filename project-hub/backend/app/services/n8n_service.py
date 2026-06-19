@@ -1142,6 +1142,23 @@ class N8NService:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.post(url, json=outgoing_payload, timeout=30.0)
+                
+                # Check for the specific authentication error format returned by n8n
+                is_auth_error = False
+                try:
+                    resp_json = response.json()
+                    first_elem = resp_json[0] if isinstance(resp_json, list) and len(resp_json) > 0 else resp_json
+                    if isinstance(first_elem, dict) and "error" in first_elem:
+                        err_obj = first_elem["error"]
+                        if isinstance(err_obj, dict) and err_obj.get("status") == 400 and err_obj.get("code") == "ERR_BAD_REQUEST":
+                            is_auth_error = True
+                except Exception:
+                    pass
+
+                if is_auth_error:
+                    print("[M2M-AUTH-FLOW] >>> Detectado erro de autenticação n8n no corpo da resposta.", flush=True)
+                    raise ValueError("AUTH_ERROR_N8N_BAD_REQUEST")
+
                 if response.status_code >= 400:
                     # Try to extract detailed error message from response body
                     error_msg = f"HTTP {response.status_code}"

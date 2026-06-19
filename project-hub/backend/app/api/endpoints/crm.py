@@ -130,7 +130,21 @@ async def send_whatsapp_message(
         message = await n8n_service.send_whatsapp_message(data)
         return message
     except ValueError as e:
-        # Se token inválido (401 no n8n/whatsapp), invalida cache para retentar
+        # Se for erro de autenticação detectado no n8n, tenta renovar o token e re-enviar
+        if str(e) == "AUTH_ERROR_N8N_BAD_REQUEST":
+            print(f"[M2M-AUTH-FLOW] >>> Detectado erro de autenticação n8n (ERR_BAD_REQUEST). Forçando novo OAuth e retentando...", flush=True)
+            invalidate_token(user.id)
+            try:
+                new_token = await get_oauth_token(user, db)
+                data["whatsapp_token"] = new_token
+                print(f"[M2M-AUTH-FLOW] >>> Novo token obtido com sucesso. Re-enviando mensagem...", flush=True)
+                message = await n8n_service.send_whatsapp_message(data)
+                return message
+            except Exception as retry_err:
+                print(f"[M2M-AUTH-FLOW] >>> ❌ Falha na retentativa de envio após renovação: {retry_err}", flush=True)
+                raise HTTPException(status_code=400, detail=f"Erro de autenticação na retentativa: {str(retry_err)}")
+        
+        # Se token inválido (outro erro de validação), invalida cache e lança HTTP 400
         invalidate_token(user.id)
         raise HTTPException(status_code=400, detail=str(e))
 

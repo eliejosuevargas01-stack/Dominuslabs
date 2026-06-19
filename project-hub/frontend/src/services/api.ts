@@ -411,3 +411,52 @@ export async function sendWhatsappMessage(payload: {
   }
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// Credenciais manuais da WhatsApp API (client_id + client_secret)
+// ---------------------------------------------------------------------------
+
+export async function fetchCredentials(): Promise<{
+  configured: boolean;
+  client_id: string | null;
+  client_secret_preview: string | null;
+  created_at: string | null;
+}> {
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/credentials`);
+  if (!res.ok) throw new Error("Falha ao buscar credenciais.");
+  return res.json();
+}
+
+export async function saveCredentials(client_id: string, client_secret: string): Promise<{
+  ok: boolean;
+  client_id: string;
+  client_secret_preview: string;
+  message: string;
+}> {
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/credentials`, {
+    method: "PUT",
+    body: JSON.stringify({ client_id, client_secret }),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao salvar credenciais.");
+  }
+  return res.json();
+}
+
+export async function provisionCredentials(): Promise<{
+  ok: boolean;
+  client_id: string;
+  client_secret: string;
+  message: string;
+}> {
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/provision`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao vincular com a WhatsApp API.");
+  }
+  return res.json();
+}
+
