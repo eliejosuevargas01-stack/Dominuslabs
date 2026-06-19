@@ -15,9 +15,12 @@ export default function CrmView() {
 
   // Filters state
   const [statusFilter, setStatusFilter] = useState('');
-  const [originFilter, setOriginFilter] = useState('');
-  const [segmentFilter, setSegmentFilter] = useState('');
-  const [falhaFilter, setFalhaFilter] = useState('');
+  const [origemFilter, setOrigemFilter] = useState('');
+  const [nichoFilter, setNichoFilter] = useState('');
+  const [contactMethodFilter, setContactMethodFilter] = useState('');
+  const [temSiteProprioFilter, setTemSiteProprioFilter] = useState('');
+  const [temCtaFilter, setTemCtaFilter] = useState('');
+  const [temFormularioFilter, setTemFormularioFilter] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [kpiFilter, setKpiFilter] = useState<string | null>(null);
 
@@ -31,26 +34,18 @@ export default function CrmView() {
     return Array.from(s).sort();
   }, [leads]);
 
-  const dynamicOrigins = useMemo(() => {
+  const dynamicOrigens = useMemo(() => {
     const s = new Set<string>();
     leads.forEach(l => {
-      if (l.origin) s.add(l.origin);
+      if (l.origem) s.add(l.origem);
     });
     return Array.from(s).sort();
   }, [leads]);
 
-  const dynamicSegments = useMemo(() => {
+  const dynamicNichos = useMemo(() => {
     const s = new Set<string>();
     leads.forEach(l => {
-      if (l.segmento && l.segmento.trim() !== '') s.add(l.segmento);
-    });
-    return Array.from(s).sort();
-  }, [leads]);
-
-  const dynamicFalhas = useMemo(() => {
-    const s = new Set<string>();
-    leads.forEach(l => {
-      if (l.falha_identificada && l.falha_identificada.trim() !== '') s.add(l.falha_identificada);
+      if (l.nicho && l.nicho.trim() !== '') s.add(l.nicho);
     });
     return Array.from(s).sort();
   }, [leads]);
@@ -91,10 +86,10 @@ export default function CrmView() {
         });
       }
 
-      // Sort leads: by last_interaction descending
+      // Sort leads: by updated_at or last_interaction descending
       const sortedLeads = [...leadsData].sort((a: any, b: any) => {
-        const aDate = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
-        const bDate = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
+        const aDate = (a.updated_at || a.last_interaction) ? new Date(a.updated_at || a.last_interaction).getTime() : 0;
+        const bDate = (b.updated_at || b.last_interaction) ? new Date(b.updated_at || b.last_interaction).getTime() : 0;
         return bDate - aDate;
       });
       
@@ -124,23 +119,35 @@ export default function CrmView() {
   const filteredLeads = useMemo(() => {
     const filtered = leads.filter(lead => {
       const matchesStatus = statusFilter ? lead.status === statusFilter : true;
-      const matchesOrigin = originFilter ? lead.origin === originFilter : true;
-      const matchesSegment = segmentFilter ? lead.segmento === segmentFilter : true;
-      const matchesFalha = falhaFilter ? lead.falha_identificada === falhaFilter : true;
+      const matchesOrigem = origemFilter ? lead.origem === origemFilter : true;
+      const matchesNicho = nichoFilter ? lead.nicho === nichoFilter : true;
+
+      // Contact Method Logic
+      let matchesContactMethod = true;
+      if (contactMethodFilter === 'whatsapp') {
+        matchesContactMethod = lead.telefone_contato !== null && lead.telefone_contato !== undefined;
+      } else if (contactMethodFilter === 'instagram') {
+        matchesContactMethod = lead.instagram !== null && lead.instagram !== undefined;
+      } else if (contactMethodFilter === 'email') {
+        matchesContactMethod = lead.email_contato !== null && lead.email_contato !== undefined;
+      }
+
+      // Payload specific filters
+      const matchesSite = temSiteProprioFilter ? String(lead.payload?.tem_site_proprio) === temSiteProprioFilter : true;
+      const matchesCta = temCtaFilter ? lead.payload?.tem_cta === temCtaFilter : true;
+      const matchesForm = temFormularioFilter ? lead.payload?.tem_formulario === temFormularioFilter : true;
       
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = searchTerm 
         ? (String(lead.id || '').toLowerCase().includes(searchLower) ||
-           lead.company_name?.toLowerCase().includes(searchLower) || 
-           lead.email?.toLowerCase().includes(searchLower) ||
-           String(lead.whatsapp || '').includes(searchTerm) ||
+           String(lead.lead_id || '').toLowerCase().includes(searchLower) ||
+           lead.empresa_nome?.toLowerCase().includes(searchLower) ||
+           lead.email_contato?.toLowerCase().includes(searchLower) ||
+           String(lead.telefone_contato || '').includes(searchTerm) ||
            lead.instagram?.toLowerCase().includes(searchLower) ||
-           lead.responsible?.toLowerCase().includes(searchLower) ||
-           lead.segmento?.toLowerCase().includes(searchLower) ||
-           lead.falha_identificada?.toLowerCase().includes(searchLower) ||
-           lead.solucao_recomendada?.toLowerCase().includes(searchLower) ||
-           lead.notes?.toLowerCase().includes(searchLower) ||
-           lead.proposal?.toLowerCase().includes(searchLower))
+           lead.nicho?.toLowerCase().includes(searchLower) ||
+           lead.localizacao?.toLowerCase().includes(searchLower) ||
+           lead.origem?.toLowerCase().includes(searchLower))
         : true;
 
       // Card-specific KPI filters
@@ -155,16 +162,21 @@ export default function CrmView() {
         matchesKpi = lead.status === 'RESPONDED' || (lead.has_messages === true && lead.mensagem_enviada === false);
       }
         
-      return matchesStatus && matchesOrigin && matchesSegment && matchesFalha && matchesSearch && matchesKpi;
+      return matchesStatus && matchesOrigem && matchesNicho && matchesContactMethod &&
+             matchesSite && matchesCta && matchesForm && matchesSearch && matchesKpi;
     });
 
-    // Sort: by last_interaction descending
+    // Sort: by updated_at or last_interaction descending
     return filtered.sort((a, b) => {
-      const aDate = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
-      const bDate = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
+      const aDate = (a.updated_at || a.last_interaction) ? new Date(a.updated_at || a.last_interaction).getTime() : 0;
+      const bDate = (b.updated_at || b.last_interaction) ? new Date(b.updated_at || b.last_interaction).getTime() : 0;
       return bDate - aDate;
     });
-  }, [leads, statusFilter, originFilter, segmentFilter, falhaFilter, searchTerm, kpiFilter]);
+  }, [
+    leads, statusFilter, origemFilter, nichoFilter, contactMethodFilter,
+    temSiteProprioFilter, temCtaFilter, temFormularioFilter,
+    searchTerm, kpiFilter
+  ]);
 
   // Pagination state and computation
   const [currentPage, setCurrentPage] = useState(1);
@@ -180,7 +192,11 @@ export default function CrmView() {
   // Reset pagination to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, originFilter, segmentFilter, falhaFilter, searchTerm, kpiFilter]);
+  }, [
+    statusFilter, origemFilter, nichoFilter, contactMethodFilter,
+    temSiteProprioFilter, temCtaFilter, temFormularioFilter,
+    searchTerm, kpiFilter
+  ]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -349,50 +365,86 @@ export default function CrmView() {
                 ))}
               </select>
 
-              {/* Origin Filter */}
+              {/* Origem Filter */}
               <select
-                value={originFilter}
-                onChange={(e) => setOriginFilter(e.target.value)}
+                value={origemFilter}
+                onChange={(e) => setOrigemFilter(e.target.value)}
                 className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
               >
-                <option value="">Método de Contato (Todos)</option>
-                {dynamicOrigins.map(or => (
+                <option value="">Origem (Todos)</option>
+                {dynamicOrigens.map(or => (
                   <option key={or} value={or}>{or}</option>
                 ))}
               </select>
 
-              {/* Segment Filter */}
+              {/* Nicho Filter */}
               <select
-                value={segmentFilter}
-                onChange={(e) => setSegmentFilter(e.target.value)}
+                value={nichoFilter}
+                onChange={(e) => setNichoFilter(e.target.value)}
                 className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
               >
-                <option value="">Segmento (Todos)</option>
-                {dynamicSegments.map(seg => (
-                  <option key={seg} value={seg}>{seg}</option>
+                <option value="">Nicho (Todos)</option>
+                {dynamicNichos.map(n => (
+                  <option key={n} value={n}>{n}</option>
                 ))}
               </select>
 
-              {/* Failure Filter */}
+              {/* Contact Method Filter */}
               <select
-                value={falhaFilter}
-                onChange={(e) => setFalhaFilter(e.target.value)}
+                value={contactMethodFilter}
+                onChange={(e) => setContactMethodFilter(e.target.value)}
                 className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
               >
-                <option value="">Falha Encontrada (Todos)</option>
-                {dynamicFalhas.map(fal => (
-                  <option key={fal} value={fal}>{fal}</option>
-                ))}
+                <option value="">Meio de Contato (Todos)</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="instagram">Instagram</option>
+                <option value="email">E-mail</option>
+              </select>
+
+              {/* Tem Site Próprio Filter */}
+              <select
+                value={temSiteProprioFilter}
+                onChange={(e) => setTemSiteProprioFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Tem Site? (Todos)</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
+              </select>
+
+              {/* Tem CTA Filter */}
+              <select
+                value={temCtaFilter}
+                onChange={(e) => setTemCtaFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Tem CTA? (Todos)</option>
+                <option value="sim">Sim</option>
+                <option value="não">Não</option>
+              </select>
+
+              {/* Tem Formulario Filter */}
+              <select
+                value={temFormularioFilter}
+                onChange={(e) => setTemFormularioFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Tem Form? (Todos)</option>
+                <option value="sim">Sim</option>
+                <option value="não">Não</option>
               </select>
 
               {/* Clear Filters Button */}
-              {(statusFilter || originFilter || segmentFilter || falhaFilter || searchTerm || kpiFilter) && (
+              {(statusFilter || origemFilter || nichoFilter || contactMethodFilter || temSiteProprioFilter || temCtaFilter || temFormularioFilter || searchTerm || kpiFilter) && (
                 <button
                   onClick={() => {
                     setStatusFilter('');
-                    setOriginFilter('');
-                    setSegmentFilter('');
-                    setFalhaFilter('');
+                    setOrigemFilter('');
+                    setNichoFilter('');
+                    setContactMethodFilter('');
+                    setTemSiteProprioFilter('');
+                    setTemCtaFilter('');
+                    setTemFormularioFilter('');
                     setSearchTerm('');
                     setKpiFilter(null);
                   }}
@@ -419,14 +471,14 @@ export default function CrmView() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-violet-100/50 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      <th className="py-3 px-2 max-w-[80px]">ID</th>
+                      <th className="py-3 px-2 max-w-[120px]">Lead ID</th>
                       <th className="py-3 px-2">Empresa</th>
-                      <th className="py-3 px-2">Segmento</th>
-                      <th className="py-3 px-2">Falha Encontrada</th>
-                      <th className="py-3 px-2">WhatsApp</th>
+                      <th className="py-3 px-2">Nicho</th>
                       <th className="py-3 px-2">Status</th>
-                      <th className="py-3 px-2">Método de Contato</th>
-                      <th className="py-3 px-2">Última Interação</th>
+                      <th className="py-3 px-2">Origem</th>
+                      <th className="py-3 px-2">Canais</th>
+                      <th className="py-3 px-2">Assets</th>
+                      <th className="py-3 px-2">Última Atu.</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-violet-100/30 text-xs font-medium text-slate-600">
@@ -437,18 +489,41 @@ export default function CrmView() {
                           onClick={() => window.open(`/crm/leads/${lead.id}`, '_blank')}
                           className="hover:bg-violet-50/30 cursor-pointer transition-colors"
                         >
-                          <td className="py-3.5 px-2 text-slate-400 max-w-[80px] truncate" title={lead.id}>#{lead.id}</td>
-                          <td className="py-3.5 px-2 text-slate-800">{lead.company_name}</td>
-                          <td className="py-3.5 px-2 text-slate-500">{lead.segmento || '-'}</td>
-                          <td className="py-3.5 px-2 text-slate-500">{lead.falha_identificada || '-'}</td>
-                          <td className="py-3.5 px-2">{lead.whatsapp || '-'}</td>
+                          <td className="py-3.5 px-2 text-slate-400 max-w-[120px] truncate" title={lead.lead_id || lead.id}>
+                            #{lead.lead_id || lead.id}
+                          </td>
+                          <td className="py-3.5 px-2">
+                            <div className="font-bold text-slate-800">{lead.empresa_nome || lead.company_name}</div>
+                            <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{lead.localizacao}</div>
+                          </td>
+                          <td className="py-3.5 px-2">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                              {lead.nicho || lead.segmento || '-'}
+                            </span>
+                          </td>
                           <td className="py-3.5 px-2">
                             <span className={`px-2 py-0.5 rounded-full border text-[10px] uppercase font-bold tracking-wide ${getStatusColor(lead.status)}`}>
                               {lead.status}
                             </span>
                           </td>
-                          <td className="py-3.5 px-2 text-slate-500">{lead.origin}</td>
-                          <td className="py-3.5 px-2 text-slate-400">{formatDate(lead.last_interaction)}</td>
+                          <td className="py-3.5 px-2 text-slate-500 font-semibold">{lead.origem || lead.origin}</td>
+                          <td className="py-3.5 px-2">
+                            <div className="flex items-center gap-1.5">
+                              {lead.telefone_contato && <MessageCircle className="w-4 h-4 text-emerald-500" title={lead.telefone_contato} />}
+                              {lead.instagram && <Sparkles className="w-4 h-4 text-pink-500" title={lead.instagram} />}
+                              {lead.email_contato && <AlertCircle className="w-4 h-4 text-blue-500" title={lead.email_contato} />}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-2">
+                            <div className="flex gap-1">
+                              {lead.payload?.tem_site_proprio && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Tem Site" />}
+                              {lead.payload?.tem_cta === 'sim' && <span className="w-2 h-2 rounded-full bg-blue-400" title="Tem CTA" />}
+                              {lead.payload?.tem_formulario === 'sim' && <span className="w-2 h-2 rounded-full bg-purple-400" title="Tem Form" />}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-2 text-slate-400 whitespace-nowrap">
+                            {formatDate(lead.updated_at || lead.last_interaction)}
+                          </td>
                         </tr>
                       );
                     })}
