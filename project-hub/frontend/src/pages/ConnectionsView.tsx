@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   MessageSquare, Plus, Trash2, Wifi, WifiOff, Loader2, 
-  AlertCircle, X, CheckCircle2, QrCode, ShieldAlert, Settings
+  AlertCircle, X, CheckCircle2, QrCode, ShieldAlert, Settings, Key, Save, Eye, EyeOff
 } from 'lucide-react';
 
 const Instagram = ({ size = 24, ...props }: React.SVGProps<SVGSVGElement> & { size?: number }) => (
@@ -33,7 +33,10 @@ import {
   loginInstagramProxy,
   logoutInstagramProxy,
   getWhatsappSessionSettings,
-  updateWhatsappSessionSettings
+  updateWhatsappSessionSettings,
+  fetchCredentials,
+  saveCredentials,
+  provisionCredentials,
 } from '../services/api';
 
 interface Session {
@@ -88,6 +91,19 @@ export default function ConnectionsView() {
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
 
+  // Credentials State
+  const [credConfigured, setCredConfigured] = useState<boolean | null>(null);
+  const [credClientId, setCredClientId] = useState('');
+  const [credClientIdInput, setCredClientIdInput] = useState('');
+  const [credSecretPreview, setCredSecretPreview] = useState<string | null>(null);
+  const [credClientSecretInput, setCredClientSecretInput] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
+  const [credSaving, setCredSaving] = useState(false);
+  const [credProvisioning, setCredProvisioning] = useState(false);
+  const [credSuccess, setCredSuccess] = useState(false);
+  const [credError, setCredError] = useState<string | null>(null);
+  const [credCreatedAt, setCredCreatedAt] = useState<string | null>(null);
+
   const loadSessions = useCallback(async () => {
     try {
       setLoading(true);
@@ -107,6 +123,62 @@ export default function ConnectionsView() {
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
+
+  useEffect(() => {
+    fetchCredentials()
+      .then((data) => {
+        setCredConfigured(data.configured);
+        setCredClientId(data.client_id || '');
+        setCredClientIdInput(data.client_id || '');
+        setCredSecretPreview(data.client_secret_preview);
+        setCredCreatedAt(data.created_at);
+      })
+      .catch(() => setCredConfigured(false));
+  }, []);
+
+  const handleSaveCredentials = async () => {
+    if (!credClientIdInput.trim() || !credClientSecretInput.trim()) {
+      setCredError('Preencha o Client ID e o Client Secret.');
+      return;
+    }
+    setCredSaving(true);
+    setCredError(null);
+    setCredSuccess(false);
+    try {
+      const res = await saveCredentials(credClientIdInput.trim(), credClientSecretInput.trim());
+      setCredConfigured(true);
+      setCredClientId(res.client_id);
+      setCredClientIdInput(res.client_id);
+      setCredSecretPreview(res.client_secret_preview);
+      setCredClientSecretInput('');
+      setCredSuccess(true);
+      setTimeout(() => setCredSuccess(false), 4000);
+    } catch (err: any) {
+      setCredError(err.message || 'Erro ao salvar credenciais.');
+    } finally {
+      setCredSaving(false);
+    }
+  };
+
+  const handleProvisionCredentials = async () => {
+    setCredProvisioning(true);
+    setCredError(null);
+    setCredSuccess(false);
+    try {
+      const res = await provisionCredentials();
+      setCredConfigured(true);
+      setCredClientId(res.client_id);
+      setCredClientIdInput(res.client_id);
+      setCredClientSecretInput(res.client_secret);
+      setCredSecretPreview(res.client_secret.slice(0, 8) + '••••••••');
+      setCredSuccess(true);
+      setTimeout(() => setCredSuccess(false), 5000);
+    } catch (err: any) {
+      setCredError(err.message || 'Erro ao vincular com a WhatsApp API.');
+    } finally {
+      setCredProvisioning(false);
+    }
+  };
 
   // Polling for QR Code status check
   useEffect(() => {
@@ -386,6 +458,119 @@ export default function ConnectionsView() {
           <span>{error}</span>
         </div>
       )}
+
+      {/* ================================================================ */}
+      {/* Credenciais da WhatsApp API                                       */}
+      {/* ================================================================ */}
+      <div className="glass-card p-5 bg-white/80 border border-violet-100/40">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center">
+              <Key className="w-4.5 h-4.5 text-indigo-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-800">Credenciais da WhatsApp API</h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Insira o <strong>Client ID</strong> e <strong>Client Secret</strong> gerados pela sua instância da WhatsApp API.
+              </p>
+            </div>
+          </div>
+          {credConfigured === true && (
+            <span className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 shrink-0">
+              <CheckCircle2 className="w-3 h-3" /> Configurado
+            </span>
+          )}
+          {credConfigured === false && (
+            <span className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-600 border border-amber-200 shrink-0">
+              <AlertCircle className="w-3 h-3" /> Não configurado
+            </span>
+          )}
+        </div>
+
+        {/* Existing credential summary */}
+        {credConfigured && credClientId && (
+          <div className="mb-3 p-3 rounded-lg bg-slate-50 border border-slate-100 flex flex-wrap gap-4 text-xs">
+            <div>
+              <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Client ID</span>
+              <p className="font-mono text-slate-700 font-bold mt-0.5">{credClientId}</p>
+            </div>
+            <div>
+              <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Client Secret</span>
+              <p className="font-mono text-slate-700 font-bold mt-0.5">{credSecretPreview}</p>
+            </div>
+            {credCreatedAt && (
+              <div>
+                <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Salvo em</span>
+                <p className="text-slate-600 font-semibold mt-0.5">{new Date(credCreatedAt).toLocaleString('pt-BR')}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Input form */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Client ID (UUID)</label>
+            <input
+              type="text"
+              value={credClientIdInput}
+              onChange={(e) => setCredClientIdInput(e.target.value)}
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              className="w-full px-3 py-2 rounded-lg border border-violet-100 bg-white text-xs font-mono focus:border-purple-400 outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Client Secret</label>
+            <div className="relative">
+              <input
+                type={showSecret ? 'text' : 'password'}
+                value={credClientSecretInput}
+                onChange={(e) => setCredClientSecretInput(e.target.value)}
+                placeholder={credConfigured ? 'Digite para atualizar o secret...' : 'Cole o client_secret aqui'}
+                className="w-full px-3 py-2 pr-9 rounded-lg border border-violet-100 bg-white text-xs font-mono focus:border-purple-400 outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSecret((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                {showSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {credError && (
+          <p className="text-xs text-rose-600 font-semibold mt-2 flex items-center gap-1">
+            <AlertCircle className="w-3.5 h-3.5" /> {credError}
+          </p>
+        )}
+        {credSuccess && (
+          <p className="text-xs text-emerald-600 font-semibold mt-2 flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Credenciais salvas com sucesso!
+          </p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <button
+            onClick={handleSaveCredentials}
+            disabled={credSaving || credProvisioning}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:scale-[1.01] active:scale-[0.99] transition-all shadow-sm disabled:opacity-60 cursor-pointer"
+          >
+            {credSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            {credSaving ? 'Salvando...' : credConfigured ? 'Atualizar Credenciais' : 'Salvar Credenciais'}
+          </button>
+
+          <button
+            onClick={handleProvisionCredentials}
+            disabled={credSaving || credProvisioning}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:scale-[1.01] active:scale-[0.99] transition-all shadow-sm disabled:opacity-60 cursor-pointer"
+          >
+            {credProvisioning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+            {credProvisioning ? 'Vinculando...' : 'Vincular com Whats API'}
+          </button>
+        </div>
+      </div>
 
       {/* Grid List */}
       {loading && sessions.length === 0 ? (

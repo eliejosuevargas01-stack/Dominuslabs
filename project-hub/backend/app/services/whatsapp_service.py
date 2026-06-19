@@ -47,10 +47,10 @@ async def get_oauth_token(user: User, db: Session) -> str:
     async with httpx.AsyncClient(timeout=15.0) as client:
         logger.info(f"[WA-OAUTH] Obtendo token para user_id={user.id}...")
         resp = await client.post(
-            f"{base_url}/api/auth/token",
+            f"{base_url}/api/auth/login",
             json={
-                "client_id": str(wa_account.client_id),
-                "client_secret": wa_account.client_secret,
+                "username": str(wa_account.client_id),
+                "password": wa_account.client_secret,
             },
         )
 

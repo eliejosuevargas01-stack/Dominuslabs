@@ -44,6 +44,7 @@ async def _provision_whatsapp_client(user: User, db: Session) -> None:
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
             logger.info(f"[WA-PROVISION] Provisionando cliente para {user.email}...")
+            print(f"\n[M2M-AUTH-FLOW] >>> Enviando solicitação de provisionamento M2M para a WhatsApp API: email={user.email}", flush=True)
             resp = await client.post(
                 provision_url,
                 json={"email": user.email, "password": user.hashed_password},
@@ -56,11 +57,13 @@ async def _provision_whatsapp_client(user: User, db: Session) -> None:
                 ).first()
                 if existing:
                     logger.info(f"[WA-PROVISION] {user.email} já provisionado (banco OK).")
+                    print(f"[M2M-AUTH-FLOW] >>> Usuário {user.email} já possui credenciais provisionadas e salvas no banco.", flush=True)
                 else:
                     logger.warning(
                         f"[WA-PROVISION] {user.email} já provisionado na WhatsApp API "
                         f"mas credenciais ausentes no banco Dominus. Reprovisionar manualmente."
                     )
+                    print(f"[M2M-AUTH-FLOW] >>> ⚠️ Usuário {user.email} já provisionado na WhatsApp API, mas ausente no banco Dominus. Use a interface para reprovisionar.", flush=True)
                 return
 
             if resp.status_code not in (200, 201):
@@ -68,6 +71,7 @@ async def _provision_whatsapp_client(user: User, db: Session) -> None:
                     f"[WA-PROVISION] ❌ Falha para {user.email}: "
                     f"status={resp.status_code} body={resp.text[:300]}"
                 )
+                print(f"[M2M-AUTH-FLOW] >>> ❌ Erro no provisionamento na WhatsApp API: status={resp.status_code}", flush=True)
                 return
 
             data = resp.json()
@@ -76,7 +80,13 @@ async def _provision_whatsapp_client(user: User, db: Session) -> None:
 
             if not client_id or not client_secret:
                 logger.error(f"[WA-PROVISION] Resposta inválida da WhatsApp API: {data}")
+                print(f"[M2M-AUTH-FLOW] >>> ❌ Resposta inválida da WhatsApp API (faltando client_id ou client_secret): {data}", flush=True)
                 return
+
+            print(f"[M2M-AUTH-FLOW] >>> Cópia de client_id e client_secret recebida com sucesso da WhatsApp API!", flush=True)
+            print(f"[M2M-AUTH-FLOW] >>> client_id: {client_id}", flush=True)
+            print(f"[M2M-AUTH-FLOW] >>> client_secret: {client_secret[:8]}****************", flush=True)
+            print(f"[M2M-AUTH-FLOW] >>> Salvando novas credenciais na tabela whatsapp_accounts...", flush=True)
 
             # Salva as credenciais no banco Dominus
             wa_account = WhatsappAccount(
@@ -90,9 +100,11 @@ async def _provision_whatsapp_client(user: User, db: Session) -> None:
                 f"[WA-PROVISION] ✅ Cliente provisionado para {user.email} "
                 f"(client_id={client_id})"
             )
+            print(f"[M2M-AUTH-FLOW] ✅ Credenciais M2M salvas no banco de dados Dominus com sucesso para {user.email}!\n", flush=True)
 
     except Exception as e:
         logger.error(f"[WA-PROVISION] Erro ao provisionar {user.email}: {e}")
+        print(f"[M2M-AUTH-FLOW] >>> ❌ Erro excepcional ao provisionar {user.email}: {e}", flush=True)
 
 
 async def _maybe_provision(user: User, db: Session) -> None:
