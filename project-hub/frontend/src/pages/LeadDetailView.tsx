@@ -2,9 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, MessageSquare, Send, Check, Clipboard, Loader2, 
-  MessageCircle, AlertCircle, Trash2, Building2, Globe
+  MessageCircle, AlertCircle, Trash2, Building2, Globe, Wifi, ExternalLink
 } from 'lucide-react';
-import { API_BASE, fetchWithAuth } from '../services/api';
+import {
+  API_BASE, fetchWithAuth,
+  fetchWhatsappSessions, fetchSessionPreference, setSessionPreference
+} from '../services/api';
 
 export default function LeadDetailView() {
   const { id } = useParams<{ id: string }>();
@@ -28,6 +31,10 @@ export default function LeadDetailView() {
   const [copiedProposal, setCopiedProposal] = useState(false);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // WhatsApp sessions
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [selectedSession, setSelectedSession] = useState<string>('');
 
   const statuses = [
     'Prospectado',
@@ -77,6 +84,22 @@ export default function LeadDetailView() {
   useEffect(() => {
     fetchLeadData();
   }, [id]);
+
+  // Carrega sessões WhatsApp e preferência salva
+  useEffect(() => {
+    fetchWhatsappSessions()
+      .then((data: any) => {
+        const list = data?.sessions || (Array.isArray(data) ? data : []);
+        setSessions(list);
+      })
+      .catch(() => {});
+
+    fetchSessionPreference()
+      .then((pref: any) => {
+        if (pref?.session_id) setSelectedSession(pref.session_id);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -178,10 +201,11 @@ export default function LeadDetailView() {
     if (!whatsappMessage.trim() || !lead) return;
     setSendingMessage(true);
 
-    const payload = {
+    const payload: any = {
       lead_id: lead.id,
       phone: lead.whatsapp || '',
-      message: whatsappMessage
+      message: whatsappMessage,
+      session_id: selectedSession || undefined,
     };
 
     try {
@@ -321,24 +345,41 @@ export default function LeadDetailView() {
           </div>
         </div>
 
-        {lead.proposal && (
-          <button
-            onClick={handleSendProposal}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold transition-all cursor-pointer shadow-sm shadow-purple-200/50"
-          >
-            {copiedProposal ? (
-              <>
-                <Check className="w-3.5 h-3.5 animate-bounce" />
-                <span>Proposta Comercial Copiada!</span>
-              </>
-            ) : (
-              <>
-                <Clipboard className="w-3.5 h-3.5" />
-                <span>Copiar e Enviar Proposta Comercial</span>
-              </>
-            )}
-          </button>
-        )}
+        {/* Buttons area: Meta Ads + Proposta */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Botão Ver Anúncio Meta */}
+          {(lead.id_anuncio_meta || lead.payload?.id_anuncio_meta) && (
+            <a
+              href={`https://www.facebook.com/ads/library/?id=${lead.id_anuncio_meta || lead.payload?.id_anuncio_meta}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-all cursor-pointer shadow-sm shadow-blue-200/50"
+              title={`Abrir Anúncio #${lead.id_anuncio_meta || lead.payload?.id_anuncio_meta} na Biblioteca de Anúncios`}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Ver Anúncio Meta</span>
+            </a>
+          )}
+
+          {lead.proposal && (
+            <button
+              onClick={handleSendProposal}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold transition-all cursor-pointer shadow-sm shadow-purple-200/50"
+            >
+              {copiedProposal ? (
+                <>
+                  <Check className="w-3.5 h-3.5 animate-bounce" />
+                  <span>Proposta Comercial Copiada!</span>
+                </>
+              ) : (
+                <>
+                  <Clipboard className="w-3.5 h-3.5" />
+                  <span>Copiar e Enviar Proposta Comercial</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -517,12 +558,26 @@ export default function LeadDetailView() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">ID Anúncio Meta</label>
-                  <input
-                    type="text"
-                    value={editingLead.id_anuncio_meta || ''}
-                    onChange={(e) => setEditingLead({ ...editingLead, id_anuncio_meta: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-violet-100 bg-white text-xs font-semibold focus:border-purple-500 outline-none"
-                  />
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      value={editingLead.id_anuncio_meta || ''}
+                      onChange={(e) => setEditingLead({ ...editingLead, id_anuncio_meta: e.target.value })}
+                      className="flex-1 px-3 py-2 rounded-lg border border-violet-100 bg-white text-xs font-semibold focus:border-purple-500 outline-none"
+                      placeholder="Ex: 840868641672048"
+                    />
+                    {(editingLead.id_anuncio_meta || lead.payload?.id_anuncio_meta) && (
+                      <a
+                        href={`https://www.facebook.com/ads/library/?id=${editingLead.id_anuncio_meta || lead.payload?.id_anuncio_meta}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-shrink-0 p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 transition-all"
+                        title="Abrir na Biblioteca de Anúncios Meta"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Erros Identificados no Site</label>
@@ -644,6 +699,37 @@ export default function LeadDetailView() {
 
           {/* Message Composer Area */}
           <div className="p-4 border-t border-violet-100/30 bg-white/70">
+            {/* Session selector */}
+            <div className="flex items-center gap-2 mb-2">
+              <Wifi className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+              <select
+                value={selectedSession}
+                onChange={(e) => {
+                  setSelectedSession(e.target.value);
+                  if (e.target.value) setSessionPreference(e.target.value).catch(() => {});
+                }}
+                className="text-xs font-medium border border-violet-100 rounded-lg px-2 py-1 bg-white text-slate-700 focus:border-purple-400 outline-none flex-1 max-w-[280px] cursor-pointer"
+              >
+                <option value="">— Selecionar sessão WhatsApp —</option>
+                {sessions
+                  .filter((s) => s.snapshot?.status === 'connected')
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      ✅ {s.name} ({s.snapshot?.me?.name || s.id})
+                    </option>
+                  ))}
+                {sessions
+                  .filter((s) => s.snapshot?.status !== 'connected')
+                  .map((s) => (
+                    <option key={s.id} value={s.id} className="text-slate-400">
+                      ⚫ {s.name} ({s.snapshot?.status || 'idle'})
+                    </option>
+                  ))}
+              </select>
+              {!selectedSession && (
+                <span className="text-[10px] text-amber-500 font-medium">Nenhuma sessão selecionada</span>
+              )}
+            </div>
             <form onSubmit={handleSendWhatsapp} className="flex gap-2 items-end">
               <textarea
                 placeholder="Digite a mensagem para enviar via WhatsApp... (Pressione Enter para enviar, Shift+Enter para nova linha)"

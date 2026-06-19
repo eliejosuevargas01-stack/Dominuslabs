@@ -24,6 +24,47 @@ def get_user_token(email: str, db: Session) -> str:
         db.refresh(user)
     return user.whatsapp_token
 
+async def make_whatsapp_api_request(
+    method: str,
+    path: str,
+    headers: Optional[Dict[str, str]] = None,
+    json_data: Optional[Any] = None,
+    timeout: float = 10.0
+) -> Any:
+    url = f"{settings.WHATSAPP_API_URL}{path}"
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        try:
+            response = await client.request(
+                method,
+                url,
+                headers=headers,
+                json=json_data
+            )
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
+            )
+        
+        # Verify content-type and try to decode JSON
+        try:
+            res_data = response.json()
+        except (ValueError, TypeError):
+            # The response is not JSON (e.g. HTML proxy error)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"A API de WhatsApp retornou uma resposta inválida (status {response.status_code}). É provável que o serviço esteja offline ou instável."
+            )
+            
+        if response.status_code >= 400:
+            detail_msg = res_data.get("message") or res_data.get("detail") or "Erro na API de WhatsApp."
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=detail_msg
+            )
+            
+        return res_data
+
 @router.get("/sessions")
 async def list_sessions(
     db: Session = Depends(get_db),
@@ -33,19 +74,11 @@ async def list_sessions(
     List all sessions (WhatsApp and Instagram) belonging to the authenticated user.
     """
     token = get_user_token(current_user, db)
-    
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            response = await client.get(
-                f"{settings.WHATSAPP_API_URL}/api/sessions",
-                headers={"x-session-token": token}
-            )
-            return response.json()
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
-            )
+    return await make_whatsapp_api_request(
+        "GET",
+        "/api/sessions",
+        headers={"x-session-token": token}
+    )
 
 @router.post("/sessions")
 async def create_session(
@@ -64,24 +97,12 @@ async def create_session(
         )
         
     token = get_user_token(current_user, db)
-    
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        try:
-            response = await client.post(
-                f"{settings.WHATSAPP_API_URL}/api/sessions",
-                json={"name": name, "authToken": token}
-            )
-            if response.status_code >= 400:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=response.json().get("message", "Erro ao criar sessão.")
-                )
-            return response.json()
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
-            )
+    return await make_whatsapp_api_request(
+        "POST",
+        "/api/sessions",
+        json_data={"name": name, "authToken": token},
+        timeout=15.0
+    )
 
 @router.get("/sessions/{session_id}")
 async def get_session_status(
@@ -93,23 +114,11 @@ async def get_session_status(
     Get the details and status of a WhatsApp session.
     """
     token = get_user_token(current_user, db)
-    
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            response = await client.get(
-                f"{settings.WHATSAPP_API_URL}/api/sessions/{session_id}",
-                headers={"x-session-token": token}
-            )
-            if response.status_code == 404:
-                raise HTTPException(status_code=404, detail="Sessão não encontrada ou não pertence a você.")
-            elif response.status_code >= 400:
-                raise HTTPException(status_code=response.status_code, detail="Erro ao buscar status da sessão.")
-            return response.json()
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
-            )
+    return await make_whatsapp_api_request(
+        "GET",
+        f"/api/sessions/{session_id}",
+        headers={"x-session-token": token}
+    )
 
 @router.post("/sessions/{session_id}/connect")
 async def connect_session(
@@ -121,23 +130,12 @@ async def connect_session(
     Request connection (pairing QR Code) for a WhatsApp session.
     """
     token = get_user_token(current_user, db)
-    
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        try:
-            response = await client.post(
-                f"{settings.WHATSAPP_API_URL}/api/sessions/{session_id}/connect",
-                headers={"x-session-token": token}
-            )
-            if response.status_code == 404:
-                raise HTTPException(status_code=404, detail="Sessão não encontrada ou não pertence a você.")
-            elif response.status_code >= 400:
-                raise HTTPException(status_code=response.status_code, detail="Erro ao solicitar conexão da sessão.")
-            return response.json()
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
-            )
+    return await make_whatsapp_api_request(
+        "POST",
+        f"/api/sessions/{session_id}/connect",
+        headers={"x-session-token": token},
+        timeout=20.0
+    )
 
 @router.post("/sessions/{session_id}/disconnect")
 async def disconnect_session(
@@ -149,23 +147,12 @@ async def disconnect_session(
     Disconnect a WhatsApp session.
     """
     token = get_user_token(current_user, db)
-    
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        try:
-            response = await client.post(
-                f"{settings.WHATSAPP_API_URL}/api/sessions/{session_id}/disconnect",
-                headers={"x-session-token": token}
-            )
-            if response.status_code == 404:
-                raise HTTPException(status_code=404, detail="Sessão não encontrada ou não pertence a você.")
-            elif response.status_code >= 400:
-                raise HTTPException(status_code=response.status_code, detail="Erro ao desconectar sessão.")
-            return response.json()
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
-            )
+    return await make_whatsapp_api_request(
+        "POST",
+        f"/api/sessions/{session_id}/disconnect",
+        headers={"x-session-token": token},
+        timeout=15.0
+    )
 
 @router.delete("/sessions/{session_id}")
 async def delete_session(
@@ -177,23 +164,12 @@ async def delete_session(
     Delete a WhatsApp session.
     """
     token = get_user_token(current_user, db)
-    
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        try:
-            response = await client.delete(
-                f"{settings.WHATSAPP_API_URL}/api/sessions/{session_id}",
-                headers={"x-session-token": token}
-            )
-            if response.status_code == 404:
-                raise HTTPException(status_code=404, detail="Sessão não encontrada ou não pertence a você.")
-            elif response.status_code >= 400:
-                raise HTTPException(status_code=response.status_code, detail="Erro ao excluir sessão.")
-            return response.json()
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
-            )
+    return await make_whatsapp_api_request(
+        "DELETE",
+        f"/api/sessions/{session_id}",
+        headers={"x-session-token": token},
+        timeout=15.0
+    )
 
 @router.get("/sessions/{session_id}/settings")
 async def get_session_settings(
@@ -205,23 +181,11 @@ async def get_session_settings(
     Get the webhook and other settings of a WhatsApp session.
     """
     token = get_user_token(current_user, db)
-    
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            response = await client.get(
-                f"{settings.WHATSAPP_API_URL}/api/sessions/{session_id}/settings",
-                headers={"x-session-token": token}
-            )
-            if response.status_code == 404:
-                raise HTTPException(status_code=404, detail="Sessão não encontrada ou não pertence a você.")
-            elif response.status_code >= 400:
-                raise HTTPException(status_code=response.status_code, detail="Erro ao buscar configurações da sessão.")
-            return response.json()
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
-            )
+    return await make_whatsapp_api_request(
+        "GET",
+        f"/api/sessions/{session_id}/settings",
+        headers={"x-session-token": token}
+    )
 
 @router.put("/sessions/{session_id}/settings")
 async def update_session_settings(
@@ -234,24 +198,12 @@ async def update_session_settings(
     Update the webhook and other settings of a WhatsApp session.
     """
     token = get_user_token(current_user, db)
-    
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            response = await client.put(
-                f"{settings.WHATSAPP_API_URL}/api/sessions/{session_id}/settings",
-                headers={"x-session-token": token},
-                json=payload
-            )
-            if response.status_code == 404:
-                raise HTTPException(status_code=404, detail="Sessão não encontrada ou não pertence a você.")
-            elif response.status_code >= 400:
-                raise HTTPException(status_code=response.status_code, detail="Erro ao atualizar configurações da sessão.")
-            return response.json()
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
-            )
+    return await make_whatsapp_api_request(
+        "PUT",
+        f"/api/sessions/{session_id}/settings",
+        headers={"x-session-token": token},
+        json_data=payload
+    )
 
 # Instagram Proxy Routes
 @router.post("/instagram/login")
@@ -272,24 +224,12 @@ async def login_instagram_proxy(
         )
         
     token = get_user_token(current_user, db)
-    
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            response = await client.post(
-                f"{settings.WHATSAPP_API_URL}/api/instagram/login",
-                json={"username": username, "password": password, "authToken": token}
-            )
-            if response.status_code >= 400:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=response.json().get("message", "Falha ao autenticar Instagram.")
-                )
-            return response.json()
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
-            )
+    return await make_whatsapp_api_request(
+        "POST",
+        "/api/instagram/login",
+        json_data={"username": username, "password": password, "authToken": token},
+        timeout=30.0
+    )
 
 @router.post("/instagram/sessions/{username}/logout")
 async def logout_instagram_proxy(
@@ -301,20 +241,10 @@ async def logout_instagram_proxy(
     Log out of an Instagram account.
     """
     token = get_user_token(current_user, db)
-    
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        try:
-            response = await client.post(
-                f"{settings.WHATSAPP_API_URL}/api/instagram/sessions/{username}/logout",
-                headers={"x-session-token": token}
-            )
-            if response.status_code == 404:
-                raise HTTPException(status_code=404, detail="Sessão Instagram não encontrada ou não pertence a você.")
-            elif response.status_code >= 400:
-                raise HTTPException(status_code=response.status_code, detail="Erro ao desconectar conta Instagram.")
-            return response.json()
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
-            )
+    return await make_whatsapp_api_request(
+        "POST",
+        f"/api/instagram/sessions/{username}/logout",
+        headers={"x-session-token": token},
+        timeout=15.0
+    )
+
