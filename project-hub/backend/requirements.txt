@@ -8,3 +8,4 @@ pydantic-settings
 psycopg2-binary
 aiofiles
 httpx
+cachetools
