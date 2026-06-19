@@ -509,9 +509,21 @@ export default function CrmView() {
                           <td className="py-3.5 px-2 text-slate-500 font-semibold">{lead.origem || lead.origin}</td>
                           <td className="py-3.5 px-2">
                             <div className="flex items-center gap-1.5">
-                              {lead.telefone_contato && <MessageCircle className="w-4 h-4 text-emerald-500" title={lead.telefone_contato} />}
-                              {lead.instagram && <Sparkles className="w-4 h-4 text-pink-500" title={lead.instagram} />}
-                              {lead.email_contato && <AlertCircle className="w-4 h-4 text-blue-500" title={lead.email_contato} />}
+                              {lead.telefone_contato && (
+                                <span title={lead.telefone_contato}>
+                                  <MessageCircle className="w-4 h-4 text-emerald-500" />
+                                </span>
+                              )}
+                              {lead.instagram && (
+                                <span title={lead.instagram}>
+                                  <Sparkles className="w-4 h-4 text-pink-500" />
+                                </span>
+                              )}
+                              {lead.email_contato && (
+                                <span title={lead.email_contato}>
+                                  <AlertCircle className="w-4 h-4 text-blue-500" />
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="py-3.5 px-2">
