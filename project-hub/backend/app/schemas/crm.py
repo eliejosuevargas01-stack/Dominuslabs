@@ -52,6 +52,7 @@ class MessageSendPayload(BaseModel):
     lead_id: str
     phone: str
     message: str
+    session_id: Optional[str] = None  # sessão WhatsApp a usar; usa preferred_session_id do usuário se None
 
 class CrmDashboardMetrics(BaseModel):
     total_leads: int

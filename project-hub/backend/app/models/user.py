@@ -17,5 +17,6 @@ class User(Base):
     can_use_scrapper = Column(Boolean, default=True, nullable=False)
     
     whatsapp_token = Column(String, unique=True, nullable=True)
+    preferred_session_id = Column(String, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -1,9 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 from app.schemas.crm import Lead, LeadUpdate, Message, MessageSendPayload, CrmDashboardMetrics
 from app.services.n8n_service import n8n_service, MOCK_CONVERSATIONS
 from app.core.auth import get_current_user, check_crm_permission
 from datetime import datetime
+from sqlalchemy.orm import Session
+from app.core.database import get_db
+from app.models.user import User
+from app.services.whatsapp_service import get_oauth_token, invalidate_token
 
 router = APIRouter()
 
@@ -50,30 +55,83 @@ async def read_conversation_messages(lead_id: str, current_user: str = Depends(g
     messages = await n8n_service.get_messages(lead_id)
     return messages
 
-from sqlalchemy.orm import Session
-from app.core.database import get_db
-from app.models.user import User
+# ---------------------------------------------------------------------------
+# Preferência de sessão WhatsApp
+# ---------------------------------------------------------------------------
+
+class SessionPreferencePayload(BaseModel):
+    session_id: str
+
+@router.get("/preferences/session")
+async def get_session_preference(
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """Retorna a sessão WhatsApp preferida do usuário para envio de mensagens."""
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    return {"session_id": user.preferred_session_id}
+
+@router.put("/preferences/session")
+async def set_session_preference(
+    payload: SessionPreferencePayload,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(check_crm_permission),
+):
+    """Define a sessão WhatsApp preferida do usuário para envio de mensagens."""
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    user.preferred_session_id = payload.session_id
+    db.commit()
+    return {"session_id": user.preferred_session_id, "ok": True}
+
+# ---------------------------------------------------------------------------
+# Envio de mensagem com OAuth token
+# ---------------------------------------------------------------------------
 
 @router.post("/messages/send", response_model=Message)
 async def send_whatsapp_message(
     payload: MessageSendPayload,
     db: Session = Depends(get_db),
-    current_user: str = Depends(check_crm_permission)
+    current_user: str = Depends(check_crm_permission),
 ):
     """
-    Send an outbound WhatsApp message to the lead.
+    Envia mensagem WhatsApp para o lead.
+    - Resolve a sessão: usa payload.session_id ou preferred_session_id do usuário.
+    - Obtém token temporário via OAuth (com cache TTL).
+    - Repassa { phone, message, session_id, whatsapp_token } ao n8n.
     """
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuário não encontrado.")
+
+    # Resolve sessão: payload > preferência salva
+    session_id = payload.session_id or user.preferred_session_id
+    if not session_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Nenhuma sessão WhatsApp selecionada. Escolha uma sessão ou defina uma preferência em Conexões."
+        )
+
     try:
-        user = db.query(User).filter(User.email == current_user).first()
-        token = user.whatsapp_token if user else None
-        
+        # Fase 2: obtém token temporário (OAuth com cache)
+        whatsapp_token = await get_oauth_token(user, db)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    try:
         data = payload.model_dump()
         data["updated_by"] = current_user
-        data["whatsapp_token"] = token
-        
+        data["session_id"] = session_id
+        data["whatsapp_token"] = whatsapp_token
+
         message = await n8n_service.send_whatsapp_message(data)
         return message
     except ValueError as e:
+        # Se token inválido (401 no n8n/whatsapp), invalida cache para retentar
+        invalidate_token(user.id)
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/dashboard", response_model=CrmDashboardMetrics)

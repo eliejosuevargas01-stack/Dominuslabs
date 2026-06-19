@@ -368,3 +368,46 @@ export async function logoutInstagramProxy(username: string) {
   }
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// Preferência de sessão WhatsApp
+// ---------------------------------------------------------------------------
+
+export async function fetchSessionPreference(): Promise<{ session_id: string | null }> {
+  const res = await fetchWithAuth(`${API_BASE}/crm/preferences/session`);
+  if (!res.ok) throw new Error("Falha ao buscar preferência de sessão.");
+  return res.json();
+}
+
+export async function setSessionPreference(session_id: string): Promise<{ session_id: string; ok: boolean }> {
+  const res = await fetchWithAuth(`${API_BASE}/crm/preferences/session`, {
+    method: "PUT",
+    body: JSON.stringify({ session_id }),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao salvar preferência de sessão.");
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Envio de mensagem com sessão
+// ---------------------------------------------------------------------------
+
+export async function sendWhatsappMessage(payload: {
+  lead_id: string;
+  phone: string;
+  message: string;
+  session_id?: string;
+}) {
+  const res = await fetchWithAuth(`${API_BASE}/crm/messages/send`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao enviar mensagem.");
+  }
+  return res.json();
+}
