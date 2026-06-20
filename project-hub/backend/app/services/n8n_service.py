@@ -152,7 +152,8 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     if lead_id and lead_id.lower() != "none" and lead_id != "":
         RAW_LEADS_CACHE[lead_id] = copy.deepcopy(lead)
 
-    payload_dict = lead.get("payload") or {}
+    raw_payload = lead.get("payload")
+    payload_dict = safe_parse_json(raw_payload) if isinstance(raw_payload, str) else (raw_payload or {})
     if not isinstance(payload_dict, dict):
         payload_dict = {}
 
@@ -305,7 +306,8 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         "falha_identificada": falha_identificada,
         "segmento": segmento,
         "solucao_recomendada": solucao_recomendada,
-        "mensagem_enviada": mensagem_enviada
+        "mensagem_enviada": mensagem_enviada,
+        "payload": payload_dict
     }
 
     origem_plataforma = lead.get("origem") or lead.get("origin") or ""

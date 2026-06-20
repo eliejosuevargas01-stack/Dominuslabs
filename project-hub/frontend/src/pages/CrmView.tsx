@@ -136,9 +136,14 @@ export default function CrmView() {
       }
 
       // Payload specific filters
-      const matchesSite = temSiteProprioFilter ? String(lead.payload?.tem_site_proprio) === temSiteProprioFilter : true;
-      const matchesCta = temCtaFilter ? lead.payload?.tem_cta === temCtaFilter : true;
-      const matchesForm = temFormularioFilter ? lead.payload?.tem_formulario === temFormularioFilter : true;
+      const hasSite = lead.payload?.tem_site_proprio === true || lead.payload?.tem_site_proprio === 'true';
+      const matchesSite = temSiteProprioFilter ? (temSiteProprioFilter === 'true' ? hasSite : !hasSite) : true;
+
+      const hasCta = lead.payload?.tem_cta === 'sim' || lead.payload?.tem_cta === 'true' || lead.payload?.tem_cta === true;
+      const matchesCta = temCtaFilter ? (temCtaFilter === 'sim' ? hasCta : !hasCta) : true;
+
+      const hasForm = lead.payload?.tem_formulario === 'sim' || lead.payload?.tem_formulario === 'true' || lead.payload?.tem_formulario === true;
+      const matchesForm = temFormularioFilter ? (temFormularioFilter === 'sim' ? hasForm : !hasForm) : true;
       
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = searchTerm 
@@ -489,6 +494,9 @@ export default function CrmView() {
                       const hasWhatsApp = !!(lead.telefone_contato || lead.whatsapp) && String(lead.telefone_contato || lead.whatsapp).trim() !== '' && String(lead.telefone_contato || lead.whatsapp).toLowerCase() !== 'none' && String(lead.telefone_contato || lead.whatsapp).toLowerCase() !== 'null';
                       const hasInstagram = !!lead.instagram && String(lead.instagram).trim() !== '' && String(lead.instagram).toLowerCase() !== 'none' && String(lead.instagram).toLowerCase() !== 'null';
                       const hasEmail = !!(lead.email_contato || lead.email) && String(lead.email_contato || lead.email).trim() !== '' && String(lead.email_contato || lead.email).toLowerCase() !== 'none' && String(lead.email_contato || lead.email).toLowerCase() !== 'null';
+                      const hasSite = lead.payload?.tem_site_proprio === true || lead.payload?.tem_site_proprio === 'true';
+                      const hasCta = lead.payload?.tem_cta === 'sim' || lead.payload?.tem_cta === 'true' || lead.payload?.tem_cta === true;
+                      const hasForm = lead.payload?.tem_formulario === 'sim' || lead.payload?.tem_formulario === 'true' || lead.payload?.tem_formulario === true;
 
                       return (
                         <tr 
@@ -535,9 +543,9 @@ export default function CrmView() {
                           </td>
                           <td className="py-3.5 px-2">
                             <div className="flex gap-1">
-                              {lead.payload?.tem_site_proprio && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Tem Site" />}
-                              {lead.payload?.tem_cta === 'sim' && <span className="w-2 h-2 rounded-full bg-blue-400" title="Tem CTA" />}
-                              {lead.payload?.tem_formulario === 'sim' && <span className="w-2 h-2 rounded-full bg-purple-400" title="Tem Form" />}
+                              {hasSite && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Tem Site" />}
+                              {hasCta && <span className="w-2 h-2 rounded-full bg-blue-400" title="Tem CTA" />}
+                              {hasForm && <span className="w-2 h-2 rounded-full bg-purple-400" title="Tem Form" />}
                             </div>
                           </td>
                           <td className="py-3.5 px-2 text-slate-400 whitespace-nowrap">
