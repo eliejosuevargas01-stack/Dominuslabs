@@ -14,15 +14,35 @@ export default function CrmView() {
   const [error, setError] = useState<string | null>(null);
 
   // Filters state
-  const [statusFilter, setStatusFilter] = useState('');
-  const [origemFilter, setOrigemFilter] = useState('');
-  const [nichoFilter, setNichoFilter] = useState('');
-  const [contactMethodFilter, setContactMethodFilter] = useState('');
-  const [temSiteProprioFilter, setTemSiteProprioFilter] = useState('');
-  const [temCtaFilter, setTemCtaFilter] = useState('');
-  const [temFormularioFilter, setTemFormularioFilter] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [kpiFilter, setKpiFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem('dominus_statusFilter') || '');
+  const [origemFilter, setOrigemFilter] = useState(() => localStorage.getItem('dominus_origemFilter') || '');
+  const [nichoFilter, setNichoFilter] = useState(() => localStorage.getItem('dominus_nichoFilter') || '');
+  const [contactMethodFilter, setContactMethodFilter] = useState(() => localStorage.getItem('dominus_contactMethodFilter') || '');
+  const [temSiteProprioFilter, setTemSiteProprioFilter] = useState(() => localStorage.getItem('dominus_temSiteProprioFilter') || '');
+  const [temCtaFilter, setTemCtaFilter] = useState(() => localStorage.getItem('dominus_temCtaFilter') || '');
+  const [temFormularioFilter, setTemFormularioFilter] = useState(() => localStorage.getItem('dominus_temFormularioFilter') || '');
+  const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('dominus_searchTerm') || '');
+  const [kpiFilter, setKpiFilter] = useState<string | null>(() => localStorage.getItem('dominus_kpiFilter') || null);
+
+  useEffect(() => {
+    localStorage.setItem('dominus_statusFilter', statusFilter);
+    localStorage.setItem('dominus_origemFilter', origemFilter);
+    localStorage.setItem('dominus_nichoFilter', nichoFilter);
+    localStorage.setItem('dominus_contactMethodFilter', contactMethodFilter);
+    localStorage.setItem('dominus_temSiteProprioFilter', temSiteProprioFilter);
+    localStorage.setItem('dominus_temCtaFilter', temCtaFilter);
+    localStorage.setItem('dominus_temFormularioFilter', temFormularioFilter);
+    localStorage.setItem('dominus_searchTerm', searchTerm);
+    if (kpiFilter) {
+      localStorage.setItem('dominus_kpiFilter', kpiFilter);
+    } else {
+      localStorage.removeItem('dominus_kpiFilter');
+    }
+  }, [
+    statusFilter, origemFilter, nichoFilter, contactMethodFilter,
+    temSiteProprioFilter, temCtaFilter, temFormularioFilter,
+    searchTerm, kpiFilter
+  ]);
 
 
   // Dynamic filter lists extracted from loaded leads
