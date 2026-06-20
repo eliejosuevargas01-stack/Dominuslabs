@@ -125,11 +125,14 @@ export default function CrmView() {
       // Contact Method Logic
       let matchesContactMethod = true;
       if (contactMethodFilter === 'whatsapp') {
-        matchesContactMethod = lead.telefone_contato !== null && lead.telefone_contato !== undefined;
+        const phone = lead.telefone_contato || lead.whatsapp;
+        matchesContactMethod = !!phone && String(phone).trim() !== '' && String(phone).trim().toLowerCase() !== 'null' && String(phone).trim().toLowerCase() !== 'none';
       } else if (contactMethodFilter === 'instagram') {
-        matchesContactMethod = lead.instagram !== null && lead.instagram !== undefined;
+        const ig = lead.instagram;
+        matchesContactMethod = !!ig && String(ig).trim() !== '' && String(ig).trim().toLowerCase() !== 'null' && String(ig).trim().toLowerCase() !== 'none';
       } else if (contactMethodFilter === 'email') {
-        matchesContactMethod = lead.email_contato !== null && lead.email_contato !== undefined;
+        const mail = lead.email_contato || lead.email;
+        matchesContactMethod = !!mail && String(mail).trim() !== '' && String(mail).trim().toLowerCase() !== 'null' && String(mail).trim().toLowerCase() !== 'none';
       }
 
       // Payload specific filters
@@ -483,6 +486,10 @@ export default function CrmView() {
                   </thead>
                   <tbody className="divide-y divide-violet-100/30 text-xs font-medium text-slate-600">
                     {paginatedLeads.map((lead) => {
+                      const hasWhatsApp = !!(lead.telefone_contato || lead.whatsapp) && String(lead.telefone_contato || lead.whatsapp).trim() !== '' && String(lead.telefone_contato || lead.whatsapp).toLowerCase() !== 'none' && String(lead.telefone_contato || lead.whatsapp).toLowerCase() !== 'null';
+                      const hasInstagram = !!lead.instagram && String(lead.instagram).trim() !== '' && String(lead.instagram).toLowerCase() !== 'none' && String(lead.instagram).toLowerCase() !== 'null';
+                      const hasEmail = !!(lead.email_contato || lead.email) && String(lead.email_contato || lead.email).trim() !== '' && String(lead.email_contato || lead.email).toLowerCase() !== 'none' && String(lead.email_contato || lead.email).toLowerCase() !== 'null';
+
                       return (
                         <tr 
                           key={lead.id} 
@@ -509,18 +516,18 @@ export default function CrmView() {
                           <td className="py-3.5 px-2 text-slate-500 font-semibold">{lead.origem || lead.origin}</td>
                           <td className="py-3.5 px-2">
                             <div className="flex items-center gap-1.5">
-                              {lead.telefone_contato && (
-                                <span title={lead.telefone_contato}>
+                              {hasWhatsApp && (
+                                <span title={lead.telefone_contato || lead.whatsapp}>
                                   <MessageCircle className="w-4 h-4 text-emerald-500" />
                                 </span>
                               )}
-                              {lead.instagram && (
+                              {hasInstagram && (
                                 <span title={lead.instagram}>
                                   <Sparkles className="w-4 h-4 text-pink-500" />
                                 </span>
                               )}
-                              {lead.email_contato && (
-                                <span title={lead.email_contato}>
+                              {hasEmail && (
+                                <span title={lead.email_contato || lead.email}>
                                   <AlertCircle className="w-4 h-4 text-blue-500" />
                                 </span>
                               )}
