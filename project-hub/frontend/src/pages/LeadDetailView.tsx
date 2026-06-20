@@ -9,6 +9,25 @@ import {
   fetchWhatsappSessions, fetchSessionPreference, setSessionPreference
 } from '../services/api';
 
+const InstagramIcon = ({ size = 16, ...props }: React.SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+  </svg>
+);
+
 export default function LeadDetailView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -426,12 +445,33 @@ export default function LeadDetailView() {
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Instagram</label>
-                <input
-                  type="text"
-                  value={editingLead.instagram || ''}
-                  onChange={(e) => setEditingLead({ ...editingLead, instagram: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-violet-100 bg-white text-xs font-semibold focus:border-purple-500 outline-none"
-                />
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={editingLead.instagram || ''}
+                    onChange={(e) => setEditingLead({ ...editingLead, instagram: e.target.value })}
+                    className="flex-1 px-3 py-2 rounded-lg border border-violet-100 bg-white text-xs font-semibold focus:border-purple-500 outline-none"
+                  />
+                  {editingLead.instagram && (() => {
+                    let username = editingLead.instagram.trim();
+                    if (username.startsWith('@')) username = username.substring(1);
+                    if (username.includes('instagram.com/')) {
+                      const parts = username.split('instagram.com/');
+                      username = parts[parts.length - 1].split('/')[0].split('?')[0];
+                    }
+                    return (
+                      <a
+                        href={`https://ig.me/m/${username}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-shrink-0 p-2 rounded-lg bg-pink-50 hover:bg-pink-100 text-pink-600 border border-pink-200 transition-all cursor-pointer"
+                        title="Abrir Chat do Instagram"
+                      >
+                        <InstagramIcon className="w-3.5 h-3.5" />
+                      </a>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
 
