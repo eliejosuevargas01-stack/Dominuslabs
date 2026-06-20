@@ -1196,13 +1196,6 @@ class N8NService:
                         resp_text = response.text
                         if any(kw in resp_text.lower() for kw in ["401", "unauthorized", "invalid_token", "token verification failed", "missing token"]):
                             is_auth_error = True
-                        else:
-                            resp_json = response.json()
-                            first_elem = resp_json[0] if isinstance(resp_json, list) and len(resp_json) > 0 else resp_json
-                            if isinstance(first_elem, dict) and "error" in first_elem:
-                                err_obj = first_elem["error"]
-                                if isinstance(err_obj, dict) and err_obj.get("status") == 400 and err_obj.get("code") == "ERR_BAD_REQUEST":
-                                    is_auth_error = True
                 except Exception:
                     pass
 
