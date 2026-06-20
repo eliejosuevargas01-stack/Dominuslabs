@@ -4,7 +4,7 @@ import json
 import copy
 import re
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from app.core.config import settings
 from datetime import datetime
 
@@ -1059,6 +1059,41 @@ class N8NService:
                 return all_msgs
 
     @staticmethod
+    def _extract_n8n_error_message(resp_data) -> Optional[str]:
+        import json
+        try:
+            if isinstance(resp_data, list) and len(resp_data) > 0:
+                item = resp_data[0]
+            else:
+                item = resp_data
+
+            if isinstance(item, dict) and "error" in item:
+                err_obj = item["error"]
+                if isinstance(err_obj, dict):
+                    inner_msg = err_obj.get("message") or err_obj.get("detail") or ""
+                    if isinstance(inner_msg, str):
+                        if " - " in inner_msg:
+                            parts = inner_msg.split(" - ", 1)
+                            potential_json = parts[1].strip()
+                            try:
+                                decoded_str = json.loads(potential_json)
+                                if isinstance(decoded_str, str):
+                                    decoded_data = json.loads(decoded_str)
+                                else:
+                                    decoded_data = decoded_str
+                                    
+                                if isinstance(decoded_data, dict):
+                                    return decoded_data.get("message") or decoded_data.get("error") or inner_msg
+                            except Exception:
+                                pass
+                        return inner_msg
+            if isinstance(resp_data, dict):
+                return resp_data.get("message") or resp_data.get("error") or str(resp_data)
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
     async def send_whatsapp_message(payload: dict) -> dict:
         url = settings.CRM_SEND_WHATSAPP_WEBHOOK_URL
         lead_id = payload.get("lead_id")
@@ -1180,7 +1215,10 @@ class N8NService:
                     error_msg = f"HTTP {response.status_code}"
                     try:
                         resp_data = response.json()
-                        if isinstance(resp_data, dict):
+                        extracted_msg = N8NService._extract_n8n_error_message(resp_data)
+                        if extracted_msg:
+                            error_msg = extracted_msg
+                        elif isinstance(resp_data, dict):
                             error_msg = resp_data.get("message") or resp_data.get("error") or response.text
                     except Exception:
                         error_msg = response.text or error_msg
