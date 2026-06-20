@@ -8,7 +8,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.user import User
-from app.services.whatsapp_service import get_oauth_token, invalidate_token
+from app.services.whatsapp_service import get_oauth_token, invalidate_token, check_token_validity
 
 router = APIRouter()
 
@@ -118,6 +118,12 @@ async def send_whatsapp_message(
     try:
         # Fase 2: obtém token temporário (OAuth com cache)
         whatsapp_token = await get_oauth_token(user, db)
+        
+        # Verifica se o token é válido antes de enviar para o n8n
+        if not await check_token_validity(whatsapp_token):
+            print(f"[M2M-AUTH-FLOW] >>> Token retornado do cache/db é inválido. Forçando novo OAuth antes do envio para o n8n...", flush=True)
+            invalidate_token(user.id)
+            whatsapp_token = await get_oauth_token(user, db)
     except ValueError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
