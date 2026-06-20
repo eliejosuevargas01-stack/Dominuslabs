@@ -23,9 +23,9 @@ async def get_user_token(email: str, db: Session) -> str:
         # Usa o fluxo M2M OAuth com cache para obter o token JWT
         return await get_oauth_token(user, db)
     except ValueError as e:
-        # Se não há credenciais M2M vinculadas ainda, retorna 401 para o frontend configurar
+        # Se não há credenciais M2M vinculadas ainda, retorna 412 para o frontend não deslogar
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
             detail=f"WhatsApp não vinculado. {str(e)}"
         )
 

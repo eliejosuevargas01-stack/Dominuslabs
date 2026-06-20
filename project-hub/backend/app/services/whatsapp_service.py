@@ -20,6 +20,30 @@ logger = logging.getLogger("whatsapp")
 _token_cache: TTLCache = TTLCache(maxsize=256, ttl=600)  # 10 min
 
 
+async def check_token_validity(token: str) -> bool:
+    """
+    Verifica se o token M2M é válido chamando a WhatsApp API.
+    Retorna True se for válido (status 2xx ou 404), False caso contrário.
+    """
+    if not token:
+        return False
+    base_url = settings.WHATSAPP_API_URL.rstrip("/")
+    url = f"{base_url}/api/sessions"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url, headers={"x-session-token": token})
+            # Se retornar 200, 201, 204 ou até 404 (usuário sem credenciais mas token decodificado com sucesso)
+            # O importante é não retornar 401 Unauthorized ou 403 Forbidden.
+            if resp.status_code in (200, 201, 204, 404):
+                logger.info("[WA-OAUTH] Validação do token de sessão: VÁLIDO")
+                return True
+            logger.warning(f"[WA-OAUTH] Validação do token de sessão falhou com status {resp.status_code}")
+            return False
+    except Exception as e:
+        logger.error(f"[WA-OAUTH] Falha de conexão ao verificar token: {e}")
+        return False
+
+
 async def get_oauth_token(user: User, db: Session) -> str:
     """
     Retorna o token temporário da WhatsApp API para o usuário.
@@ -28,8 +52,14 @@ async def get_oauth_token(user: User, db: Session) -> str:
     """
     cached = _token_cache.get(user.id)
     if cached:
-        logger.debug(f"[WA-OAUTH] Token em cache para user_id={user.id}")
-        return cached
+        logger.debug(f"[WA-OAUTH] Verificando token em cache para user_id={user.id}...")
+        if await check_token_validity(cached):
+            logger.debug(f"[WA-OAUTH] Token em cache é válido para user_id={user.id}")
+            return cached
+        else:
+            logger.warning(f"[WA-OAUTH] Token em cache é inválido/expirou para user_id={user.id}. Forçando renovação.")
+            invalidate_token(user.id)
+
 
     # Busca credenciais no banco
     wa_account = db.query(WhatsappAccount).filter(
