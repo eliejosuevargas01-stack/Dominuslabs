@@ -49,10 +49,12 @@ def test_crm_endpoints(client):
     send_payload = {
         "lead_id": lead_id,
         "phone": "+5511999999991",
-        "message": "Olá, esta é uma mensagem de teste!"
+        "message": "Olá, esta é uma mensagem de teste!",
+        "session_id": "test_session"
     }
     from unittest.mock import patch
-    with patch("httpx.AsyncClient.post") as mock_post:
+    with patch("httpx.AsyncClient.post") as mock_post, \
+         patch("app.api.endpoints.crm.get_oauth_token", return_value="mock_token") as mock_get_token:
         class MockResponse:
             status_code = 200
             def json(self):
@@ -76,7 +78,8 @@ def test_crm_endpoints(client):
         assert sent_json["alterado_por"] == expected_email
 
     # Test send whatsapp message (Failure propagation)
-    with patch("httpx.AsyncClient.post") as mock_post:
+    with patch("httpx.AsyncClient.post") as mock_post, \
+         patch("app.api.endpoints.crm.get_oauth_token", return_value="mock_token") as mock_get_token:
         class MockFailedResponse:
             status_code = 400
             def json(self):

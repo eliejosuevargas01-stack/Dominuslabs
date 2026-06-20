@@ -1138,6 +1138,11 @@ class N8NService:
             outgoing_payload["alterado_por"] = payload["updated_by"]
         if payload.get("whatsapp_token"):
             outgoing_payload["whatsapp_token"] = payload["whatsapp_token"]
+        if payload.get("session_id"):
+            outgoing_payload["session_id"] = payload["session_id"]
+            base_url = settings.WHATSAPP_API_URL.rstrip("/")
+            outgoing_payload["whatsapp_api_url"] = settings.WHATSAPP_API_URL
+            outgoing_payload["whatsapp_send_url"] = f"{base_url}/api/sessions/{payload['session_id']}/messages/send"
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
