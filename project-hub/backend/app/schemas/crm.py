@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import datetime
 
 class LeadBase(BaseModel):
@@ -18,10 +18,10 @@ class LeadBase(BaseModel):
     segmento: Optional[str] = ""       # Mantido para compatibilidade
     localizacao: Optional[str] = None
     data_coleta: Optional[str] = None
-    score: Optional[str] = None
-    temperatura: Optional[str] = None
+    score: Optional[Union[str, int, float]] = None
+    temperatura: Optional[Union[str, int, float]] = None
     proposta_inicial: Optional[str] = None
-    lid: Optional[str] = None
+    lid: Optional[Union[str, int]] = None
     payload: Optional[dict] = None
     notes: Optional[str] = None
     proposal: Optional[str] = None
