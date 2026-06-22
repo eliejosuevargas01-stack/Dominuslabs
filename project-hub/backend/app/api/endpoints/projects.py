@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from app.core.database import get_db
 from app.schemas.project import Project, ProjectCreate, ProjectUpdate
@@ -129,6 +129,12 @@ class ShowcaseProject(BaseModel):
     name: str
     project_type: str
     status: str
+    description: Optional[str] = None
+    assets: List[ProjectAsset] = []
+    deploy_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 class Testimonial(BaseModel):
     client_name: str
@@ -177,10 +183,15 @@ def get_public_showcase(db: Session = Depends(get_db)):
     
     projects_list = []
     for p in all_projects:
+        # Filter assets to include only images and videos for safety/portfolio relevance
+        filtered_assets = [a for a in p.assets if a.file_type in ("images", "videos")]
         projects_list.append({
             "name": p.name,
             "project_type": p.project_type,
-            "status": p.status.value
+            "status": p.status.value,
+            "description": p.description,
+            "assets": filtered_assets,
+            "deploy_url": p.deploy_url
         })
         
     from app.models.feedback import Feedback

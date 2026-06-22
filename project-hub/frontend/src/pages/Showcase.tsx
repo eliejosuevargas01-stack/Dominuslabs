@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchShowcaseData } from '../services/api';
+import { fetchShowcaseData, API_BASE } from '../services/api';
 import Footer from '../components/Footer';
 import { 
   FolderCheck, 
@@ -10,7 +10,14 @@ import {
   Loader2, 
   ArrowRight,
   TrendingUp,
-  Award
+  Award,
+  Play,
+  Video,
+  Maximize2,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  ExternalLink
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -19,6 +26,10 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'completed' | 'ongoing'>('completed');
+  
+  // Modal states for full case view
+  const [selectedProject, setSelectedProject] = useState<any | null>(null);
+  const [currentMediaIndex, setCurrentMediaIndex] = useState<number>(0);
 
   useEffect(() => {
     const loadShowcase = async () => {
@@ -36,6 +47,21 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
     };
     loadShowcase();
   }, []);
+
+  // Keyboard navigation for Escape to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedProject(null);
+      }
+    };
+    if (selectedProject) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedProject]);
 
   if (loading) {
     return (
@@ -73,6 +99,24 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
   const ongoingProjects = data.projects.filter(
     (p) => p.status === 'NEW' || p.status === 'IN_PROGRESS' || p.status === 'REVIEW'
   );
+
+  // Find matching client testimonial
+  const projectTestimonial = selectedProject
+    ? data.testimonials.find((t) => t.project_name === selectedProject.name)
+    : null;
+
+  // Carrousel navigations
+  const nextMedia = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!selectedProject?.assets) return;
+    setCurrentMediaIndex((prev) => (prev + 1) % selectedProject.assets.length);
+  };
+
+  const prevMedia = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!selectedProject?.assets) return;
+    setCurrentMediaIndex((prev) => (prev - 1 + selectedProject.assets.length) % selectedProject.assets.length);
+  };
 
   return (
     <div className={isDashboard ? "relative z-10 w-full" : "min-h-screen bg-slate-50/50 relative overflow-hidden flex flex-col justify-between"}>
@@ -156,28 +200,106 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {completedProjects.map((proj, idx) => (
-                  <div key={idx} className="glass-card p-6 flex flex-col justify-between group hover:border-violet-300 hover:shadow-lg transition-all relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/5 rounded-bl-full -z-10 group-hover:scale-110 transition-transform"></div>
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-start gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200/30 uppercase tracking-wider">
+                {completedProjects.map((proj, idx) => {
+                  const media = proj.assets || [];
+                  const imageAssets = media.filter((a: any) => a.file_type === 'images');
+                  const videoAssets = media.filter((a: any) => a.file_type === 'videos');
+                  const firstImage = imageAssets[0];
+                  const firstVideo = videoAssets[0];
+                  
+                  const hasMedia = media.length > 0;
+                  const coverUrl = firstImage 
+                    ? `${API_BASE}/${firstImage.file_path}` 
+                    : firstVideo 
+                      ? `${API_BASE}/${firstVideo.file_path}` 
+                      : null;
+                  const isVideo = !firstImage && firstVideo;
+
+                  return (
+                    <div key={idx} className="glass-card flex flex-col justify-between group hover:border-violet-300 hover:shadow-lg transition-all relative overflow-hidden h-[450px]">
+                      {/* Media Header Preview */}
+                      <div className="h-48 w-full relative overflow-hidden bg-slate-900 shrink-0">
+                        {hasMedia ? (
+                          isVideo ? (
+                            <div className="w-full h-full relative">
+                              <video src={coverUrl || undefined} muted className="w-full h-full object-cover opacity-85" />
+                              <div className="absolute inset-0 bg-slate-950/40 flex items-center justify-center group-hover:bg-slate-950/20 transition-all">
+                                <Play className="w-9 h-9 text-white fill-white/80 drop-shadow-md" />
+                              </div>
+                              <span className="absolute top-3 left-3 text-[9px] font-bold px-2 py-0.5 rounded bg-violet-600 text-white flex items-center gap-1 uppercase tracking-wide">
+                                <Video className="w-3 h-3" /> Vídeo
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="w-full h-full relative">
+                              <img src={coverUrl || undefined} alt={proj.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                              <div className="absolute inset-0 bg-slate-950/10 group-hover:bg-transparent transition-all"></div>
+                              {media.length > 1 && (
+                                <span className="absolute bottom-3 right-3 text-[9px] font-bold px-2.5 py-0.5 rounded bg-slate-950/60 backdrop-blur text-white uppercase tracking-wider">
+                                  +{media.length - 1} Arquivos
+                                </span>
+                              )}
+                            </div>
+                          )
+                        ) : (
+                          // Premium default gradient preview if no assets
+                          <div className="w-full h-full bg-gradient-to-br from-violet-600/15 via-indigo-600/10 to-emerald-500/10 flex items-center justify-center relative">
+                            <div className="absolute -top-10 -left-10 w-24 h-24 bg-violet-500/10 rounded-full blur-xl"></div>
+                            <div className="absolute -bottom-10 -right-10 w-24 h-24 bg-emerald-500/15 rounded-full blur-xl"></div>
+                            <FolderCheck className="w-12 h-12 text-violet-500/30" />
+                          </div>
+                        )}
+                        {/* Status Badge */}
+                        <span className="absolute top-3 right-3 text-[9px] font-extrabold px-2.5 py-0.5 rounded bg-emerald-500 text-white uppercase tracking-wider">
                           Pronto
                         </span>
-                        <span className="text-xs font-semibold text-slate-400">
-                          {proj.project_type}
-                        </span>
                       </div>
-                      <h3 className="text-lg font-bold text-slate-800 tracking-tight group-hover:text-violet-700 transition-colors">
-                        {proj.name}
-                      </h3>
+
+                      {/* Card Body */}
+                      <div className="p-5 flex-1 flex flex-col justify-between">
+                        <div className="space-y-2">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                            {proj.project_type}
+                          </span>
+                          <h3 className="text-base sm:text-lg font-bold text-slate-800 tracking-tight line-clamp-1 group-hover:text-violet-700 transition-colors">
+                            {proj.name}
+                          </h3>
+                          <p className="text-slate-500 text-xs leading-relaxed line-clamp-3 font-medium">
+                            {proj.description || 'Projeto concluído com sucesso e entregue de acordo com os requisitos do cliente.'}
+                          </p>
+                        </div>
+
+                        <div className="space-y-3 mt-4">
+                          <div className="pt-3 border-t border-slate-100/50 flex items-center justify-between text-xs text-slate-400 font-semibold">
+                            <span>Dominuslabs Case</span>
+                            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => { setSelectedProject(proj); setCurrentMediaIndex(0); }}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl border border-violet-100 text-violet-700 bg-violet-50/50 hover:bg-violet-600 hover:text-white hover:border-violet-600 transition-all font-bold text-xs cursor-pointer shadow-sm"
+                            >
+                              <span>Ver Case Completo</span>
+                              <Maximize2 className="w-3.5 h-3.5" />
+                            </button>
+                            {proj.deploy_url && (
+                              <a 
+                                href={proj.deploy_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-1 py-2.5 px-3 rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all font-bold text-xs cursor-pointer shadow-sm shrink-0"
+                                title="Acessar Sistema Online"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="pt-4 border-t border-slate-100/50 mt-6 flex items-center justify-between text-xs text-slate-400 font-semibold">
-                      <span>Dominuslabs Case</span>
-                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )
           ) : (
@@ -188,28 +310,106 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {ongoingProjects.map((proj, idx) => (
-                  <div key={idx} className="glass-card p-6 flex flex-col justify-between group hover:border-violet-300 hover:shadow-lg transition-all relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-20 h-20 bg-violet-500/5 rounded-bl-full -z-10 group-hover:scale-110 transition-transform"></div>
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-start gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-100 text-violet-800 border border-violet-200/30 uppercase tracking-wider">
+                {ongoingProjects.map((proj, idx) => {
+                  const media = proj.assets || [];
+                  const imageAssets = media.filter((a: any) => a.file_type === 'images');
+                  const videoAssets = media.filter((a: any) => a.file_type === 'videos');
+                  const firstImage = imageAssets[0];
+                  const firstVideo = videoAssets[0];
+                  
+                  const hasMedia = media.length > 0;
+                  const coverUrl = firstImage 
+                    ? `${API_BASE}/${firstImage.file_path}` 
+                    : firstVideo 
+                      ? `${API_BASE}/${firstVideo.file_path}` 
+                      : null;
+                  const isVideo = !firstImage && firstVideo;
+
+                  return (
+                    <div key={idx} className="glass-card flex flex-col justify-between group hover:border-violet-300 hover:shadow-lg transition-all relative overflow-hidden h-[450px]">
+                      {/* Media Header Preview */}
+                      <div className="h-48 w-full relative overflow-hidden bg-slate-900 shrink-0">
+                        {hasMedia ? (
+                          isVideo ? (
+                            <div className="w-full h-full relative">
+                              <video src={coverUrl || undefined} muted className="w-full h-full object-cover opacity-85" />
+                              <div className="absolute inset-0 bg-slate-950/40 flex items-center justify-center group-hover:bg-slate-950/20 transition-all">
+                                <Play className="w-9 h-9 text-white fill-white/80 drop-shadow-md" />
+                              </div>
+                              <span className="absolute top-3 left-3 text-[9px] font-bold px-2 py-0.5 rounded bg-violet-600 text-white flex items-center gap-1 uppercase tracking-wide">
+                                <Video className="w-3 h-3" /> Vídeo
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="w-full h-full relative">
+                              <img src={coverUrl || undefined} alt={proj.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                              <div className="absolute inset-0 bg-slate-950/10 group-hover:bg-transparent transition-all"></div>
+                              {media.length > 1 && (
+                                <span className="absolute bottom-3 right-3 text-[9px] font-bold px-2.5 py-0.5 rounded bg-slate-950/60 backdrop-blur text-white uppercase tracking-wider">
+                                  +{media.length - 1} Arquivos
+                                </span>
+                              )}
+                            </div>
+                          )
+                        ) : (
+                          // Premium default gradient preview if no assets
+                          <div className="w-full h-full bg-gradient-to-br from-violet-600/15 via-indigo-600/10 to-emerald-500/10 flex items-center justify-center relative">
+                            <div className="absolute -top-10 -left-10 w-24 h-24 bg-violet-500/10 rounded-full blur-xl"></div>
+                            <div className="absolute -bottom-10 -right-10 w-24 h-24 bg-emerald-500/15 rounded-full blur-xl"></div>
+                            <FolderCheck className="w-12 h-12 text-violet-500/30" />
+                          </div>
+                        )}
+                        {/* Status Badge */}
+                        <span className="absolute top-3 right-3 text-[9px] font-extrabold px-2.5 py-0.5 rounded bg-violet-500 text-white uppercase tracking-wider">
                           Em Progresso
                         </span>
-                        <span className="text-xs font-semibold text-slate-400">
-                          {proj.project_type}
-                        </span>
                       </div>
-                      <h3 className="text-lg font-bold text-slate-800 tracking-tight group-hover:text-violet-700 transition-colors">
-                        {proj.name}
-                      </h3>
+
+                      {/* Card Body */}
+                      <div className="p-5 flex-1 flex flex-col justify-between">
+                        <div className="space-y-2">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                            {proj.project_type}
+                          </span>
+                          <h3 className="text-base sm:text-lg font-bold text-slate-800 tracking-tight line-clamp-1 group-hover:text-violet-700 transition-colors">
+                            {proj.name}
+                          </h3>
+                          <p className="text-slate-500 text-xs leading-relaxed line-clamp-3 font-medium">
+                            {proj.description || 'Desenvolvimento ativo. Siga os detalhes e deploys de homologação em tempo real.'}
+                          </p>
+                        </div>
+
+                        <div className="space-y-3 mt-4">
+                          <div className="pt-3 border-t border-slate-100/50 flex items-center justify-between text-xs text-slate-400 font-semibold">
+                            <span>Desenvolvimento Ativo</span>
+                            <TrendingUp className="w-3.5 h-3.5 text-violet-500" />
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => { setSelectedProject(proj); setCurrentMediaIndex(0); }}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl border border-violet-100 text-violet-700 bg-violet-50/50 hover:bg-violet-600 hover:text-white hover:border-violet-600 transition-all font-bold text-xs cursor-pointer shadow-sm"
+                            >
+                              <span>Ver Detalhes do Projeto</span>
+                              <Maximize2 className="w-3.5 h-3.5" />
+                            </button>
+                            {proj.deploy_url && (
+                              <a 
+                                href={proj.deploy_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-1 py-2.5 px-3 rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all font-bold text-xs cursor-pointer shadow-sm shrink-0"
+                                title="Acessar Sistema Online"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="pt-4 border-t border-slate-100/50 mt-6 flex items-center justify-between text-xs text-slate-400 font-semibold">
-                      <span>Desenvolvimento Ativo</span>
-                      <TrendingUp className="w-3.5 h-3.5 text-violet-500" />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )
           )}
@@ -298,6 +498,200 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
         )}
 
       </div>
+
+      {/* Detailed Case Modal */}
+      {selectedProject && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-[fade-in_0.2s_ease-out]"
+          onClick={() => setSelectedProject(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl border border-slate-100 flex flex-col md:flex-row max-h-[90vh] md:max-h-[80vh] animate-[scale-up_0.25s_cubic-bezier(0.34,1.56,0.64,1)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Left Media Carrousel */}
+            <div className="w-full md:w-1/2 bg-slate-950 flex flex-col justify-between relative overflow-hidden h-[300px] md:h-auto min-h-[300px]">
+              {selectedProject.assets && selectedProject.assets.length > 0 ? (
+                <>
+                  {/* Media Content */}
+                  <div className="flex-1 flex items-center justify-center relative group/media w-full h-full">
+                    {selectedProject.assets[currentMediaIndex].file_type === 'videos' ? (
+                      <video 
+                        key={selectedProject.assets[currentMediaIndex].id}
+                        src={`${API_BASE}/${selectedProject.assets[currentMediaIndex].file_path}`} 
+                        controls 
+                        autoPlay
+                        className="w-full h-full object-contain" 
+                      />
+                    ) : (
+                      <div className="w-full h-full relative">
+                        {/* Blurred background image for elegant preview aspect ratio */}
+                        <div 
+                          className="absolute inset-0 bg-cover bg-center blur-2xl opacity-30 scale-110"
+                          style={{ backgroundImage: `url(${API_BASE}/${selectedProject.assets[currentMediaIndex].file_path})` }}
+                        ></div>
+                        <img 
+                          src={`${API_BASE}/${selectedProject.assets[currentMediaIndex].file_path}`} 
+                          alt={selectedProject.name} 
+                          className="w-full h-full object-contain relative z-10" 
+                        />
+                      </div>
+                    )}
+
+                    {/* Chevron Controls (only if more than 1 asset) */}
+                    {selectedProject.assets.length > 1 && (
+                      <>
+                        <button 
+                          onClick={prevMedia}
+                          className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 hover:bg-black/80 text-white z-20 cursor-pointer transition-all hover:scale-105 border border-white/10"
+                        >
+                          <ChevronLeft className="w-5 h-5" />
+                        </button>
+                        <button 
+                          onClick={nextMedia}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 hover:bg-black/80 text-white z-20 cursor-pointer transition-all hover:scale-105 border border-white/10"
+                        >
+                          <ChevronRight className="w-5 h-5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Carrousel Footer Indicators */}
+                  {selectedProject.assets.length > 1 && (
+                    <div className="absolute bottom-4 inset-x-0 flex flex-col items-center gap-1.5 z-20">
+                      <div className="flex gap-1.5">
+                        {selectedProject.assets.map((_: any, idx: number) => (
+                          <button
+                            key={idx}
+                            onClick={() => setCurrentMediaIndex(idx)}
+                            className={`w-2 h-2 rounded-full transition-all cursor-pointer ${
+                              idx === currentMediaIndex ? 'bg-white w-4' : 'bg-white/40 hover:bg-white/60'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-[10px] font-bold text-white/70 bg-black/45 backdrop-blur px-2.5 py-0.5 rounded-full">
+                        {currentMediaIndex + 1} de {selectedProject.assets.length}
+                      </span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                // Gradient placeholder if no assets
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4 bg-gradient-to-br from-slate-900 to-slate-950 w-full h-full relative">
+                  <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
+                  <FolderCheck className="w-16 h-16 text-violet-500/35" />
+                  <p className="text-xs text-slate-500 italic">Nenhuma mídia anexada a este projeto.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Right Information Panel */}
+            <div className="w-full md:w-1/2 p-6 sm:p-8 flex flex-col justify-between overflow-y-auto max-h-[50vh] md:max-h-full">
+              <div>
+                {/* Header Row */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200/50 uppercase tracking-wider inline-block">
+                      {selectedProject.project_type}
+                    </span>
+                    <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-1.5">
+                      {selectedProject.name}
+                    </h3>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedProject(null)}
+                    className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Case Story / Scope */}
+                <div className="mt-6 space-y-3">
+                  <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Sobre o Case</h4>
+                  <p className="text-sm text-slate-600 leading-relaxed break-words font-medium whitespace-pre-line">
+                    {selectedProject.description || 'Descrição detalhada do projeto não fornecida.'}
+                  </p>
+                </div>
+
+                {/* Testimonial inside modal */}
+                {projectTestimonial && (
+                  <div className="mt-6 p-4 bg-amber-50/70 border border-amber-100/50 rounded-2xl space-y-3 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/5 rounded-bl-full -z-10"></div>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star 
+                          key={star} 
+                          className={`w-3.5 h-3.5 ${star <= projectTestimonial.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} 
+                        />
+                      ))}
+                    </div>
+                    <blockquote className="text-xs text-slate-600 font-semibold italic leading-relaxed break-words">
+                      "{projectTestimonial.comment}"
+                    </blockquote>
+                    <div className="flex items-center gap-2.5 pt-1.5 border-t border-amber-100/40">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center font-bold text-xs uppercase">
+                        {projectTestimonial.client_name.charAt(0)}
+                      </div>
+                      <div>
+                        <h5 className="text-xs font-bold text-slate-800 leading-tight">{projectTestimonial.client_name}</h5>
+                        <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Avaliação do Cliente</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer specs / call to action */}
+              <div className="mt-8 pt-5 border-t border-slate-100 flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-4 text-xs font-semibold text-slate-400">
+                  <div>
+                    <span className="block text-[9px] font-bold text-slate-300 uppercase tracking-wider">Status</span>
+                    <span className={`inline-flex items-center gap-1.5 mt-0.5 ${
+                      selectedProject.status === 'DELIVERED' || selectedProject.status === 'DEPLOYED' 
+                        ? 'text-emerald-600 font-bold' 
+                        : 'text-violet-600 font-bold'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        selectedProject.status === 'DELIVERED' || selectedProject.status === 'DEPLOYED'
+                          ? 'bg-emerald-500'
+                          : 'bg-violet-500'
+                      }`} />
+                      {selectedProject.status === 'DELIVERED' || selectedProject.status === 'DEPLOYED' ? 'Concluído' : 'Em Desenvolvimento'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2.5">
+                  {selectedProject.deploy_url && (
+                    <a
+                      href={selectedProject.deploy_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Ver Sistema Online</span>
+                    </a>
+                  )}
+                  <a
+                    href="https://wa.me/5500000000000"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                  >
+                    <span>Solicitar Projeto Similar</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       {!isDashboard && <Footer onTabSelect={setActiveTab} />}
