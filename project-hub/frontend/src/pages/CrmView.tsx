@@ -19,8 +19,9 @@ export default function CrmView() {
   const [nichoFilter, setNichoFilter] = useState(() => localStorage.getItem('dominus_nichoFilter') || '');
   const [contactMethodFilter, setContactMethodFilter] = useState(() => localStorage.getItem('dominus_contactMethodFilter') || '');
   const [temSiteProprioFilter, setTemSiteProprioFilter] = useState(() => localStorage.getItem('dominus_temSiteProprioFilter') || '');
-  const [temCtaFilter, setTemCtaFilter] = useState(() => localStorage.getItem('dominus_temCtaFilter') || '');
-  const [temFormularioFilter, setTemFormularioFilter] = useState(() => localStorage.getItem('dominus_temFormularioFilter') || '');
+  const [siteModernoFilter, setSiteModernoFilter] = useState(() => localStorage.getItem('dominus_siteModernoFilter') || '');
+  const [empresaGrandeFilter, setEmpresaGrandeFilter] = useState(() => localStorage.getItem('dominus_empresaGrandeFilter') || '');
+  const [franquiaFilter, setFranquiaFilter] = useState(() => localStorage.getItem('dominus_franquiaFilter') || '');
   const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('dominus_searchTerm') || '');
   const [kpiFilter, setKpiFilter] = useState<string | null>(() => localStorage.getItem('dominus_kpiFilter') || null);
 
@@ -30,8 +31,9 @@ export default function CrmView() {
     localStorage.setItem('dominus_nichoFilter', nichoFilter);
     localStorage.setItem('dominus_contactMethodFilter', contactMethodFilter);
     localStorage.setItem('dominus_temSiteProprioFilter', temSiteProprioFilter);
-    localStorage.setItem('dominus_temCtaFilter', temCtaFilter);
-    localStorage.setItem('dominus_temFormularioFilter', temFormularioFilter);
+    localStorage.setItem('dominus_siteModernoFilter', siteModernoFilter);
+    localStorage.setItem('dominus_empresaGrandeFilter', empresaGrandeFilter);
+    localStorage.setItem('dominus_franquiaFilter', franquiaFilter);
     localStorage.setItem('dominus_searchTerm', searchTerm);
     if (kpiFilter) {
       localStorage.setItem('dominus_kpiFilter', kpiFilter);
@@ -40,7 +42,7 @@ export default function CrmView() {
     }
   }, [
     statusFilter, origemFilter, nichoFilter, contactMethodFilter,
-    temSiteProprioFilter, temCtaFilter, temFormularioFilter,
+    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter,
     searchTerm, kpiFilter
   ]);
 
@@ -156,14 +158,21 @@ export default function CrmView() {
       }
 
       // Payload specific filters
-      const hasSite = lead.payload?.tem_site_proprio === true || lead.payload?.tem_site_proprio === 'true';
+      const hasSite = lead.payload?.["possui site"] === true || 
+                      lead.payload?.["possui site"] === 'true' || 
+                      lead.payload?.tem_site_proprio === true || 
+                      lead.payload?.tem_site_proprio === 'true' ||
+                      (lead.payload?.site && String(lead.payload.site).trim() !== '' && String(lead.payload.site).toLowerCase() !== 'null');
       const matchesSite = temSiteProprioFilter ? (temSiteProprioFilter === 'true' ? hasSite : !hasSite) : true;
 
-      const hasCta = lead.payload?.tem_cta === 'sim' || lead.payload?.tem_cta === 'true' || lead.payload?.tem_cta === true;
-      const matchesCta = temCtaFilter ? (temCtaFilter === 'sim' ? hasCta : !hasCta) : true;
+      const isSiteModerno = lead.payload?.["site moderno"] === true || lead.payload?.["site moderno"] === 'true';
+      const matchesSiteModerno = siteModernoFilter ? (siteModernoFilter === 'true' ? isSiteModerno : !isSiteModerno) : true;
 
-      const hasForm = lead.payload?.tem_formulario === 'sim' || lead.payload?.tem_formulario === 'true' || lead.payload?.tem_formulario === true;
-      const matchesForm = temFormularioFilter ? (temFormularioFilter === 'sim' ? hasForm : !hasForm) : true;
+      const isEmpresaGrande = lead.payload?.["empresa grande"] === true || lead.payload?.["empresa grande"] === 'true';
+      const matchesEmpresaGrande = empresaGrandeFilter ? (empresaGrandeFilter === 'true' ? isEmpresaGrande : !isEmpresaGrande) : true;
+
+      const isFranquia = lead.payload?.["franquia"] === true || lead.payload?.["franquia"] === 'true';
+      const matchesFranquia = franquiaFilter ? (franquiaFilter === 'true' ? isFranquia : !isFranquia) : true;
       
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = searchTerm 
@@ -191,7 +200,7 @@ export default function CrmView() {
       }
         
       return matchesStatus && matchesOrigem && matchesNicho && matchesContactMethod &&
-             matchesSite && matchesCta && matchesForm && matchesSearch && matchesKpi;
+             matchesSite && matchesSiteModerno && matchesEmpresaGrande && matchesFranquia && matchesSearch && matchesKpi;
     });
 
     // Sort: by updated_at or last_interaction descending
@@ -202,7 +211,7 @@ export default function CrmView() {
     });
   }, [
     leads, statusFilter, origemFilter, nichoFilter, contactMethodFilter,
-    temSiteProprioFilter, temCtaFilter, temFormularioFilter,
+    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter,
     searchTerm, kpiFilter
   ]);
 
@@ -222,7 +231,7 @@ export default function CrmView() {
     setCurrentPage(1);
   }, [
     statusFilter, origemFilter, nichoFilter, contactMethodFilter,
-    temSiteProprioFilter, temCtaFilter, temFormularioFilter,
+    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter,
     searchTerm, kpiFilter
   ]);
 
@@ -429,41 +438,52 @@ export default function CrmView() {
                 <option value="email">E-mail</option>
               </select>
 
-              {/* Tem Site Próprio Filter */}
+              {/* Tem Site Filter */}
               <select
                 value={temSiteProprioFilter}
                 onChange={(e) => setTemSiteProprioFilter(e.target.value)}
                 className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
               >
-                <option value="">Tem Site? (Todos)</option>
+                <option value="">Possui Site? (Todos)</option>
                 <option value="true">Sim</option>
                 <option value="false">Não</option>
               </select>
 
-              {/* Tem CTA Filter */}
+              {/* Site Moderno Filter */}
               <select
-                value={temCtaFilter}
-                onChange={(e) => setTemCtaFilter(e.target.value)}
+                value={siteModernoFilter}
+                onChange={(e) => setSiteModernoFilter(e.target.value)}
                 className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
               >
-                <option value="">Tem CTA? (Todos)</option>
-                <option value="sim">Sim</option>
-                <option value="não">Não</option>
+                <option value="">Site Moderno? (Todos)</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
               </select>
 
-              {/* Tem Formulario Filter */}
+              {/* Empresa Grande Filter */}
               <select
-                value={temFormularioFilter}
-                onChange={(e) => setTemFormularioFilter(e.target.value)}
+                value={empresaGrandeFilter}
+                onChange={(e) => setEmpresaGrandeFilter(e.target.value)}
                 className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
               >
-                <option value="">Tem Form? (Todos)</option>
-                <option value="sim">Sim</option>
-                <option value="não">Não</option>
+                <option value="">Empresa Grande? (Todos)</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
+              </select>
+
+              {/* Franquia Filter */}
+              <select
+                value={franquiaFilter}
+                onChange={(e) => setFranquiaFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Franquia? (Todos)</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
               </select>
 
               {/* Clear Filters Button */}
-              {(statusFilter || origemFilter || nichoFilter || contactMethodFilter || temSiteProprioFilter || temCtaFilter || temFormularioFilter || searchTerm || kpiFilter) && (
+              {(statusFilter || origemFilter || nichoFilter || contactMethodFilter || temSiteProprioFilter || siteModernoFilter || empresaGrandeFilter || franquiaFilter || searchTerm || kpiFilter) && (
                 <button
                   onClick={() => {
                     setStatusFilter('');
@@ -471,8 +491,9 @@ export default function CrmView() {
                     setNichoFilter('');
                     setContactMethodFilter('');
                     setTemSiteProprioFilter('');
-                    setTemCtaFilter('');
-                    setTemFormularioFilter('');
+                    setSiteModernoFilter('');
+                    setEmpresaGrandeFilter('');
+                    setFranquiaFilter('');
                     setSearchTerm('');
                     setKpiFilter(null);
                   }}
@@ -514,9 +535,14 @@ export default function CrmView() {
                       const hasWhatsApp = !!(lead.telefone_contato || lead.whatsapp) && String(lead.telefone_contato || lead.whatsapp).trim() !== '' && String(lead.telefone_contato || lead.whatsapp).toLowerCase() !== 'none' && String(lead.telefone_contato || lead.whatsapp).toLowerCase() !== 'null';
                       const hasInstagram = !!lead.instagram && String(lead.instagram).trim() !== '' && String(lead.instagram).toLowerCase() !== 'none' && String(lead.instagram).toLowerCase() !== 'null';
                       const hasEmail = !!(lead.email_contato || lead.email) && String(lead.email_contato || lead.email).trim() !== '' && String(lead.email_contato || lead.email).toLowerCase() !== 'none' && String(lead.email_contato || lead.email).toLowerCase() !== 'null';
-                      const hasSite = lead.payload?.tem_site_proprio === true || lead.payload?.tem_site_proprio === 'true';
-                      const hasCta = lead.payload?.tem_cta === 'sim' || lead.payload?.tem_cta === 'true' || lead.payload?.tem_cta === true;
-                      const hasForm = lead.payload?.tem_formulario === 'sim' || lead.payload?.tem_formulario === 'true' || lead.payload?.tem_formulario === true;
+                      const hasSite = lead.payload?.["possui site"] === true || 
+                                      lead.payload?.["possui site"] === 'true' || 
+                                      lead.payload?.tem_site_proprio === true || 
+                                      lead.payload?.tem_site_proprio === 'true' ||
+                                      (lead.payload?.site && String(lead.payload.site).trim() !== '' && String(lead.payload.site).toLowerCase() !== 'null');
+                      const isSiteModerno = lead.payload?.["site moderno"] === true || lead.payload?.["site moderno"] === 'true';
+                      const isEmpresaGrande = lead.payload?.["empresa grande"] === true || lead.payload?.["empresa grande"] === 'true';
+                      const isFranquia = lead.payload?.["franquia"] === true || lead.payload?.["franquia"] === 'true';
 
                       return (
                         <tr 
@@ -563,9 +589,10 @@ export default function CrmView() {
                           </td>
                           <td className="py-3.5 px-2">
                             <div className="flex gap-1">
-                              {hasSite && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Tem Site" />}
-                              {hasCta && <span className="w-2 h-2 rounded-full bg-blue-400" title="Tem CTA" />}
-                              {hasForm && <span className="w-2 h-2 rounded-full bg-purple-400" title="Tem Form" />}
+                              {hasSite && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Possui Site" />}
+                              {isSiteModerno && <span className="w-2 h-2 rounded-full bg-blue-400" title="Site Moderno" />}
+                              {isEmpresaGrande && <span className="w-2 h-2 rounded-full bg-purple-400" title="Empresa Grande" />}
+                              {isFranquia && <span className="w-2 h-2 rounded-full bg-amber-400" title="Franquia" />}
                             </div>
                           </td>
                           <td className="py-3.5 px-2 text-slate-400 whitespace-nowrap">
