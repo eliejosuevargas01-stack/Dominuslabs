@@ -352,7 +352,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     keys_to_remove = [
         "lead_id", "empresa_nome", "nome_empresa", "telefone_contato", "telefone",
         "email_contato", "origin", "nicho", "data_coleta", "updated_at", "updatedAt",
-        "createdAt", "payload", "presenca_digital", "reputacao_google", "oportunidades_identificadas"
+        "createdAt", "presenca_digital", "reputacao_google", "oportunidades_identificadas"
     ]
     for k in keys_to_remove:
         if k in mapped_lead:
@@ -516,6 +516,10 @@ def update_raw_lead(raw_lead: dict, payload: dict) -> dict:
         payload_dict = safe_parse_json(raw_payload) if is_str else (raw_payload or {})
         if not isinstance(payload_dict, dict):
             payload_dict = {}
+
+        # Merge any updated keys from the incoming payload dict
+        if "payload" in payload and isinstance(payload["payload"], dict):
+            payload_dict.update(payload["payload"])
 
         p_mappings = {}
         if "email" in payload:
@@ -690,12 +694,8 @@ def sanitize_outgoing_payload(payload: dict) -> dict:
         is_str = isinstance(raw_p, str)
         p_dict = safe_parse_json(raw_p) if is_str else (raw_p or {})
         if isinstance(p_dict, dict):
-            p_whitelist = {
-                "email", "tem_cta", "url_site", "tem_formulario",
-                "id_anuncio_meta", "tem_site_proprio", "erros_identificados_site"
-            }
-            sanitized_p = {pk: pv for pk, pv in p_dict.items() if pk in p_whitelist}
-            sanitized["payload"] = json.dumps(sanitized_p) if is_str else sanitized_p
+            # Preserve all keys inside the dynamic payload dictionary
+            sanitized["payload"] = json.dumps(p_dict) if is_str else p_dict
 
     return sanitized
 

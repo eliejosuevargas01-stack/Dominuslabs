@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, MessageSquare, Send, Check, Clipboard, Loader2, 
-  MessageCircle, AlertCircle, Trash2, Building2, Globe, Wifi, ExternalLink
+  MessageCircle, AlertCircle, Trash2, Building2, Globe, Wifi, ExternalLink, Sliders
 } from 'lucide-react';
 import {
   API_BASE, fetchWithAuth,
@@ -630,6 +630,51 @@ export default function LeadDetailView() {
                 </div>
               </div>
             </div>
+
+            {/* Dynamic Payload Fields */}
+            {editingLead.payload && typeof editingLead.payload === 'object' && Object.keys(editingLead.payload).length > 0 && (
+              <div className="pt-3 border-t border-slate-100/50 space-y-4">
+                <h4 className="text-[11px] font-bold text-purple-700 uppercase tracking-wide flex items-center gap-1.5">
+                  <Sliders className="w-3.5 h-3.5" />
+                  Atributos do Payload (N8N)
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {Object.entries(editingLead.payload).map(([key, val]) => {
+                    const isBool = typeof val === 'boolean';
+                    return (
+                      <div key={key}>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          {key}
+                        </label>
+                        {isBool ? (
+                          <select
+                            value={String(val)}
+                            onChange={(e) => {
+                              const updatedPayload = { ...editingLead.payload, [key]: e.target.value === 'true' };
+                              setEditingLead({ ...editingLead, payload: updatedPayload });
+                            }}
+                            className="w-full px-3 py-2 rounded-lg border border-violet-100 bg-white text-xs font-semibold focus:border-purple-500 outline-none cursor-pointer"
+                          >
+                            <option value="true">Sim</option>
+                            <option value="false">Não</option>
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={val !== null ? String(val) : ''}
+                            onChange={(e) => {
+                              const updatedPayload = { ...editingLead.payload, [key]: e.target.value === '' ? null : e.target.value };
+                              setEditingLead({ ...editingLead, payload: updatedPayload });
+                            }}
+                            className="w-full px-3 py-2 rounded-lg border border-violet-100 bg-white text-xs font-semibold focus:border-purple-500 outline-none"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Proposal / Text diagnostics */}
             <div className="pt-3 border-t border-slate-100/50 space-y-2">
