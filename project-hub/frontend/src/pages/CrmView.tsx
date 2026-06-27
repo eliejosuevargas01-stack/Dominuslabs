@@ -23,6 +23,7 @@ export default function CrmView() {
   const [empresaGrandeFilter, setEmpresaGrandeFilter] = useState(() => localStorage.getItem('dominus_empresaGrandeFilter') || '');
   const [franquiaFilter, setFranquiaFilter] = useState(() => localStorage.getItem('dominus_franquiaFilter') || '');
   const [proprietarioFilter, setProprietarioFilter] = useState(() => localStorage.getItem('dominus_proprietarioFilter') || '');
+  const [cnpjFilter, setCnpjFilter] = useState(() => localStorage.getItem('dominus_cnpjFilter') || '');
   const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('dominus_searchTerm') || '');
   const [kpiFilter, setKpiFilter] = useState<string | null>(() => localStorage.getItem('dominus_kpiFilter') || null);
 
@@ -36,6 +37,7 @@ export default function CrmView() {
     localStorage.setItem('dominus_empresaGrandeFilter', empresaGrandeFilter);
     localStorage.setItem('dominus_franquiaFilter', franquiaFilter);
     localStorage.setItem('dominus_proprietarioFilter', proprietarioFilter);
+    localStorage.setItem('dominus_cnpjFilter', cnpjFilter);
     localStorage.setItem('dominus_searchTerm', searchTerm);
     if (kpiFilter) {
       localStorage.setItem('dominus_kpiFilter', kpiFilter);
@@ -44,7 +46,7 @@ export default function CrmView() {
     }
   }, [
     statusFilter, origemFilter, nichoFilter, contactMethodFilter,
-    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter,
+    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter, cnpjFilter,
     searchTerm, kpiFilter
   ]);
 
@@ -181,6 +183,12 @@ export default function CrmView() {
                               String(lead.payload["proprietario"]).toLowerCase() !== 'null' &&
                               String(lead.payload["proprietario"]).toLowerCase() !== 'none';
       const matchesProprietario = proprietarioFilter ? (proprietarioFilter === 'true' ? hasProprietario : !hasProprietario) : true;
+
+      const hasCnpj = !!lead.payload?.["cnpj"] && 
+                      String(lead.payload["cnpj"]).trim() !== '' && 
+                      String(lead.payload["cnpj"]).toLowerCase() !== 'null' &&
+                      String(lead.payload["cnpj"]).toLowerCase() !== 'none';
+      const matchesCnpj = cnpjFilter ? (cnpjFilter === 'true' ? hasCnpj : !hasCnpj) : true;
       
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = searchTerm 
@@ -208,7 +216,7 @@ export default function CrmView() {
       }
         
       return matchesStatus && matchesOrigem && matchesNicho && matchesContactMethod &&
-             matchesSite && matchesSiteModerno && matchesEmpresaGrande && matchesFranquia && matchesProprietario && matchesSearch && matchesKpi;
+             matchesSite && matchesSiteModerno && matchesEmpresaGrande && matchesFranquia && matchesProprietario && matchesCnpj && matchesSearch && matchesKpi;
     });
 
     // Sort: by updated_at or last_interaction descending
@@ -219,7 +227,7 @@ export default function CrmView() {
     });
   }, [
     leads, statusFilter, origemFilter, nichoFilter, contactMethodFilter,
-    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter,
+    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter, cnpjFilter,
     searchTerm, kpiFilter
   ]);
 
@@ -239,7 +247,7 @@ export default function CrmView() {
     setCurrentPage(1);
   }, [
     statusFilter, origemFilter, nichoFilter, contactMethodFilter,
-    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter,
+    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter, cnpjFilter,
     searchTerm, kpiFilter
   ]);
 
@@ -501,8 +509,19 @@ export default function CrmView() {
                 <option value="false">Não</option>
               </select>
 
+              {/* CNPJ Filter */}
+              <select
+                value={cnpjFilter}
+                onChange={(e) => setCnpjFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Tem CNPJ? (Todos)</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
+              </select>
+
               {/* Clear Filters Button */}
-              {(statusFilter || origemFilter || nichoFilter || contactMethodFilter || temSiteProprioFilter || siteModernoFilter || empresaGrandeFilter || franquiaFilter || proprietarioFilter || searchTerm || kpiFilter) && (
+              {(statusFilter || origemFilter || nichoFilter || contactMethodFilter || temSiteProprioFilter || siteModernoFilter || empresaGrandeFilter || franquiaFilter || proprietarioFilter || cnpjFilter || searchTerm || kpiFilter) && (
                 <button
                   onClick={() => {
                     setStatusFilter('');
@@ -514,6 +533,7 @@ export default function CrmView() {
                     setEmpresaGrandeFilter('');
                     setFranquiaFilter('');
                     setProprietarioFilter('');
+                    setCnpjFilter('');
                     setSearchTerm('');
                     setKpiFilter(null);
                   }}
