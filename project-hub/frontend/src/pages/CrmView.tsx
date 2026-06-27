@@ -22,6 +22,7 @@ export default function CrmView() {
   const [siteModernoFilter, setSiteModernoFilter] = useState(() => localStorage.getItem('dominus_siteModernoFilter') || '');
   const [empresaGrandeFilter, setEmpresaGrandeFilter] = useState(() => localStorage.getItem('dominus_empresaGrandeFilter') || '');
   const [franquiaFilter, setFranquiaFilter] = useState(() => localStorage.getItem('dominus_franquiaFilter') || '');
+  const [proprietarioFilter, setProprietarioFilter] = useState(() => localStorage.getItem('dominus_proprietarioFilter') || '');
   const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('dominus_searchTerm') || '');
   const [kpiFilter, setKpiFilter] = useState<string | null>(() => localStorage.getItem('dominus_kpiFilter') || null);
 
@@ -34,6 +35,7 @@ export default function CrmView() {
     localStorage.setItem('dominus_siteModernoFilter', siteModernoFilter);
     localStorage.setItem('dominus_empresaGrandeFilter', empresaGrandeFilter);
     localStorage.setItem('dominus_franquiaFilter', franquiaFilter);
+    localStorage.setItem('dominus_proprietarioFilter', proprietarioFilter);
     localStorage.setItem('dominus_searchTerm', searchTerm);
     if (kpiFilter) {
       localStorage.setItem('dominus_kpiFilter', kpiFilter);
@@ -42,7 +44,7 @@ export default function CrmView() {
     }
   }, [
     statusFilter, origemFilter, nichoFilter, contactMethodFilter,
-    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter,
+    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter,
     searchTerm, kpiFilter
   ]);
 
@@ -173,6 +175,12 @@ export default function CrmView() {
 
       const isFranquia = lead.payload?.["franquia"] === true || lead.payload?.["franquia"] === 'true';
       const matchesFranquia = franquiaFilter ? (franquiaFilter === 'true' ? isFranquia : !isFranquia) : true;
+
+      const hasProprietario = !!lead.payload?.["proprietario"] && 
+                              String(lead.payload["proprietario"]).trim() !== '' && 
+                              String(lead.payload["proprietario"]).toLowerCase() !== 'null' &&
+                              String(lead.payload["proprietario"]).toLowerCase() !== 'none';
+      const matchesProprietario = proprietarioFilter ? (proprietarioFilter === 'true' ? hasProprietario : !hasProprietario) : true;
       
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = searchTerm 
@@ -200,7 +208,7 @@ export default function CrmView() {
       }
         
       return matchesStatus && matchesOrigem && matchesNicho && matchesContactMethod &&
-             matchesSite && matchesSiteModerno && matchesEmpresaGrande && matchesFranquia && matchesSearch && matchesKpi;
+             matchesSite && matchesSiteModerno && matchesEmpresaGrande && matchesFranquia && matchesProprietario && matchesSearch && matchesKpi;
     });
 
     // Sort: by updated_at or last_interaction descending
@@ -211,7 +219,7 @@ export default function CrmView() {
     });
   }, [
     leads, statusFilter, origemFilter, nichoFilter, contactMethodFilter,
-    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter,
+    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter,
     searchTerm, kpiFilter
   ]);
 
@@ -231,7 +239,7 @@ export default function CrmView() {
     setCurrentPage(1);
   }, [
     statusFilter, origemFilter, nichoFilter, contactMethodFilter,
-    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter,
+    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter,
     searchTerm, kpiFilter
   ]);
 
@@ -482,8 +490,19 @@ export default function CrmView() {
                 <option value="false">Não</option>
               </select>
 
+              {/* Proprietário Filter */}
+              <select
+                value={proprietarioFilter}
+                onChange={(e) => setProprietarioFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Tem Proprietário? (Todos)</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
+              </select>
+
               {/* Clear Filters Button */}
-              {(statusFilter || origemFilter || nichoFilter || contactMethodFilter || temSiteProprioFilter || siteModernoFilter || empresaGrandeFilter || franquiaFilter || searchTerm || kpiFilter) && (
+              {(statusFilter || origemFilter || nichoFilter || contactMethodFilter || temSiteProprioFilter || siteModernoFilter || empresaGrandeFilter || franquiaFilter || proprietarioFilter || searchTerm || kpiFilter) && (
                 <button
                   onClick={() => {
                     setStatusFilter('');
@@ -494,6 +513,7 @@ export default function CrmView() {
                     setSiteModernoFilter('');
                     setEmpresaGrandeFilter('');
                     setFranquiaFilter('');
+                    setProprietarioFilter('');
                     setSearchTerm('');
                     setKpiFilter(null);
                   }}
