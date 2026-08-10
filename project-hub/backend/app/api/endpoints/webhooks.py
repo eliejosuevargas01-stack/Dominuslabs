@@ -34,10 +34,13 @@ async def notify_crm_chat_listeners(lead_id: str):
         await queue.put(payload)
 
 @router.get("/events/leads/{lead_id}")
-async def lead_events(lead_id: str, request: Request, token: Optional[str] = None):
+async def lead_events(lead_id: str, token: str, request: Request):
     from app.core.auth import decode_access_token
-    payload = decode_access_token(token) if token else None
-    user_email = payload.get("sub", "user") if payload else "user"
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
+    
+    user_email = payload.get("sub", "unknown")
     queue = asyncio.Queue()
     
     if lead_id not in lead_listeners:
@@ -65,10 +68,13 @@ async def lead_events(lead_id: str, request: Request, token: Optional[str] = Non
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.get("/events/crm-chats")
-async def crm_chats_events(request: Request, token: Optional[str] = None):
+async def crm_chats_events(token: str, request: Request):
     from app.core.auth import decode_access_token
-    payload = decode_access_token(token) if token else None
-    user_email = payload.get("sub", "user") if payload else "user"
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
+    
+    user_email = payload.get("sub", "unknown")
     queue = asyncio.Queue()
     
     crm_chat_listeners.append((user_email, queue))

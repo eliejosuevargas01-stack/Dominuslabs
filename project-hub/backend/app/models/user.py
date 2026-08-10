@@ -19,4 +19,10 @@ class User(Base):
     whatsapp_token = Column(String, unique=True, nullable=True)
     preferred_session_id = Column(String, nullable=True)
     
+    # Preventive 1h Token storage and expiration tracking
+    access_token = Column(String, nullable=True)
+    refresh_token = Column(String, nullable=True)
+    token_issued_at = Column(DateTime, nullable=True)
+    token_expires_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

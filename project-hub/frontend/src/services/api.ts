@@ -75,6 +75,9 @@ export async function fetchWithAuth(
               localStorage.setItem("whatsapp_token", refreshData.whatsapp_token);
             }
 
+            window.dispatchEvent(new CustomEvent("token_refreshed", { detail: { token: refreshData.access_token } }));
+            schedulePreventiveTokenRefresh();
+
             // Retry the original request with the new token
             mergedHeaders["Authorization"] = `Bearer ${refreshData.access_token}`;
             response = await fetch(url, {
@@ -104,6 +107,87 @@ export async function fetchWithAuth(
   return response;
 }
 
+// ---------------------------------------------------------------------------
+// Re-autenticação Preventiva (1 a 10s antes da expiração / ~59.8 minutos)
+// ---------------------------------------------------------------------------
+
+let preventiveTimerId: any = null;
+
+export function decodeJwtExp(token: string): number | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.exp || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function refreshAuthTokenPreventively(): Promise<string | null> {
+  const refreshToken = localStorage.getItem("admin_refresh_token");
+  if (!refreshToken || refreshToken === "null" || refreshToken === "undefined") return null;
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.access_token) {
+        localStorage.setItem("admin_token", data.access_token);
+        if (data.refresh_token) {
+          localStorage.setItem("admin_refresh_token", data.refresh_token);
+        }
+        if (data.whatsapp_token) {
+          localStorage.setItem("whatsapp_token", data.whatsapp_token);
+        }
+        console.log("[PREVENTIVE-REAUTH] ✅ Token re-autenticado com sucesso 1-10s antes da expiração (~59.8 min)!");
+        window.dispatchEvent(new CustomEvent("token_refreshed", { detail: { token: data.access_token } }));
+        schedulePreventiveTokenRefresh();
+        return data.access_token;
+      }
+    }
+  } catch (err) {
+    console.error("[PREVENTIVE-REAUTH] Erro ao re-autenticar preventivamente:", err);
+  }
+  return null;
+}
+
+export function schedulePreventiveTokenRefresh() {
+  if (preventiveTimerId) {
+    clearTimeout(preventiveTimerId);
+    preventiveTimerId = null;
+  }
+
+  const token = localStorage.getItem("admin_token");
+  if (!token || token === "null" || token === "undefined") return;
+
+  const exp = decodeJwtExp(token);
+  if (!exp) return;
+
+  const nowInSeconds = Math.floor(Date.now() / 1000);
+  const secondsRemaining = exp - nowInSeconds;
+
+  // Agenda disparo preventivo 10s antes do token expirar (ex: 3588s = 59.8 min)
+  const leadTimeSeconds = 10;
+  const delayMs = Math.max((secondsRemaining - leadTimeSeconds), 1) * 1000;
+
+  console.log(`[PREVENTIVE-REAUTH] Re-autenticação preventiva agendada em ${Math.round(delayMs / 1000)}s (~${(delayMs / 60000).toFixed(1)} min).`);
+
+  preventiveTimerId = setTimeout(() => {
+    refreshAuthTokenPreventively();
+  }, delayMs);
+}
+
+// Executa o agendador preventivo ao carregar o arquivo de API
+if (typeof window !== "undefined") {
+  schedulePreventiveTokenRefresh();
+}
+
 export async function loginUser(username: string, password: string) {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
@@ -114,7 +198,15 @@ export async function loginUser(username: string, password: string) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.detail || "Erro de login");
   }
-  return res.json();
+  const data = await res.json();
+  if (data && data.access_token) {
+    localStorage.setItem("admin_token", data.access_token);
+    if (data.refresh_token) {
+      localStorage.setItem("admin_refresh_token", data.refresh_token);
+    }
+    schedulePreventiveTokenRefresh();
+  }
+  return data;
 }
 
 export async function fetchProjects() {

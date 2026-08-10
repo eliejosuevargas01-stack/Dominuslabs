@@ -122,24 +122,47 @@ export default function LeadDetailView() {
 
   useEffect(() => {
     if (!id) return;
-    const token = localStorage.getItem("admin_token");
-    if (!token) return;
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: any = null;
 
-    const sseUrl = `${API_BASE}/webhooks/events/leads/${id}?token=${encodeURIComponent(token)}`;
-    const eventSource = new EventSource(sseUrl);
+    const connectSSE = () => {
+      const token = localStorage.getItem("admin_token");
+      if (!token) return;
 
-    eventSource.onmessage = (event) => {
-      if (event.data === 'reload') {
-        fetchLeadMessages(false);
+      const sseUrl = `${API_BASE}/webhooks/events/leads/${id}?token=${encodeURIComponent(token)}`;
+      eventSource = new EventSource(sseUrl);
+
+      eventSource.onmessage = (event) => {
+        if (event.data === 'reload') {
+          fetchLeadMessages(false);
+        }
+      };
+
+      eventSource.onerror = (err) => {
+        console.warn('Lead SSE disconnected, retrying with fresh token in 5s...', err);
+        if (eventSource) {
+          eventSource.close();
+        }
+        reconnectTimeout = setTimeout(connectSSE, 5000);
+      };
+    };
+
+    connectSSE();
+
+    const handleTokenRefreshed = () => {
+      if (eventSource) {
+        eventSource.close();
       }
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      connectSSE();
     };
 
-    eventSource.onerror = (err) => {
-      console.error('SSE Error:', err);
-    };
+    window.addEventListener("token_refreshed", handleTokenRefreshed);
 
     return () => {
-      eventSource.close();
+      window.removeEventListener("token_refreshed", handleTokenRefreshed);
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (eventSource) eventSource.close();
     };
   }, [id]);
 
