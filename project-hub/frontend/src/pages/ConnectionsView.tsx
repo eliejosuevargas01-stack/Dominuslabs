@@ -109,9 +109,8 @@ export default function ConnectionsView() {
       setLoading(true);
       setError(null);
       const data = await fetchWhatsappSessions();
-      if (data && data.sessions) {
-        setSessions(data.sessions);
-      }
+      const list = data?.sessions || (Array.isArray(data) ? data : []);
+      setSessions(list);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Erro ao carregar conexões.');
@@ -180,6 +179,22 @@ export default function ConnectionsView() {
     }
   };
 
+  // Helpers for extracting status and QR Code from various API response shapes
+  const extractStatus = (res: any): string => {
+    const raw = res?.session?.snapshot?.status || res?.snapshot?.status || res?.session?.status || res?.status || 'disconnected';
+    return String(raw).toLowerCase();
+  };
+
+  const extractQrCode = (res: any): string | null => {
+    const qr = res?.session?.snapshot?.qrDataUrl || res?.snapshot?.qrDataUrl || res?.session?.qrDataUrl || res?.qrDataUrl || res?.session?.snapshot?.qrCode || res?.snapshot?.qrCode || res?.qrCode || res?.qr;
+    if (!qr) return null;
+    if (typeof qr === 'string') {
+      if (qr.startsWith('data:image') || qr.startsWith('http')) return qr;
+      if (qr.length > 80 && !qr.includes(' ')) return `data:image/png;base64,${qr}`;
+    }
+    return qr;
+  };
+
   // Polling for QR Code status check
   useEffect(() => {
     let intervalId: any = null;
@@ -188,8 +203,13 @@ export default function ConnectionsView() {
       intervalId = setInterval(async () => {
         try {
           const res = await getWhatsappSessionStatus(pairingSession.id);
-          const currentStatus = res?.session?.snapshot?.status || 'disconnected';
+          const currentStatus = extractStatus(res);
           setPairingStatus(currentStatus);
+
+          const qrUrl = extractQrCode(res);
+          if (qrUrl) {
+            setQrCodeUrl(qrUrl);
+          }
 
           if (currentStatus === 'connected') {
             setPollingActive(false);
@@ -198,8 +218,6 @@ export default function ConnectionsView() {
               setPairingSession(null);
               loadSessions();
             }, 1500);
-          } else if (res?.session?.snapshot?.qrDataUrl) {
-            setQrCodeUrl(res.session.snapshot.qrDataUrl);
           }
         } catch (err) {
           console.error('Error polling session status', err);
@@ -225,8 +243,9 @@ export default function ConnectionsView() {
       setWaSessionName('');
       
       // If session created, trigger connect immediately
-      if (res && res.session) {
-        handleConnectWa(res.session);
+      const createdSession = res?.session || (res?.id ? res : null);
+      if (createdSession) {
+        handleConnectWa(createdSession);
       } else {
         loadSessions();
       }
@@ -247,11 +266,11 @@ export default function ConnectionsView() {
       setPollingActive(true);
 
       const res = await connectWhatsappSession(session.id);
-      if (res && res.snapshot) {
-        setPairingStatus(res.snapshot.status);
-        if (res.snapshot.qrDataUrl) {
-          setQrCodeUrl(res.snapshot.qrDataUrl);
-        }
+      const status = extractStatus(res);
+      const qrUrl = extractQrCode(res);
+      setPairingStatus(status);
+      if (qrUrl) {
+        setQrCodeUrl(qrUrl);
       }
     } catch (err: any) {
       setPollingActive(false);
@@ -598,8 +617,8 @@ export default function ConnectionsView() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {sessions.map((session) => {
-            const isWa = session.platform === 'whatsapp';
-            const status = session.snapshot?.status || 'disconnected';
+            const isWa = session.platform === 'whatsapp' || !session.platform;
+            const status = extractStatus(session);
             
             return (
               <div key={session.id} className="glass-card p-6 bg-white/70 border border-violet-100/30 flex flex-col justify-between hover:shadow-lg transition-shadow relative overflow-hidden group">

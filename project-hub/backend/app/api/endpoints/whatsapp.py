@@ -36,13 +36,22 @@ async def make_whatsapp_api_request(
     json_data: Optional[Any] = None,
     timeout: float = 10.0
 ) -> Any:
-    url = f"{settings.WHATSAPP_API_URL}{path}"
+    base_url = settings.WHATSAPP_API_URL.rstrip("/")
+    clean_path = path if path.startswith("/") else f"/{path}"
+    url = f"{base_url}{clean_path}"
+
+    req_headers = dict(headers) if headers else {}
+    if "x-session-token" in req_headers:
+        token = req_headers["x-session-token"]
+        if "Authorization" not in req_headers and token:
+            req_headers["Authorization"] = f"Bearer {token}"
+
     async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.request(
                 method,
                 url,
-                headers=headers,
+                headers=req_headers,
                 json=json_data
             )
         except httpx.HTTPError as e:
@@ -208,6 +217,40 @@ async def update_session_settings(
         f"/api/sessions/{session_id}/settings",
         headers={"x-session-token": token},
         json_data=payload
+    )
+
+@router.post("/sessions/{session_id}/messages/send")
+async def send_session_message(
+    session_id: str,
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    current_user: str = Depends(check_crm_permission)
+):
+    """
+    Send a WhatsApp message directly through a specific session.
+    """
+    phone = payload.get("phone") or payload.get("number")
+    message = payload.get("message") or payload.get("text")
+    if not phone or not message:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Os campos 'phone' (ou 'number') e 'message' (ou 'text') são obrigatórios."
+        )
+
+    cleaned_phone = "".join(filter(str.isdigit, str(phone)))
+    token = await get_user_token(current_user, db)
+    return await make_whatsapp_api_request(
+        "POST",
+        f"/api/sessions/{session_id}/messages/send",
+        headers={"x-session-token": token},
+        json_data={
+            "phone": cleaned_phone,
+            "number": cleaned_phone,
+            "message": message,
+            "text": message,
+            "jid": f"{cleaned_phone}@s.whatsapp.net"
+        },
+        timeout=20.0
     )
 
 # Instagram Proxy Routes

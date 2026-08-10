@@ -797,17 +797,17 @@ export default function LeadDetailView() {
               >
                 <option value="">— Selecionar sessão WhatsApp —</option>
                 {sessions
-                  .filter((s) => s.snapshot?.status === 'connected')
+                  .filter((s) => (s.snapshot?.status || s.status || '').toLowerCase() === 'connected')
                   .map((s) => (
                     <option key={s.id} value={s.id}>
                       ✅ {s.name} ({s.snapshot?.me?.name || s.id})
                     </option>
                   ))}
                 {sessions
-                  .filter((s) => s.snapshot?.status !== 'connected')
+                  .filter((s) => (s.snapshot?.status || s.status || '').toLowerCase() !== 'connected')
                   .map((s) => (
                     <option key={s.id} value={s.id} className="text-slate-400">
-                      ⚫ {s.name} ({s.snapshot?.status || 'idle'})
+                      ⚫ {s.name} ({s.snapshot?.status || s.status || 'idle'})
                     </option>
                   ))}
               </select>
