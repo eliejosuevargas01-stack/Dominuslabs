@@ -13,8 +13,9 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
   const [isOpen, setIsOpen] = useState(false);
 
   const menuItems = [
-    { name: 'Bandeja de Entrada', path: '/crm', icon: MessageSquare },
     { name: 'Scrapper', path: '/scrapper', icon: Search },
+    { name: 'CRM Comercial', path: '/crm', icon: Users },
+    { name: 'Bandeja de Entrada', path: '/inbox', icon: MessageSquare },
     { name: 'Conexões', path: '/connections', icon: Radio },
     { name: 'Cases', path: '/cases-dashboard', icon: Briefcase },
     { name: 'Project Hub', path: '/project-hub', icon: Folder },
