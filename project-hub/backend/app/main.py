@@ -24,7 +24,7 @@ os.makedirs(os.path.join(settings.UPLOAD_DIR, "documents"), exist_ok=True)
 
 Base.metadata.create_all(bind=engine)
 
-# Automatic database migration for whatsapp_token column
+# Automatic database migration for users columns
 try:
     from sqlalchemy import text
     with engine.connect() as conn:
@@ -35,11 +35,23 @@ try:
             columns = [c["name"] for c in inspector.get_columns("users")]
             if "whatsapp_token" not in columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN whatsapp_token VARCHAR;"))
-                conn.commit()
+            if "access_token" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN access_token VARCHAR;"))
+            if "refresh_token" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN refresh_token VARCHAR;"))
+            if "token_issued_at" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN token_issued_at DATETIME;"))
+            if "token_expires_at" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN token_expires_at DATETIME;"))
+            conn.commit()
         else:
             conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_token VARCHAR(255) UNIQUE;"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS access_token TEXT;"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token TEXT;"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_issued_at TIMESTAMP;"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMP;"))
             conn.commit()
-        print("Database migration: whatsapp_token column checked/added successfully.")
+        print("Database migration: users table token columns checked/added successfully.")
 except Exception as e:
     print(f"Database migration warning/error: {e}")
 
