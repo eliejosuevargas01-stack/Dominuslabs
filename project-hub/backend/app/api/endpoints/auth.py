@@ -138,6 +138,8 @@ def _build_token_data(user: User) -> dict:
     }
 
 
+from datetime import datetime, timedelta
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -156,23 +158,31 @@ async def login(
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Usuário ou senha incorretos")
 
-    # Garante whatsapp_token local (legado — mantido para compatibilidade)
+    # Garante whatsapp_token local
     if not user.whatsapp_token:
         user.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
-        db.commit()
-        db.refresh(user)
 
     # Fase 1: Provisiona cliente na WhatsApp API em background (não bloqueia login)
     background_tasks.add_task(_maybe_provision, user, db)
 
     token_data = _build_token_data(user)
-    access_token = create_access_token(data=token_data)
-    refresh_token = create_refresh_token(data=token_data)
+    access_token = create_access_token(data=token_data, expires_in=3600)
+    refresh_token = create_refresh_token(data=token_data, expires_in=604800)
+
+    now = datetime.utcnow()
+    user.access_token = access_token
+    user.refresh_token = refresh_token
+    user.token_issued_at = now
+    user.token_expires_at = now + timedelta(seconds=3600)
+    db.commit()
+    db.refresh(user)
 
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
+        "expires_in": 3600,
+        "reauth_at_seconds": 3588,  # 59.8 minutos (12s / 1-10s antes de 3600s)
         "whatsapp_token": user.whatsapp_token,
     }
 
@@ -194,19 +204,27 @@ async def refresh(
 
     if not user.whatsapp_token:
         user.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
-        db.commit()
-        db.refresh(user)
 
     # Garante provisão em background no refresh também
     background_tasks.add_task(_maybe_provision, user, db)
 
     token_data = _build_token_data(user)
-    new_access_token = create_access_token(data=token_data)
-    new_refresh_token = create_refresh_token(data=token_data)
+    new_access_token = create_access_token(data=token_data, expires_in=3600)
+    new_refresh_token = create_refresh_token(data=token_data, expires_in=604800)
+
+    now = datetime.utcnow()
+    user.access_token = new_access_token
+    user.refresh_token = new_refresh_token
+    user.token_issued_at = now
+    user.token_expires_at = now + timedelta(seconds=3600)
+    db.commit()
+    db.refresh(user)
 
     return {
         "access_token": new_access_token,
         "refresh_token": new_refresh_token,
         "token_type": "bearer",
+        "expires_in": 3600,
+        "reauth_at_seconds": 3588,  # 59.8 minutos
         "whatsapp_token": user.whatsapp_token,
     }

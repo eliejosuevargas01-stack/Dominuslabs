@@ -180,7 +180,19 @@ export default function ChatPopup() {
 
     connectSSE();
 
+    const handleTokenRefreshed = (e: any) => {
+      console.log('[PREVENTIVE-REAUTH] Reconectando SSE com o novo token preventivo...', e.detail?.token);
+      if (eventSource) {
+        eventSource.close();
+      }
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      connectSSE();
+    };
+
+    window.addEventListener("token_refreshed", handleTokenRefreshed);
+
     return () => {
+      window.removeEventListener("token_refreshed", handleTokenRefreshed);
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (eventSource) eventSource.close();
     };
