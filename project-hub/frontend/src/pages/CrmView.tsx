@@ -1,667 +1,712 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
-  MessageSquare, Search, Send, Loader2, Sparkles, Check, CheckCheck,
-  RefreshCw, Filter, Phone, User, Radio, ArrowLeft
+  Users, UserCheck, MessageSquare, Check, 
+  Search, Loader2, Sparkles, MessageCircle, AlertCircle,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { API_BASE, fetchWithAuth, fetchWhatsappSessions, sendWhatsappMessage } from '../services/api';
-
-// Paleta de Cores Únicas e Vibrantes para cada Instância de WhatsApp
-export const WHATSAPP_COLOR_PALETTES = [
-  { 
-    name: 'emerald', 
-    bg: 'bg-emerald-500', 
-    text: 'text-emerald-700', 
-    bgLight: 'bg-emerald-50', 
-    border: 'border-emerald-200', 
-    badgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-    hex: '#10B981', 
-    glow: 'shadow-emerald-500/20' 
-  },
-  { 
-    name: 'violet', 
-    bg: 'bg-violet-600', 
-    text: 'text-violet-700', 
-    bgLight: 'bg-violet-50', 
-    border: 'border-violet-200', 
-    badgeBg: 'bg-violet-100 text-violet-800 border-violet-300',
-    hex: '#8B5CF6', 
-    glow: 'shadow-violet-500/20' 
-  },
-  { 
-    name: 'amber', 
-    bg: 'bg-amber-500', 
-    text: 'text-amber-700', 
-    bgLight: 'bg-amber-50', 
-    border: 'border-amber-200', 
-    badgeBg: 'bg-amber-100 text-amber-800 border-amber-300',
-    hex: '#F59E0B', 
-    glow: 'shadow-amber-500/20' 
-  },
-  { 
-    name: 'cyan', 
-    bg: 'bg-cyan-500', 
-    text: 'text-cyan-700', 
-    bgLight: 'bg-cyan-50', 
-    border: 'border-cyan-200', 
-    badgeBg: 'bg-cyan-100 text-cyan-800 border-cyan-300',
-    hex: '#06B6D4', 
-    glow: 'shadow-cyan-500/20' 
-  },
-  { 
-    name: 'rose', 
-    bg: 'bg-rose-500', 
-    text: 'text-rose-700', 
-    bgLight: 'bg-rose-50', 
-    border: 'border-rose-200', 
-    badgeBg: 'bg-rose-100 text-rose-800 border-rose-300',
-    hex: '#F43F5E', 
-    glow: 'shadow-rose-500/20' 
-  },
-  { 
-    name: 'indigo', 
-    bg: 'bg-indigo-600', 
-    text: 'text-indigo-700', 
-    bgLight: 'bg-indigo-50', 
-    border: 'border-indigo-200', 
-    badgeBg: 'bg-indigo-100 text-indigo-800 border-indigo-300',
-    hex: '#6366F1', 
-    glow: 'shadow-indigo-500/20' 
-  },
-  { 
-    name: 'teal', 
-    bg: 'bg-teal-500', 
-    text: 'text-teal-700', 
-    bgLight: 'bg-teal-50', 
-    border: 'border-teal-200', 
-    badgeBg: 'bg-teal-100 text-teal-800 border-teal-300',
-    hex: '#14B8A6', 
-    glow: 'shadow-teal-500/20' 
-  },
-  { 
-    name: 'orange', 
-    bg: 'bg-orange-500', 
-    text: 'text-orange-700', 
-    bgLight: 'bg-orange-50', 
-    border: 'border-orange-200', 
-    badgeBg: 'bg-orange-100 text-orange-800 border-orange-300',
-    hex: '#F97316', 
-    glow: 'shadow-orange-500/20' 
-  }
-];
-
-export function getSessionColor(sessionId: string | undefined | null) {
-  if (!sessionId) return WHATSAPP_COLOR_PALETTES[0];
-  let hash = 0;
-  for (let i = 0; i < sessionId.length; i++) {
-    hash = sessionId.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const index = Math.abs(hash) % WHATSAPP_COLOR_PALETTES.length;
-  return WHATSAPP_COLOR_PALETTES[index];
-}
+import { API_BASE, fetchWithAuth } from '../services/api';
 
 export default function CrmView() {
   const [leads, setLeads] = useState<any[]>([]);
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics] = useState<any>(null);
+  const [loadingLeads, setLoadingLeads] = useState(true);
+  const [loadingMetrics, setLoadingMetrics] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Active filters & search
-  const [selectedSessionFilter, setSelectedSessionFilter] = useState<string>('ALL');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeLead, setActiveLead] = useState<any | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [replyText, setReplyText] = useState('');
-  const [replySessionId, setReplySessionId] = useState<string>('');
+  // Filters state
+  const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem('dominus_statusFilter') || '');
+  const [origemFilter, setOrigemFilter] = useState(() => localStorage.getItem('dominus_origemFilter') || '');
+  const [nichoFilter, setNichoFilter] = useState(() => localStorage.getItem('dominus_nichoFilter') || '');
+  const [contactMethodFilter, setContactMethodFilter] = useState(() => localStorage.getItem('dominus_contactMethodFilter') || '');
+  const [temSiteProprioFilter, setTemSiteProprioFilter] = useState(() => localStorage.getItem('dominus_temSiteProprioFilter') || '');
+  const [siteModernoFilter, setSiteModernoFilter] = useState(() => localStorage.getItem('dominus_siteModernoFilter') || '');
+  const [empresaGrandeFilter, setEmpresaGrandeFilter] = useState(() => localStorage.getItem('dominus_empresaGrandeFilter') || '');
+  const [franquiaFilter, setFranquiaFilter] = useState(() => localStorage.getItem('dominus_franquiaFilter') || '');
+  const [proprietarioFilter, setProprietarioFilter] = useState(() => localStorage.getItem('dominus_proprietarioFilter') || '');
+  const [cnpjFilter, setCnpjFilter] = useState(() => localStorage.getItem('dominus_cnpjFilter') || '');
+  const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('dominus_searchTerm') || '');
+  const [kpiFilter, setKpiFilter] = useState<string | null>(() => localStorage.getItem('dominus_kpiFilter') || null);
 
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-
-  // 1. Carrega sessões de WhatsApp para identificar quais números estão conectados
-  const loadSessions = async () => {
-    try {
-      const data = await fetchWhatsappSessions();
-      let rawList: any[] = [];
-      if (Array.isArray(data)) rawList = data;
-      else if (data && Array.isArray(data.sessions)) rawList = data.sessions;
-      setSessions(rawList);
-    } catch (err) {
-      console.warn("Falha ao carregar sessões de WhatsApp:", err);
+  useEffect(() => {
+    localStorage.setItem('dominus_statusFilter', statusFilter);
+    localStorage.setItem('dominus_origemFilter', origemFilter);
+    localStorage.setItem('dominus_nichoFilter', nichoFilter);
+    localStorage.setItem('dominus_contactMethodFilter', contactMethodFilter);
+    localStorage.setItem('dominus_temSiteProprioFilter', temSiteProprioFilter);
+    localStorage.setItem('dominus_siteModernoFilter', siteModernoFilter);
+    localStorage.setItem('dominus_empresaGrandeFilter', empresaGrandeFilter);
+    localStorage.setItem('dominus_franquiaFilter', franquiaFilter);
+    localStorage.setItem('dominus_proprietarioFilter', proprietarioFilter);
+    localStorage.setItem('dominus_cnpjFilter', cnpjFilter);
+    localStorage.setItem('dominus_searchTerm', searchTerm);
+    if (kpiFilter) {
+      localStorage.setItem('dominus_kpiFilter', kpiFilter);
+    } else {
+      localStorage.removeItem('dominus_kpiFilter');
     }
-  };
+  }, [
+    statusFilter, origemFilter, nichoFilter, contactMethodFilter,
+    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter, cnpjFilter,
+    searchTerm, kpiFilter
+  ]);
 
-  // 2. Carrega lista de conversas/leads
-  const loadLeads = async (silent = false) => {
-    if (!silent) setLoading(true);
+
+  // Dynamic filter lists extracted from loaded leads
+  const dynamicStatuses = useMemo(() => {
+    const s = new Set<string>();
+    leads.forEach(l => {
+      if (l.status) s.add(l.status);
+    });
+    return Array.from(s).sort();
+  }, [leads]);
+
+  const dynamicOrigens = useMemo(() => {
+    const s = new Set<string>();
+    leads.forEach(l => {
+      if (l.origem) s.add(l.origem);
+    });
+    return Array.from(s).sort();
+  }, [leads]);
+
+  const dynamicNichos = useMemo(() => {
+    const s = new Set<string>();
+    leads.forEach(l => {
+      if (l.nicho && l.nicho.trim() !== '') s.add(l.nicho);
+    });
+    return Array.from(s).sort();
+  }, [leads]);
+
+  // Fetch initial leads and dashboard metrics
+  const fetchData = async () => {
+    setLoadingLeads(true);
+    setLoadingMetrics(true);
+    setError(null);
+
     try {
-      const res = await fetchWithAuth(`${API_BASE}/crm/leads`);
-      if (!res.ok) throw new Error('Falha ao carregar lista de conversas');
-      const data = await res.json();
+      // 1. Fetch leads
+      const leadsRes = await fetchWithAuth(`${API_BASE}/crm/leads`);
+      if (!leadsRes.ok) throw new Error('Falha ao buscar leads');
+      const leadsData = await leadsRes.json();
       
-      // Ordena por última interação desc
-      const sorted = Array.isArray(data) ? [...data].sort((a, b) => {
-        const aDate = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
-        const bDate = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
+      // 3. Auto-advance leads with chat history from Prospectado → Abordagem Enviada
+      const leadsToAdvance = leadsData.filter(
+        (l: any) => l.mensagem_enviada === true && l.status === 'Prospectado'
+      );
+
+      if (leadsToAdvance.length > 0) {
+        // Fire all PUT requests in parallel
+        await Promise.allSettled(
+          leadsToAdvance.map((l: any) =>
+            fetchWithAuth(`${API_BASE}/crm/leads/${l.id}`, {
+              method: 'PUT',
+              body: JSON.stringify({ ...l, status: 'Abordagem Enviada' })
+            })
+          )
+        );
+
+        // Reflect changes locally
+        leadsData.forEach((l: any) => {
+          if (l.mensagem_enviada === true && l.status === 'Prospectado') {
+            l.status = 'Abordagem Enviada';
+          }
+        });
+      }
+
+      // Sort leads: by updated_at or last_interaction descending
+      const sortedLeads = [...leadsData].sort((a: any, b: any) => {
+        const aDate = (a.updated_at || a.last_interaction) ? new Date(a.updated_at || a.last_interaction).getTime() : 0;
+        const bDate = (b.updated_at || b.last_interaction) ? new Date(b.updated_at || b.last_interaction).getTime() : 0;
         return bDate - aDate;
-      }) : [];
+      });
+      
+      setLeads(sortedLeads);
+      setLoadingLeads(false);
 
-      setLeads(sorted);
-      if (!silent && sorted.length > 0 && !activeLead) {
-        setActiveLead(sorted[0]);
-      }
+      // 2. Fetch metrics
+      const metricsRes = await fetchWithAuth(`${API_BASE}/crm/dashboard`);
+      if (!metricsRes.ok) throw new Error('Falha ao buscar indicadores');
+      const metricsData = await metricsRes.json();
+      setMetrics(metricsData);
+      setLoadingMetrics(false);
     } catch (err: any) {
-      setError(err.message || 'Erro ao conectar à API');
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  };
-
-  // 3. Carrega histórico de mensagens do lead ativo
-  const loadConversation = async (leadId: string, silent = false) => {
-    if (!silent) setLoadingMessages(true);
-    try {
-      const res = await fetchWithAuth(`${API_BASE}/crm/conversations/${leadId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(Array.isArray(data) ? data : []);
-      }
-    } catch (err) {
-      console.error("Erro ao carregar mensagens:", err);
-    } finally {
-      if (!silent) setLoadingMessages(false);
+      setError(err.message || 'Erro de conexão com a API.');
+      setLoadingLeads(false);
+      setLoadingMetrics(false);
     }
   };
 
   useEffect(() => {
-    loadSessions();
-    loadLeads();
+    fetchData();
   }, []);
 
-  useEffect(() => {
-    if (activeLead) {
-      loadConversation(activeLead.id);
-      // Se a conversa tiver um whatsapp_instance associado, ajusta o seletor de resposta
-      if (activeLead.whatsapp_instance || activeLead.session_id) {
-        setReplySessionId(activeLead.whatsapp_instance || activeLead.session_id);
+
+
+  // Filter and sort leads locally
+  const filteredLeads = useMemo(() => {
+    const filtered = leads.filter(lead => {
+      const matchesStatus = statusFilter ? lead.status === statusFilter : true;
+      const matchesOrigem = origemFilter ? lead.origem === origemFilter : true;
+      const matchesNicho = nichoFilter ? lead.nicho === nichoFilter : true;
+
+      // Contact Method Logic
+      let matchesContactMethod = true;
+      if (contactMethodFilter === 'whatsapp') {
+        const phone = lead.telefone_contato || lead.whatsapp;
+        matchesContactMethod = !!phone && String(phone).trim() !== '' && String(phone).trim().toLowerCase() !== 'null' && String(phone).trim().toLowerCase() !== 'none';
+      } else if (contactMethodFilter === 'instagram') {
+        const ig = lead.instagram;
+        matchesContactMethod = !!ig && String(ig).trim() !== '' && String(ig).trim().toLowerCase() !== 'null' && String(ig).trim().toLowerCase() !== 'none';
+      } else if (contactMethodFilter === 'email') {
+        const mail = lead.email_contato || lead.email;
+        matchesContactMethod = !!mail && String(mail).trim() !== '' && String(mail).trim().toLowerCase() !== 'null' && String(mail).trim().toLowerCase() !== 'none';
       }
-    }
-  }, [activeLead]);
 
-  // Rola o chat para o fim quando novas mensagens chegam
+      // Payload specific filters
+      const hasSite = lead.payload?.["possui site"] === true || 
+                      lead.payload?.["possui site"] === 'true' || 
+                      lead.payload?.tem_site_proprio === true || 
+                      lead.payload?.tem_site_proprio === 'true' ||
+                      (lead.payload?.site && String(lead.payload.site).trim() !== '' && String(lead.payload.site).toLowerCase() !== 'null');
+      const matchesSite = temSiteProprioFilter ? (temSiteProprioFilter === 'true' ? hasSite : !hasSite) : true;
+
+      const isSiteModerno = lead.payload?.["site moderno"] === true || lead.payload?.["site moderno"] === 'true';
+      const matchesSiteModerno = siteModernoFilter ? (siteModernoFilter === 'true' ? isSiteModerno : !isSiteModerno) : true;
+
+      const isEmpresaGrande = lead.payload?.["empresa grande"] === true || lead.payload?.["empresa grande"] === 'true';
+      const matchesEmpresaGrande = empresaGrandeFilter ? (empresaGrandeFilter === 'true' ? isEmpresaGrande : !isEmpresaGrande) : true;
+
+      const isFranquia = lead.payload?.["franquia"] === true || lead.payload?.["franquia"] === 'true';
+      const matchesFranquia = franquiaFilter ? (franquiaFilter === 'true' ? isFranquia : !isFranquia) : true;
+
+      const hasProprietario = !!lead.payload?.["proprietario"] && 
+                              String(lead.payload["proprietario"]).trim() !== '' && 
+                              String(lead.payload["proprietario"]).toLowerCase() !== 'null' &&
+                              String(lead.payload["proprietario"]).toLowerCase() !== 'none';
+      const matchesProprietario = proprietarioFilter ? (proprietarioFilter === 'true' ? hasProprietario : !hasProprietario) : true;
+
+      const hasCnpj = !!lead.payload?.["cnpj"] && 
+                      String(lead.payload["cnpj"]).trim() !== '' && 
+                      String(lead.payload["cnpj"]).toLowerCase() !== 'null' &&
+                      String(lead.payload["cnpj"]).toLowerCase() !== 'none';
+      const matchesCnpj = cnpjFilter ? (cnpjFilter === 'true' ? hasCnpj : !hasCnpj) : true;
+      
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = searchTerm 
+        ? (String(lead.id || '').toLowerCase().includes(searchLower) ||
+           String(lead.lead_id || '').toLowerCase().includes(searchLower) ||
+           lead.empresa_nome?.toLowerCase().includes(searchLower) ||
+           lead.email_contato?.toLowerCase().includes(searchLower) ||
+           String(lead.telefone_contato || '').includes(searchTerm) ||
+           lead.instagram?.toLowerCase().includes(searchLower) ||
+           lead.nicho?.toLowerCase().includes(searchLower) ||
+           lead.localizacao?.toLowerCase().includes(searchLower) ||
+           lead.origem?.toLowerCase().includes(searchLower))
+        : true;
+
+      // Card-specific KPI filters
+      let matchesKpi = true;
+      if (kpiFilter === 'conversas') {
+        matchesKpi = lead.mensagem_enviada === true || lead.status === 'Abordagem Enviada';
+      } else if (kpiFilter === 'negociacoes') {
+        matchesKpi = lead.status === 'Negociando/Objeção';
+      } else if (kpiFilter === 'fechados') {
+        matchesKpi = lead.status === 'Fechado (Win)';
+      } else if (kpiFilter === 'pendentes') {
+        matchesKpi = lead.status === 'RESPONDED' || (lead.has_messages === true && lead.mensagem_enviada === false);
+      }
+        
+      return matchesStatus && matchesOrigem && matchesNicho && matchesContactMethod &&
+             matchesSite && matchesSiteModerno && matchesEmpresaGrande && matchesFranquia && matchesProprietario && matchesCnpj && matchesSearch && matchesKpi;
+    });
+
+    // Sort: by updated_at or last_interaction descending
+    return filtered.sort((a, b) => {
+      const aDate = (a.updated_at || a.last_interaction) ? new Date(a.updated_at || a.last_interaction).getTime() : 0;
+      const bDate = (b.updated_at || b.last_interaction) ? new Date(b.updated_at || b.last_interaction).getTime() : 0;
+      return bDate - aDate;
+    });
+  }, [
+    leads, statusFilter, origemFilter, nichoFilter, contactMethodFilter,
+    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter, cnpjFilter,
+    searchTerm, kpiFilter
+  ]);
+
+  // Pagination state and computation
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
+  const totalPages = Math.ceil(filteredLeads.length / itemsPerPage);
+
+  const paginatedLeads = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredLeads.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredLeads, currentPage]);
+
+  // Reset pagination to first page when filters change
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [messages]);
+    setCurrentPage(1);
+  }, [
+    statusFilter, origemFilter, nichoFilter, contactMethodFilter,
+    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter, cnpjFilter,
+    searchTerm, kpiFilter
+  ]);
 
-  // Escuta atualizações em tempo real (SSE)
-  useEffect(() => {
-    let eventSource: EventSource | null = null;
-    let reconnectTimeout: any = null;
-
-    const connectSSE = () => {
-      const token = localStorage.getItem("admin_token");
-      if (!token) return;
-
-      const sseUrl = `${API_BASE}/webhooks/events/crm-chats?token=${encodeURIComponent(token)}`;
-      eventSource = new EventSource(sseUrl);
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.event === 'reload') {
-            loadLeads(true);
-            if (activeLead && String(activeLead.id) === String(data.lead_id)) {
-              loadConversation(data.lead_id, true);
-            }
-          }
-        } catch (e) {
-          if (event.data === 'reload') {
-            loadLeads(true);
-            if (activeLead) loadConversation(activeLead.id, true);
-          }
-        }
-      };
-
-      eventSource.onerror = (err) => {
-        if (eventSource) eventSource.close();
-        reconnectTimeout = setTimeout(connectSSE, 5000);
-      };
-    };
-
-    connectSSE();
-
-    const handleTokenRefreshed = () => {
-      if (eventSource) eventSource.close();
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      connectSSE();
-    };
-
-    window.addEventListener("token_refreshed", handleTokenRefreshed);
-
-    return () => {
-      window.removeEventListener("token_refreshed", handleTokenRefreshed);
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (eventSource) eventSource.close();
-    };
-  }, [activeLead]);
-
-  // Envio de Mensagem
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!replyText.trim() || !activeLead || sending) return;
-
-    setSending(true);
-    try {
-      const payload = {
-        lead_id: String(activeLead.id),
-        phone: activeLead.whatsapp || activeLead.phone || activeLead.id,
-        message: replyText.trim(),
-        session_id: replySessionId || activeLead.whatsapp_instance || activeLead.session_id || undefined,
-      };
-
-      await sendWhatsappMessage(payload);
-      setReplyText('');
-      await loadConversation(activeLead.id, true);
-      await loadLeads(true);
-    } catch (err: any) {
-      alert(`Falha ao enviar mensagem: ${err.message || err}`);
-    } finally {
-      setSending(false);
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'Prospectado': return 'bg-slate-100 text-slate-700 border-slate-200';
+      case 'Abordagem Enviada': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'Em Qualificação': return 'bg-amber-100 text-amber-800 border-amber-200';
+      case 'Diagnóstico/Proposta': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'Negociando/Objeção': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+      case 'Fechado (Win)': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      case 'Perdido (Loss)': return 'bg-rose-100 text-rose-800 border-rose-200';
+      default: return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
 
-  // Mapeia instâncias de WhatsApp disponíveis
-  const connectedSessionsList = useMemo(() => {
-    if (sessions.length > 0) return sessions;
-    
-    // Fallback: extrai sessões únicas a partir dos próprios leads cadastrados
-    const found = new Set<string>();
-    leads.forEach(l => {
-      const sName = l.whatsapp_instance || l.session_id;
-      if (sName) found.add(sName);
-    });
-    return Array.from(found).map(id => ({ name: id, status: 'CONNECTED' }));
-  }, [sessions, leads]);
-
-  // Filtra conversas na Bandeja de Entrada por Instância e Termo de Busca
-  const filteredLeads = useMemo(() => {
-    return leads.filter(lead => {
-      const leadSession = lead.whatsapp_instance || lead.session_id || 'default';
-      
-      // Filtro por WhatsApp
-      if (selectedSessionFilter !== 'ALL' && leadSession !== selectedSessionFilter) {
-        return false;
-      }
-
-      // Filtro por Busca (Nome, Telefone ou Mensagem)
-      if (searchTerm.trim()) {
-        const query = searchTerm.toLowerCase();
-        const nameMatch = (lead.nome || '').toLowerCase().includes(query);
-        const companyMatch = (lead.nome_empresa || '').toLowerCase().includes(query);
-        const phoneMatch = (lead.whatsapp || lead.phone || '').includes(query);
-        const msgMatch = (lead.ultima_mensagem || '').toLowerCase().includes(query);
-        return nameMatch || companyMatch || phoneMatch || msgMatch;
-      }
-
-      return true;
-    });
-  }, [leads, selectedSessionFilter, searchTerm]);
+  const formatDate = (isoString?: string) => {
+    if (!isoString) return '-';
+    try {
+      const date = new Date(isoString);
+      return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return isoString;
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-4 md:p-8 space-y-6">
-      {/* Header Principal da Bandeja de Entrada */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/80 backdrop-blur-md p-6 rounded-3xl border border-violet-100/50 shadow-sm">
+    <div className="space-y-6">
+      {/* Top Title & Dashboard metrics */}
+      <div className="flex items-center justify-between">
         <div>
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-2xl shadow-md shadow-violet-500/20">
-              <MessageSquare className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="font-display font-extrabold text-2xl text-slate-800 tracking-tight">
-                Bandeja de Entrada Multi-WhatsApp
-              </h1>
-              <p className="text-sm font-medium text-slate-500">
-                Central unificada para receber e responder conversas de todas as suas instâncias conectadas.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => { loadSessions(); loadLeads(); }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-violet-50 text-slate-700 hover:text-purple-700 font-semibold text-xs rounded-xl border border-slate-200/60 transition-all cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Atualizar Conversas
-          </button>
+          <h1 className="text-3xl font-display font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
+            <Sparkles className="w-6 h-6 text-violet-600 animate-pulse" />
+            CRM Comercial
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Centralize e gerencie sua esteira de vendas, leads prospectados, propostas e histórico de conversas.
+          </p>
         </div>
       </div>
 
-      {/* Barra de Filtros por Instância de WhatsApp (Cada uma com Cor Única) */}
-      <div className="bg-white/80 backdrop-blur-md p-4 rounded-2xl border border-violet-100/50 shadow-sm space-y-3">
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-          <Filter className="w-3.5 h-3.5" />
-          <span>Filtrar por WhatsApp Conectado</span>
+      {/* Error Banner */}
+      {error && (
+        <div className="flex items-center gap-2 p-3.5 rounded-xl bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
         </div>
+      )}
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {/* Opção Todos os WhatsApps */}
-          <button
-            onClick={() => setSelectedSessionFilter('ALL')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
-              selectedSessionFilter === 'ALL'
-                ? 'bg-slate-900 text-white border-slate-900 shadow-md shadow-slate-900/10'
-                : 'bg-slate-50 text-slate-600 border-slate-200/60 hover:bg-slate-100'
-            }`}
-          >
-            <Radio className="w-3.5 h-3.5" />
-            <span>Todos os WhatsApps</span>
-            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px]">
-              {leads.length}
-            </span>
-          </button>
+      {/* Metrics Row */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {loadingMetrics ? (
+          Array(5).fill(0).map((_, i) => (
+            <div key={i} className="glass-card p-6 h-24 flex items-center justify-center animate-pulse">
+              <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
+            </div>
+          ))
+        ) : metrics ? (
+          <>
+            <div 
+              onClick={() => setKpiFilter(null)}
+              className={`glass-card p-5 bg-white/70 border flex items-center gap-4 cursor-pointer transition-all hover:scale-[1.02] ${
+                !kpiFilter ? 'border-purple-500 shadow-sm shadow-purple-100/50' : 'border-violet-100/30'
+              }`}
+            >
+              <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-purple-700">
+                <Users className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Leads</p>
+                <p className="text-2xl font-display font-extrabold text-slate-800">{metrics.total_leads}</p>
+              </div>
+            </div>
 
-          {/* Botões para cada WhatsApp Conectado com Cor Única */}
-          {connectedSessionsList.map((session, index) => {
-            const sName = session.name || session.session_name || `Instância ${index + 1}`;
-            const palette = getSessionColor(sName);
-            const isSelected = selectedSessionFilter === sName;
-            const chatCount = leads.filter(l => (l.whatsapp_instance || l.session_id) === sName).length;
+            <div 
+              onClick={() => setKpiFilter('conversas')}
+              className={`glass-card p-5 bg-white/70 border flex items-center gap-4 cursor-pointer transition-all hover:scale-[1.02] ${
+                kpiFilter === 'conversas' ? 'border-indigo-500 shadow-sm shadow-indigo-100/50' : 'border-violet-100/30'
+              }`}
+            >
+              <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-700">
+                <MessageCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Conversas Iniciadas</p>
+                <p className="text-2xl font-display font-extrabold text-slate-800">{metrics.conversas_iniciadas}</p>
+              </div>
+            </div>
 
-            return (
-              <button
-                key={sName}
-                onClick={() => setSelectedSessionFilter(sName)}
-                style={{
-                  borderColor: isSelected ? palette.hex : undefined
-                }}
-                className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
-                  isSelected
-                    ? `${palette.bg} text-white shadow-md ${palette.glow}`
-                    : `${palette.bgLight} ${palette.text} ${palette.border} hover:opacity-90`
-                }`}
-              >
-                {/* Dot com a Cor Única */}
-                <span 
-                  className={`w-2.5 h-2.5 rounded-full shadow-sm ${isSelected ? 'bg-white' : palette.bg}`}
+            <div 
+              onClick={() => setKpiFilter('negociacoes')}
+              className={`glass-card p-5 bg-white/70 border flex items-center gap-4 cursor-pointer transition-all hover:scale-[1.02] ${
+                kpiFilter === 'negociacoes' ? 'border-blue-500 shadow-sm shadow-blue-100/50' : 'border-violet-100/30'
+              }`}
+            >
+              <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700">
+                <UserCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Negociações</p>
+                <p className="text-2xl font-display font-extrabold text-slate-800">{metrics.negociacoes}</p>
+              </div>
+            </div>
+
+            <div 
+              onClick={() => setKpiFilter('fechados')}
+              className={`glass-card p-5 bg-white/70 border flex items-center gap-4 cursor-pointer transition-all hover:scale-[1.02] ${
+                kpiFilter === 'fechados' ? 'border-emerald-500 shadow-sm shadow-emerald-100/50' : 'border-violet-100/30'
+              }`}
+            >
+              <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700">
+                <Check className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Clientes Fechados</p>
+                <p className="text-2xl font-display font-extrabold text-slate-800">{metrics.clientes_fechados}</p>
+              </div>
+            </div>
+
+            <div 
+              onClick={() => setKpiFilter('pendentes')}
+              className={`glass-card p-5 bg-white/70 border flex items-center gap-4 cursor-pointer transition-all hover:scale-[1.02] ${
+                kpiFilter === 'pendentes' ? 'border-amber-500 shadow-sm shadow-amber-100/50' : 'border-violet-100/30'
+              }`}
+            >
+              <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700">
+                <MessageSquare className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Respostas Pendentes</p>
+                <p className="text-2xl font-display font-extrabold text-slate-800">{metrics.respostas_pendentes}</p>
+              </div>
+            </div>
+          </>
+        ) : null}
+      </div>
+
+      {/* Main CRM Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+        {/* Leads Table Card */}
+        <div className="xl:col-span-12 glass-card p-6 bg-white/70 border border-violet-100/30">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <h2 className="text-lg font-bold text-slate-800">Funil de Leads</h2>
+            
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Text Search */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Buscar lead..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 pr-4 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs outline-none focus:border-purple-400 transition-all font-semibold"
                 />
-                <span>{sName}</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                  isSelected ? 'bg-white/20 text-white' : palette.badgeBg
-                }`}>
-                  {chatCount} {chatCount === 1 ? 'chat' : 'chats'}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+              </div>
 
-      {/* Grid Principal: Lista de Conversas (Esquerda) + Chat Ativo (Direita) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
-        {/* LADO ESQUERDO: Lista da Bandeja de Entrada (4 colunas) */}
-        <div className={`lg:col-span-5 bg-white/90 backdrop-blur-md rounded-3xl border border-violet-100/50 shadow-sm flex flex-col h-[750px] overflow-hidden ${
-          activeLead ? 'hidden lg:flex' : 'flex'
-        }`}>
-          {/* Busca na Bandeja */}
-          <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Buscar por nome, telefone ou mensagem..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-white rounded-xl border border-slate-200/70 text-xs font-medium text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all"
-              />
+              {/* Status Filter */}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Status (Todos)</option>
+                {dynamicStatuses.map(st => (
+                  <option key={st} value={st}>{st}</option>
+                ))}
+              </select>
+
+              {/* Origem Filter */}
+              <select
+                value={origemFilter}
+                onChange={(e) => setOrigemFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Origem (Todos)</option>
+                {dynamicOrigens.map(or => (
+                  <option key={or} value={or}>{or}</option>
+                ))}
+              </select>
+
+              {/* Nicho Filter */}
+              <select
+                value={nichoFilter}
+                onChange={(e) => setNichoFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Nicho (Todos)</option>
+                {dynamicNichos.map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+
+              {/* Contact Method Filter */}
+              <select
+                value={contactMethodFilter}
+                onChange={(e) => setContactMethodFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Meio de Contato (Todos)</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="instagram">Instagram</option>
+                <option value="email">E-mail</option>
+              </select>
+
+              {/* Tem Site Filter */}
+              <select
+                value={temSiteProprioFilter}
+                onChange={(e) => setTemSiteProprioFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Possui Site? (Todos)</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
+              </select>
+
+              {/* Site Moderno Filter */}
+              <select
+                value={siteModernoFilter}
+                onChange={(e) => setSiteModernoFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Site Moderno? (Todos)</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
+              </select>
+
+              {/* Empresa Grande Filter */}
+              <select
+                value={empresaGrandeFilter}
+                onChange={(e) => setEmpresaGrandeFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Empresa Grande? (Todos)</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
+              </select>
+
+              {/* Franquia Filter */}
+              <select
+                value={franquiaFilter}
+                onChange={(e) => setFranquiaFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Franquia? (Todos)</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
+              </select>
+
+              {/* Proprietário Filter */}
+              <select
+                value={proprietarioFilter}
+                onChange={(e) => setProprietarioFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Tem Proprietário? (Todos)</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
+              </select>
+
+              {/* CNPJ Filter */}
+              <select
+                value={cnpjFilter}
+                onChange={(e) => setCnpjFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
+              >
+                <option value="">Tem CNPJ? (Todos)</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
+              </select>
+
+              {/* Clear Filters Button */}
+              {(statusFilter || origemFilter || nichoFilter || contactMethodFilter || temSiteProprioFilter || siteModernoFilter || empresaGrandeFilter || franquiaFilter || proprietarioFilter || cnpjFilter || searchTerm || kpiFilter) && (
+                <button
+                  onClick={() => {
+                    setStatusFilter('');
+                    setOrigemFilter('');
+                    setNichoFilter('');
+                    setContactMethodFilter('');
+                    setTemSiteProprioFilter('');
+                    setSiteModernoFilter('');
+                    setEmpresaGrandeFilter('');
+                    setFranquiaFilter('');
+                    setProprietarioFilter('');
+                    setCnpjFilter('');
+                    setSearchTerm('');
+                    setKpiFilter(null);
+                  }}
+                  className="px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all cursor-pointer shadow-sm shadow-rose-100/50"
+                >
+                  Limpar Filtros
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Feed de Conversas */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100/80">
-            {loading ? (
-              <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
-                <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-                <p className="text-xs font-medium">Carregando bandeja de entrada...</p>
+          {/* Table Container */}
+          <div className="overflow-x-auto">
+            {loadingLeads ? (
+              <div className="py-20 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
               </div>
             ) : filteredLeads.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3 p-6 text-center">
-                <MessageSquare className="w-10 h-10 text-slate-300" />
-                <p className="text-sm font-semibold text-slate-600">Nenhuma conversa encontrada</p>
-                <p className="text-xs text-slate-400 max-w-xs">
-                  {searchTerm ? 'Tente alterar os termos de busca.' : 'As novas mensagens recebidas pelos WhatsApps conectados aparecerão aqui.'}
-                </p>
+              <div className="py-20 text-center text-slate-400 text-sm font-semibold">
+                Nenhum lead encontrado com os filtros selecionados.
               </div>
             ) : (
-              filteredLeads.map((lead) => {
-                const sessionName = lead.whatsapp_instance || lead.session_id || 'Indefinido';
-                const palette = getSessionColor(sessionName);
-                const isSelected = activeLead && String(activeLead.id) === String(lead.id);
+              <>
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-violet-100/50 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="py-3 px-2 max-w-[120px]">Lead ID</th>
+                      <th className="py-3 px-2">Empresa</th>
+                      <th className="py-3 px-2">Nicho</th>
+                      <th className="py-3 px-2">Status</th>
+                      <th className="py-3 px-2">Origem</th>
+                      <th className="py-3 px-2">Canais</th>
+                      <th className="py-3 px-2">Assets</th>
+                      <th className="py-3 px-2">Última Atu.</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-violet-100/30 text-xs font-medium text-slate-600">
+                    {paginatedLeads.map((lead) => {
+                      const hasWhatsApp = !!(lead.telefone_contato || lead.whatsapp) && String(lead.telefone_contato || lead.whatsapp).trim() !== '' && String(lead.telefone_contato || lead.whatsapp).toLowerCase() !== 'none' && String(lead.telefone_contato || lead.whatsapp).toLowerCase() !== 'null';
+                      const hasInstagram = !!lead.instagram && String(lead.instagram).trim() !== '' && String(lead.instagram).toLowerCase() !== 'none' && String(lead.instagram).toLowerCase() !== 'null';
+                      const hasEmail = !!(lead.email_contato || lead.email) && String(lead.email_contato || lead.email).trim() !== '' && String(lead.email_contato || lead.email).toLowerCase() !== 'none' && String(lead.email_contato || lead.email).toLowerCase() !== 'null';
+                      const hasSite = lead.payload?.["possui site"] === true || 
+                                      lead.payload?.["possui site"] === 'true' || 
+                                      lead.payload?.tem_site_proprio === true || 
+                                      lead.payload?.tem_site_proprio === 'true' ||
+                                      (lead.payload?.site && String(lead.payload.site).trim() !== '' && String(lead.payload.site).toLowerCase() !== 'null');
+                      const isSiteModerno = lead.payload?.["site moderno"] === true || lead.payload?.["site moderno"] === 'true';
+                      const isEmpresaGrande = lead.payload?.["empresa grande"] === true || lead.payload?.["empresa grande"] === 'true';
+                      const isFranquia = lead.payload?.["franquia"] === true || lead.payload?.["franquia"] === 'true';
 
-                return (
-                  <div
-                    key={lead.id}
-                    onClick={() => setActiveLead(lead)}
-                    className={`p-4 transition-all cursor-pointer flex items-start gap-3 hover:bg-violet-50/40 relative ${
-                      isSelected ? 'bg-violet-50/80 border-l-4 border-purple-600' : ''
-                    }`}
-                  >
-                    {/* Avatar do Lead com a Cor da Instância do WhatsApp */}
-                    <div 
-                      className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-white shadow-sm flex-shrink-0 relative ${palette.bg}`}
-                    >
-                      {(lead.nome || lead.nome_empresa || 'W')[0].toUpperCase()}
-
-                      {/* Pill Indicador de Cor no Avatar */}
-                      <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white flex items-center justify-center shadow-sm">
-                        <span className={`w-2.5 h-2.5 rounded-full ${palette.bg}`} />
-                      </span>
-                    </div>
-
-                    {/* Conteúdo da Conversa */}
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="font-bold text-xs text-slate-800 truncate">
-                          {lead.nome || lead.nome_empresa || lead.whatsapp || lead.phone || 'Contato sem nome'}
-                        </h3>
-                        {lead.last_interaction && (
-                          <span className="text-[10px] font-semibold text-slate-400 whitespace-nowrap">
-                            {new Date(lead.last_interaction).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Tag Única com a Cor do WhatsApp Que Recebeu a Mensagem */}
-                      <div className="flex items-center gap-1.5">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold border ${palette.badgeBg}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${palette.bg}`} />
-                          {sessionName}
-                        </span>
-                      </div>
-
-                      {/* Prévia da Mensagem */}
-                      <p className="text-xs text-slate-500 truncate font-normal">
-                        {lead.ultima_mensagem || 'Sem histórico de texto...'}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* LADO DIREITO: Painel de Chat Ativo (7 colunas) */}
-        <div className={`lg:col-span-7 bg-white/90 backdrop-blur-md rounded-3xl border border-violet-100/50 shadow-sm flex flex-col h-[750px] overflow-hidden ${
-          !activeLead ? 'hidden lg:flex' : 'flex'
-        }`}>
-          {activeLead ? (
-            <>
-              {/* Header do Chat Ativo */}
-              <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <button
-                    onClick={() => setActiveLead(null)}
-                    className="lg:hidden p-1.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-purple-700"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </button>
-
-                  {/* Avatar do Lead */}
-                  {(() => {
-                    const sessionName = activeLead.whatsapp_instance || activeLead.session_id;
-                    const palette = getSessionColor(sessionName);
-                    return (
-                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold text-white shadow-sm flex-shrink-0 ${palette.bg}`}>
-                        {(activeLead.nome || activeLead.nome_empresa || 'W')[0].toUpperCase()}
-                      </div>
-                    );
-                  })()}
-
-                  <div className="min-w-0">
-                    <h2 className="font-extrabold text-sm text-slate-800 truncate">
-                      {activeLead.nome || activeLead.nome_empresa || 'Contato WhatsApp'}
-                    </h2>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
-                        <Phone className="w-3 h-3 text-slate-400" />
-                        {activeLead.whatsapp || activeLead.phone || 'Sem número'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Badge da Instância do WhatsApp Conectada com a Cor Única */}
-                {(() => {
-                  const sessionName = activeLead.whatsapp_instance || activeLead.session_id || replySessionId || 'Desconhecido';
-                  const palette = getSessionColor(sessionName);
-                  return (
-                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold ${palette.badgeBg}`}>
-                      <span className={`w-2 h-2 rounded-full animate-pulse ${palette.bg}`} />
-                      <span>WhatsApp: {sessionName}</span>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Área de Mensagens do Chat */}
-              <div 
-                ref={chatContainerRef}
-                className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4 bg-gradient-to-b from-slate-50/30 to-white"
-              >
-                {loadingMessages ? (
-                  <div className="flex items-center justify-center py-20 text-slate-400 space-y-2">
-                    <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
-                  </div>
-                ) : messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 text-slate-400 text-center space-y-2">
-                    <Sparkles className="w-8 h-8 text-violet-300 animate-pulse" />
-                    <p className="text-xs font-medium">Inicie a conversa enviando uma mensagem abaixo.</p>
-                  </div>
-                ) : (
-                  messages.map((msg, idx) => {
-                    const isOutgoing = msg.direction === 'outgoing' || msg.sent_by_user === true;
-                    return (
-                      <div
-                        key={idx}
-                        className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'}`}
-                      >
-                        <div
-                          className={`max-w-[85%] md:max-w-[75%] px-4 py-3 rounded-2xl text-xs font-medium leading-relaxed shadow-sm ${
-                            isOutgoing
-                              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-br-none'
-                              : 'bg-slate-100 text-slate-800 rounded-bl-none border border-slate-200/50'
-                          }`}
-                        >
-                          <p className="whitespace-pre-wrap break-words">{msg.content || msg.message}</p>
-                          <div className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${
-                            isOutgoing ? 'text-purple-200' : 'text-slate-400'
-                          }`}>
-                            <span>
-                              {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                            </span>
-                            {isOutgoing && <CheckCheck className="w-3 h-3 text-purple-200" />}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Formulário de Resposta no WhatsApp */}
-              <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-100 bg-white space-y-3">
-                {/* Seletor de Sessão do WhatsApp com Cores Únicas */}
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                    <Radio className="w-3 h-3" />
-                    Disparar através do WhatsApp:
-                  </span>
-                  
-                  <select
-                    value={replySessionId}
-                    onChange={(e) => setReplySessionId(e.target.value)}
-                    className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
-                  >
-                    {connectedSessionsList.map((s, idx) => {
-                      const name = s.name || s.session_name || `WhatsApp ${idx + 1}`;
                       return (
-                        <option key={name} value={name}>
-                          ● {name} ({s.status || 'Ativo'})
-                        </option>
+                        <tr 
+                          key={lead.id} 
+                          onClick={() => window.open(`/crm/leads/${lead.id}`, '_blank')}
+                          className="hover:bg-violet-50/30 cursor-pointer transition-colors"
+                        >
+                          <td className="py-3.5 px-2 text-slate-400 max-w-[120px] truncate" title={lead.lead_id || lead.id}>
+                            #{lead.lead_id || lead.id}
+                          </td>
+                          <td className="py-3.5 px-2">
+                            <div className="font-bold text-slate-800">{lead.empresa_nome || lead.company_name}</div>
+                            <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{lead.localizacao}</div>
+                          </td>
+                          <td className="py-3.5 px-2">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                              {lead.nicho || lead.segmento || '-'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-2">
+                            <span className={`px-2 py-0.5 rounded-full border text-[10px] uppercase font-bold tracking-wide ${getStatusColor(lead.status)}`}>
+                              {lead.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-2 text-slate-500 font-semibold">{lead.origem || lead.origin}</td>
+                          <td className="py-3.5 px-2">
+                            <div className="flex items-center gap-1.5">
+                              {hasWhatsApp && (
+                                <span title={lead.telefone_contato || lead.whatsapp}>
+                                  <MessageCircle className="w-4 h-4 text-emerald-500" />
+                                </span>
+                              )}
+                              {hasInstagram && (
+                                <span title={lead.instagram}>
+                                  <Sparkles className="w-4 h-4 text-pink-500" />
+                                </span>
+                              )}
+                              {hasEmail && (
+                                <span title={lead.email_contato || lead.email}>
+                                  <AlertCircle className="w-4 h-4 text-blue-500" />
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-2">
+                            <div className="flex gap-1">
+                              {hasSite && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Possui Site" />}
+                              {isSiteModerno && <span className="w-2 h-2 rounded-full bg-blue-400" title="Site Moderno" />}
+                              {isEmpresaGrande && <span className="w-2 h-2 rounded-full bg-purple-400" title="Empresa Grande" />}
+                              {isFranquia && <span className="w-2 h-2 rounded-full bg-amber-400" title="Franquia" />}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-2 text-slate-400 whitespace-nowrap">
+                            {formatDate(lead.updated_at || lead.last_interaction)}
+                          </td>
+                        </tr>
                       );
                     })}
-                  </select>
-                </div>
+                  </tbody>
+                </table>
 
-                {/* Textarea + Botão Enviar */}
-                <div className="flex items-end gap-2">
-                  <textarea
-                    rows={2}
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                    placeholder="Digite sua resposta... (Pressione Enter para enviar)"
-                    className="flex-1 p-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 focus:bg-white transition-all resize-none"
-                  />
+                {/* Pagination Controls */}
+                {filteredLeads.length > itemsPerPage && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 pt-4 border-t border-violet-100/30 text-xs font-semibold text-slate-500">
+                    <div>
+                      Exibindo <span className="font-bold text-slate-700">{Math.min((currentPage - 1) * itemsPerPage + 1, filteredLeads.length)}</span> a{' '}
+                      <span className="font-bold text-slate-700">{Math.min(currentPage * itemsPerPage, filteredLeads.length)}</span> de{' '}
+                      <span className="font-bold text-slate-700">{filteredLeads.length}</span> leads
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="p-2 rounded-xl border border-violet-100 bg-white/50 hover:bg-violet-50 text-slate-600 disabled:opacity-40 disabled:hover:bg-white/50 transition-all cursor-pointer flex items-center justify-center animate-transition"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+                        const isCurrent = page === currentPage;
+                        const isNear = Math.abs(page - currentPage) <= 1;
+                        const isFirstOrLast = page === 1 || page === totalPages;
+                        
+                        if (!isNear && !isFirstOrLast) {
+                          if (page === 2 && currentPage > 3) {
+                            return <span key="ellipsis-start" className="px-1 text-slate-400 select-none">...</span>;
+                          }
+                          if (page === totalPages - 1 && currentPage < totalPages - 2) {
+                            return <span key="ellipsis-end" className="px-1 text-slate-400 select-none">...</span>;
+                          }
+                          return null;
+                        }
+                        
+                        return (
+                          <button
+                            key={page}
+                            type="button"
+                            onClick={() => setCurrentPage(page)}
+                            className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                              isCurrent
+                                ? 'border-purple-600 bg-purple-600 text-white shadow-md shadow-purple-200'
+                                : 'border-violet-100 bg-white/50 hover:bg-violet-50 text-slate-600'
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        );
+                      })}
 
-                  <button
-                    type="submit"
-                    disabled={sending || !replyText.trim()}
-                    className={`p-3.5 rounded-2xl font-bold text-xs text-white flex items-center justify-center transition-all cursor-pointer shadow-md ${
-                      sending || !replyText.trim()
-                        ? 'bg-slate-300 cursor-not-allowed shadow-none'
-                        : 'bg-gradient-to-r from-purple-600 via-indigo-600 to-emerald-600 hover:opacity-95 shadow-purple-600/20 active:scale-95'
-                    }`}
-                  >
-                    {sending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-              </form>
-            </>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 space-y-3">
-              <div className="p-4 bg-violet-50 text-violet-600 rounded-3xl">
-                <MessageSquare className="w-10 h-10" />
-              </div>
-              <h3 className="font-bold text-slate-700 text-base">Nenhuma conversa selecionada</h3>
-              <p className="text-xs text-slate-400 max-w-sm">
-                Selecione um contato na bandeja de entrada ao lado para visualizar o histórico de mensagens e responder.
-              </p>
-            </div>
-          )}
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        className="p-2 rounded-xl border border-violet-100 bg-white/50 hover:bg-violet-50 text-slate-600 disabled:opacity-40 disabled:hover:bg-white/50 transition-all cursor-pointer flex items-center justify-center animate-transition"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
       </div>
