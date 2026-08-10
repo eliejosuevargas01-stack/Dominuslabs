@@ -89,60 +89,100 @@ export default function ChatPopup() {
     fetchLeads();
   }, []);
 
+  const playNotificationSound = () => {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+      
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } catch (e) {
+      // Audio context permission fallback
+    }
+  };
+
   // Listen to SSE updates
   useEffect(() => {
-    const token = localStorage.getItem("admin_token");
-    if (!token || token === "null" || token === "undefined") return;
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: any = null;
 
-    const sseUrl = `${API_BASE}/webhooks/events/crm-chats?token=${encodeURIComponent(token)}`;
-    const eventSource = new EventSource(sseUrl);
+    const connectSSE = () => {
+      const token = localStorage.getItem("admin_token");
+      if (!token || token === "null" || token === "undefined") return;
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.event === 'reload' && data.lead_id) {
-          const updatedLeadId = String(data.lead_id);
-          
-          // 1. If currently chatting with this lead, refresh conversation
-          if (activeLeadId && String(activeLeadId) === updatedLeadId) {
-            fetchConversation(updatedLeadId, true);
-          } else {
-            // 2. Otherwise mark as unread and trigger global badge
-            setUnreadLeads(prev => ({ ...prev, [updatedLeadId]: true }));
-            setHasNewUpdate(true);
-          }
-          
-          // Instantly update local last_interaction and move to the top
-          setLeads(prevLeads => {
-            const updated = prevLeads.map(l => {
-              if (String(l.id) === updatedLeadId) {
-                return { ...l, last_interaction: new Date().toISOString() };
-              }
-              return l;
+      const sseUrl = `${API_BASE}/webhooks/events/crm-chats?token=${encodeURIComponent(token)}`;
+      eventSource = new EventSource(sseUrl);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.event === 'reload' && data.lead_id) {
+            const updatedLeadId = String(data.lead_id);
+            
+            playNotificationSound();
+
+            // 1. If currently chatting with this lead, refresh conversation
+            if (activeLeadId && String(activeLeadId) === updatedLeadId) {
+              fetchConversation(updatedLeadId, true);
+            } else {
+              // 2. Otherwise mark as unread and trigger global badge
+              setUnreadLeads(prev => ({ ...prev, [updatedLeadId]: true }));
+              setHasNewUpdate(true);
+            }
+            
+            // Instantly update local last_interaction and move to the top
+            setLeads(prevLeads => {
+              const updated = prevLeads.map(l => {
+                if (String(l.id) === updatedLeadId) {
+                  return { ...l, last_interaction: new Date().toISOString() };
+                }
+                return l;
+              });
+              return sortLeadsByInteraction(updated);
             });
-            return sortLeadsByInteraction(updated);
-          });
-          
-          // 3. Silently update leads list to show last_interaction updates
-          fetchLeads(true);
-        }
-      } catch (err) {
-        // Fallback if message is plain string "reload"
-        if (event.data === 'reload') {
-          fetchLeads(true);
-          if (activeLeadId) {
-            fetchConversation(activeLeadId, true);
+            
+            // 3. Silently update leads list to show last_interaction updates
+            fetchLeads(true);
+          }
+        } catch (err) {
+          // Fallback if message is plain string "reload"
+          if (event.data === 'reload') {
+            playNotificationSound();
+            fetchLeads(true);
+            if (activeLeadId) {
+              fetchConversation(activeLeadId, true);
+            }
           }
         }
-      }
+      };
+
+      eventSource.onerror = (err) => {
+        console.warn('SSE EventSource disconnected, retrying with fresh token in 5s...', err);
+        if (eventSource) {
+          eventSource.close();
+        }
+        reconnectTimeout = setTimeout(connectSSE, 5000);
+      };
     };
 
-    eventSource.onerror = (err) => {
-      console.error('Global SSE Error in ChatPopup:', err);
-    };
+    connectSSE();
 
     return () => {
-      eventSource.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (eventSource) eventSource.close();
     };
   }, [activeLeadId]);
 

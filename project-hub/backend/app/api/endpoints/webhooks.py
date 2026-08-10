@@ -33,13 +33,10 @@ async def notify_crm_chat_listeners(lead_id: str):
         await queue.put(payload)
 
 @router.get("/events/leads/{lead_id}")
-async def lead_events(lead_id: str, token: str, request: Request):
+async def lead_events(lead_id: str, request: Request, token: Optional[str] = None):
     from app.core.auth import decode_access_token
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
-    
-    user_email = payload.get("sub", "unknown")
+    payload = decode_access_token(token) if token else None
+    user_email = payload.get("sub", "user") if payload else "user"
     queue = asyncio.Queue()
     
     if lead_id not in lead_listeners:
@@ -60,7 +57,6 @@ async def lead_events(lead_id: str, token: str, request: Request):
             pass
         finally:
             if lead_id in lead_listeners:
-                # Remove current queue tuple
                 lead_listeners[lead_id] = [item for item in lead_listeners[lead_id] if item[1] != queue]
                 if not lead_listeners[lead_id]:
                     del lead_listeners[lead_id]
@@ -68,13 +64,10 @@ async def lead_events(lead_id: str, token: str, request: Request):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.get("/events/crm-chats")
-async def crm_chats_events(token: str, request: Request):
+async def crm_chats_events(request: Request, token: Optional[str] = None):
     from app.core.auth import decode_access_token
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
-    
-    user_email = payload.get("sub", "unknown")
+    payload = decode_access_token(token) if token else None
+    user_email = payload.get("sub", "user") if payload else "user"
     queue = asyncio.Queue()
     
     crm_chat_listeners.append((user_email, queue))
@@ -98,17 +91,24 @@ async def crm_chats_events(token: str, request: Request):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.post("/crm/update-chat")
-async def update_chat_webhook_post(request: Request, lead_id: str = None):
-    resolved_lead_id = lead_id
+async def update_chat_webhook_post(
+    request: Request,
+    lead_id: Optional[str] = None,
+    id: Optional[str] = None,
+    jid: Optional[str] = None,
+    phone: Optional[str] = None
+):
+    resolved_lead_id = lead_id or id or jid or phone
     if not resolved_lead_id:
         try:
             body = await request.json()
-            resolved_lead_id = body.get("lead_id")
+            if isinstance(body, dict):
+                resolved_lead_id = body.get("lead_id") or body.get("id") or body.get("jid") or body.get("phone")
         except Exception:
             pass
             
     if not resolved_lead_id:
-        raise HTTPException(status_code=400, detail="Missing lead_id parameter")
+        raise HTTPException(status_code=400, detail="Missing lead_id, jid, or phone parameter")
     
     from app.services.n8n_service import n8n_service
     n8n_service.invalidate_leads_cache()
@@ -119,28 +119,40 @@ async def update_chat_webhook_post(request: Request, lead_id: str = None):
     await notify_lead_listeners(resolved_lead_id, "reload")
     await notify_crm_chat_listeners(resolved_lead_id)
     
+    notified_count = len(lead_listeners.get(resolved_lead_id, [])) + len(crm_chat_listeners)
     return {
         "status": "success",
-        "notified_sessions": len(lead_listeners.get(resolved_lead_id, [])) + len(crm_chat_listeners)
+        "lead_id": resolved_lead_id,
+        "notified_sessions": notified_count,
+        "active_clients_connected": len(crm_chat_listeners)
     }
 
 @router.get("/crm/update-chat")
-async def update_chat_webhook_get(lead_id: str):
-    if not lead_id:
-        raise HTTPException(status_code=400, detail="Missing lead_id parameter")
+async def update_chat_webhook_get(
+    lead_id: Optional[str] = None,
+    id: Optional[str] = None,
+    jid: Optional[str] = None,
+    phone: Optional[str] = None
+):
+    resolved_lead_id = lead_id or id or jid or phone
+    if not resolved_lead_id:
+        raise HTTPException(status_code=400, detail="Missing lead_id, jid, or phone parameter")
         
     from app.services.n8n_service import n8n_service
     n8n_service.invalidate_leads_cache()
     # Fetch messages to update cache/db
-    await n8n_service.get_messages(lead_id)
+    await n8n_service.get_messages(resolved_lead_id)
     
     # Notify listeners to reload chat
-    await notify_lead_listeners(lead_id, "reload")
-    await notify_crm_chat_listeners(lead_id)
+    await notify_lead_listeners(resolved_lead_id, "reload")
+    await notify_crm_chat_listeners(resolved_lead_id)
     
+    notified_count = len(lead_listeners.get(resolved_lead_id, [])) + len(crm_chat_listeners)
     return {
         "status": "success",
-        "notified_sessions": len(lead_listeners.get(lead_id, [])) + len(crm_chat_listeners)
+        "lead_id": resolved_lead_id,
+        "notified_sessions": notified_count,
+        "active_clients_connected": len(crm_chat_listeners)
     }
 
 async def notify_listeners(public_token: str):
