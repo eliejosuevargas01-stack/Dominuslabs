@@ -432,9 +432,11 @@ export default function InboxView() {
               </div>
             ) : (
               filteredLeads.map((lead) => {
-                const sessionName = lead.whatsapp_instance || lead.session_id || 'Indefinido';
+                const sessionName = lead.session_id || lead.whatsapp_instance || 'Indefinido';
                 const palette = getSessionColor(sessionName);
                 const isSelected = activeLead && String(activeLead.id) === String(lead.id);
+                const displayName = lead.push_name || lead.nome || lead.nome_empresa || lead.display_phone || lead.whatsapp || lead.phone || 'Contato WhatsApp';
+                const displayPhone = lead.display_phone || lead.whatsapp || lead.phone || '';
 
                 return (
                   <div
@@ -444,20 +446,36 @@ export default function InboxView() {
                       isSelected ? 'bg-violet-50/80 border-l-4 border-purple-600' : ''
                     }`}
                   >
-                    {/* Avatar do Lead com a Cor da Instância do WhatsApp */}
-                    <div 
-                      className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-white shadow-sm flex-shrink-0 relative ${palette.bg}`}
-                    >
-                      {(lead.nome || lead.nome_empresa || 'W')[0].toUpperCase()}
-                      <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white flex items-center justify-center shadow-sm">
-                        <span className={`w-2.5 h-2.5 rounded-full ${palette.bg}`} />
-                      </span>
-                    </div>
+                    {/* Avatar do Lead com a Cor da Instância do WhatsApp ou foto de perfil */}
+                    {lead.profile_pic_url ? (
+                      <div className="relative flex-shrink-0">
+                        <img 
+                          src={lead.profile_pic_url} 
+                          alt={displayName}
+                          className="w-11 h-11 rounded-2xl object-cover border border-slate-200 shadow-sm"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                        <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white flex items-center justify-center shadow-sm">
+                          <span className={`w-2.5 h-2.5 rounded-full ${palette.bg}`} />
+                        </span>
+                      </div>
+                    ) : (
+                      <div 
+                        className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-white shadow-sm flex-shrink-0 relative ${palette.bg}`}
+                      >
+                        {displayName[0].toUpperCase()}
+                        <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white flex items-center justify-center shadow-sm">
+                          <span className={`w-2.5 h-2.5 rounded-full ${palette.bg}`} />
+                        </span>
+                      </div>
+                    )}
 
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-center justify-between gap-2">
                         <h3 className="font-bold text-xs text-slate-800 truncate">
-                          {lead.nome || lead.nome_empresa || lead.whatsapp || lead.phone || 'Contato sem nome'}
+                          {displayName}
                         </h3>
                         {lead.last_interaction && (
                           <span className="text-[10px] font-semibold text-slate-400 whitespace-nowrap">
@@ -471,6 +489,11 @@ export default function InboxView() {
                           <span className={`w-1.5 h-1.5 rounded-full ${palette.bg}`} />
                           {sessionName}
                         </span>
+                        {displayPhone && (
+                          <span className="text-[10px] font-medium text-slate-400 truncate">
+                            {displayPhone}
+                          </span>
+                        )}
                       </div>
 
                       <p className="text-xs text-slate-500 truncate font-normal">
@@ -501,23 +524,31 @@ export default function InboxView() {
                   </button>
 
                   {(() => {
-                    const sessionName = activeLead.whatsapp_instance || activeLead.session_id;
+                    const sessionName = activeLead.session_id || activeLead.whatsapp_instance;
                     const palette = getSessionColor(sessionName);
-                    return (
+                    const displayName = activeLead.push_name || activeLead.nome || activeLead.nome_empresa || 'Contato WhatsApp';
+                    
+                    return activeLead.profile_pic_url ? (
+                      <img 
+                        src={activeLead.profile_pic_url} 
+                        alt={displayName}
+                        className="w-10 h-10 rounded-2xl object-cover border border-slate-200 shadow-sm flex-shrink-0"
+                      />
+                    ) : (
                       <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold text-white shadow-sm flex-shrink-0 ${palette.bg}`}>
-                        {(activeLead.nome || activeLead.nome_empresa || 'W')[0].toUpperCase()}
+                        {displayName[0].toUpperCase()}
                       </div>
                     );
                   })()}
 
                   <div className="min-w-0">
                     <h2 className="font-extrabold text-sm text-slate-800 truncate">
-                      {activeLead.nome || activeLead.nome_empresa || 'Contato WhatsApp'}
+                      {activeLead.push_name || activeLead.nome || activeLead.nome_empresa || 'Contato WhatsApp'}
                     </h2>
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
                         <Phone className="w-3 h-3 text-slate-400" />
-                        {activeLead.whatsapp || activeLead.phone || 'Sem número'}
+                        {activeLead.display_phone || activeLead.whatsapp || activeLead.phone || 'Sem número'}
                       </span>
                     </div>
                   </div>
