@@ -289,9 +289,17 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     mapped_lead = {
         **lead,
         "id": lead_id,
+        "push_name": lead.get("push_name") or lead.get("nome") or company_name,
+        "nome": lead.get("push_name") or lead.get("nome") or company_name,
         "company_name": company_name,
-        "whatsapp": whatsapp,
-        "telefone_contato": whatsapp,
+        "empresa_nome": company_name,
+        "display_phone": lead.get("display_phone") or whatsapp,
+        "whatsapp": whatsapp or lead.get("display_phone") or "",
+        "telefone_contato": whatsapp or lead.get("display_phone") or "",
+        "session_id": lead.get("session_id") or lead.get("whatsapp_instance") or "default",
+        "whatsapp_instance": lead.get("session_id") or lead.get("whatsapp_instance") or "default",
+        "contact_jid": lead.get("contact_jid") or lead.get("jid") or "",
+        "profile_pic_url": lead.get("profile_pic_url") or "",
         "instagram": instagram,
         "email": email,
         "email_contato": email,
@@ -386,9 +394,40 @@ def parse_embedded_timestamp(text: str) -> tuple[str, str | None]:
 
 def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
     mapped = []
+
+    # Support direct whats-api / n8n incoming message object
+    if "is_from_me" in msg or "message_id" in msg or "contact_jid" in msg or "push_name" in msg or "session_id" in msg:
+        msg_id = str(msg.get("message_id") or msg.get("id") or "")
+        is_from_me = msg.get("is_from_me", False)
+        sender = "user" if is_from_me else "lead"
+        direction = "outgoing" if is_from_me else "incoming"
+        raw_text = msg.get("message") or msg.get("content") or msg.get("text") or msg.get("body") or msg.get("conversation") or ""
+        ts = msg.get("message_timestamp") or msg.get("created_at") or msg.get("timestamp") or msg.get("createdAt")
+
+        mapped.append({
+            "id": msg_id,
+            "message_id": msg_id,
+            "session_id": msg.get("session_id"),
+            "contact_jid": msg.get("contact_jid"),
+            "is_from_me": is_from_me,
+            "sender": sender,
+            "direction": direction,
+            "sent_by_user": is_from_me,
+            "message": raw_text,
+            "content": raw_text,
+            "push_name": msg.get("push_name"),
+            "display_phone": msg.get("display_phone"),
+            "profile_pic_url": msg.get("profile_pic_url"),
+            "channel": lead_channel,
+            "timestamp": ts,
+            "status": msg.get("status", "received")
+        })
+        return mapped
+
+    # Support legacy composite message object
     msg_id = str(msg.get("id", ""))
-    created_at = msg.get("createdAt") or msg.get("data")
-    updated_at = msg.get("updatedAt") or msg.get("data")
+    created_at = msg.get("createdAt") or msg.get("data") or msg.get("created_at")
+    updated_at = msg.get("updatedAt") or msg.get("data") or msg.get("updated_at")
 
     user_text = msg.get("mensagem_enviada")
     if user_text is not None and str(user_text).strip().lower() not in ("null", ""):
@@ -396,7 +435,10 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         mapped.append({
             "id": f"{msg_id}_user",
             "sender": "user",
+            "direction": "outgoing",
+            "sent_by_user": True,
             "message": cleaned_text,
+            "content": cleaned_text,
             "channel": lead_channel,
             "timestamp": embedded_ts or created_at
         })
@@ -404,7 +446,10 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         mapped.append({
             "id": f"{msg_id}_user_fallback",
             "sender": "user",
+            "direction": "outgoing",
+            "sent_by_user": True,
             "message": "Mensagem enviada",
+            "content": "Mensagem enviada",
             "channel": lead_channel,
             "timestamp": created_at
         })
@@ -415,7 +460,10 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         mapped.append({
             "id": f"{msg_id}_lead",
             "sender": "lead",
+            "direction": "incoming",
+            "sent_by_user": False,
             "message": cleaned_text,
+            "content": cleaned_text,
             "channel": lead_channel,
             "timestamp": embedded_ts or updated_at
         })
