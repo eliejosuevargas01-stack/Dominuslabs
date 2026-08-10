@@ -221,7 +221,8 @@ export default function InboxView() {
         }
       };
 
-      eventSource.onerror = (err) => {
+      eventSource.onerror = (_err) => {
+        console.warn('SSE disconnected notice:', _err);
         if (eventSource) eventSource.close();
         reconnectTimeout = setTimeout(connectSSE, 5000);
       };
@@ -331,7 +332,12 @@ export default function InboxView() {
         </div>
       </div>
 
-      {/* Barra de Filtros por Instância de WhatsApp (Cada uma com Cor Única) */}
+      {/* Error Banner */}
+      {error && (
+        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold">
+          <span>{error}</span>
+        </div>
+      )}
       <div className="bg-white/80 backdrop-blur-md p-4 rounded-2xl border border-violet-100/50 shadow-sm space-y-3">
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
           <Filter className="w-3.5 h-3.5" />
