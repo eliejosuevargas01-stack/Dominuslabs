@@ -204,7 +204,20 @@ export default function InboxView() {
           }
         }
 
-        setMessages(deduped);
+        setMessages((prevMessages) => {
+          const pendingTemps = prevMessages.filter(m => {
+            if (!m.id || !String(m.id).startsWith('temp_')) return false;
+            const tempContent = String(m.content || m.message || '').trim();
+            const alreadyInN8n = deduped.some(nm => {
+              const nmContent = String(nm.content || nm.message || '').trim();
+              const isOutgoing = nm.is_from_me === true || nm.sent_by_user === true || nm.direction === 'outgoing' || nm.sender === 'user';
+              return isOutgoing && nmContent === tempContent;
+            });
+            return !alreadyInN8n;
+          });
+
+          return [...deduped, ...pendingTemps];
+        });
       }
     } catch (err) {
       console.error("Erro ao carregar mensagens:", err);
