@@ -410,6 +410,29 @@ def parse_embedded_timestamp(text: str) -> tuple[str, str | None]:
         return cleaned_text, iso_ts
     return text, None
 
+def extract_text_content(m: dict) -> str:
+    if not isinstance(m, dict):
+        return ""
+
+    for field in ["content", "message", "text", "body", "caption", "conversation"]:
+        val = m.get(field)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+
+    for field in ["message", "content", "extendedTextMessage"]:
+        val = m.get(field)
+        if isinstance(val, dict):
+            sub_text = extract_text_content(val)
+            if sub_text:
+                return sub_text
+
+    if "extendedTextMessage" in m and isinstance(m["extendedTextMessage"], dict):
+        text_val = m["extendedTextMessage"].get("text") or m["extendedTextMessage"].get("caption")
+        if isinstance(text_val, str) and text_val.strip():
+            return text_val.strip()
+
+    return ""
+
 def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
     mapped = []
 
@@ -433,7 +456,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             sender = "user" if is_from_me else "lead"
             direction = "outgoing" if is_from_me else "incoming"
 
-            raw_text = m.get("content") or m.get("message") or m.get("text") or m.get("body") or m.get("caption") or ""
+            raw_text = extract_text_content(m)
             image_url = m.get("image_url") or m.get("media_url") or m.get("url") or m.get("file_url") or m.get("image") or ""
             if image_url and image_url.startswith("/"):
                 image_url = f"https://whats.dominuslabs.online{image_url}"
@@ -472,7 +495,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         sender = "user" if is_from_me else "lead"
         direction = "outgoing" if is_from_me else "incoming"
         
-        raw_text = msg.get("caption") or msg.get("message") or msg.get("content") or msg.get("text") or msg.get("body") or msg.get("conversation") or ""
+        raw_text = extract_text_content(msg)
         image_url = msg.get("image_url") or msg.get("media_url") or msg.get("url") or msg.get("file_url") or msg.get("image") or ""
         profile_pic_url = msg.get("profile_pic_url") or ""
 

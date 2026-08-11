@@ -106,6 +106,24 @@ export function getSessionColor(sessionId: string | undefined | null) {
   return WHATSAPP_COLOR_PALETTES[index];
 }
 
+const extractStringText = (val: any): string => {
+  if (!val) return '';
+  if (typeof val === 'string') return val.trim();
+  if (typeof val === 'number') return String(val);
+  if (typeof val === 'object') {
+    if (typeof val.text === 'string' && val.text.trim()) return val.text.trim();
+    if (typeof val.content === 'string' && val.content.trim()) return val.content.trim();
+    if (typeof val.message === 'string' && val.message.trim()) return val.message.trim();
+    if (typeof val.body === 'string' && val.body.trim()) return val.body.trim();
+    if (typeof val.conversation === 'string' && val.conversation.trim()) return val.conversation.trim();
+    if (val.extendedTextMessage) {
+      if (typeof val.extendedTextMessage.text === 'string') return val.extendedTextMessage.text.trim();
+      if (typeof val.extendedTextMessage.caption === 'string') return val.extendedTextMessage.caption.trim();
+    }
+  }
+  return '';
+};
+
 export default function InboxView() {
   const [leads, setLeads] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
@@ -695,7 +713,13 @@ const normalizeSessionName = (name?: string) => {
                 ) : (
                   messages.map((msg, idx) => {
                     const isOutgoing = msg.is_from_me === true || msg.direction === 'outgoing' || msg.sent_by_user === true || msg.sender === 'user';
-                    const textContent = msg.content || msg.message || msg.text || msg.body || '';
+                    const textContent = extractStringText(msg.content) || 
+                                      extractStringText(msg.message) || 
+                                      extractStringText(msg.text) || 
+                                      extractStringText(msg.body) || 
+                                      extractStringText(msg.caption) || 
+                                      extractStringText(msg.conversation) || 
+                                      extractStringText(msg);
                     const isAudioMsg = msg.message_type === 'audioMessage' || textContent.toLowerCase() === '[audio]';
                     const rawMediaUrl = msg.image_url || msg.media_url || msg.url || msg.file_url || (msg.message_type === 'imageMessage' || msg.message_type === 'image' ? textContent : '');
                     const imageUrl = isAudioMsg ? '' : resolveMediaUrl(rawMediaUrl);
