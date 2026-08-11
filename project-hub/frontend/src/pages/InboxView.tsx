@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   MessageSquare, Search, Send, Loader2, Sparkles, CheckCheck,
-  RefreshCw, Filter, Phone, Radio, ArrowLeft
+  RefreshCw, Filter, Phone, Radio, ArrowLeft, Mic
 } from 'lucide-react';
 import { API_BASE, fetchWithAuth, fetchWhatsappSessions, sendWhatsappMessage } from '../services/api';
 
@@ -601,8 +601,9 @@ export default function InboxView() {
                   messages.map((msg, idx) => {
                     const isOutgoing = msg.is_from_me === true || msg.direction === 'outgoing' || msg.sent_by_user === true || msg.sender === 'user';
                     const textContent = msg.content || msg.message || msg.text || msg.body || '';
+                    const isAudioMsg = msg.message_type === 'audioMessage' || textContent.toLowerCase() === '[audio]';
                     const rawMediaUrl = msg.image_url || msg.media_url || msg.url || msg.file_url || (msg.message_type === 'imageMessage' || msg.message_type === 'image' ? textContent : '');
-                    const imageUrl = resolveMediaUrl(rawMediaUrl);
+                    const imageUrl = isAudioMsg ? '' : resolveMediaUrl(rawMediaUrl);
 
                     return (
                       <div
@@ -632,8 +633,18 @@ export default function InboxView() {
                             </div>
                           )}
 
+                          {/* Audio rendering */}
+                          {isAudioMsg && (
+                            <div className={`flex items-center gap-2.5 px-3 py-2 rounded-xl mb-1 ${
+                              isOutgoing ? 'bg-white/15 text-white' : 'bg-slate-200/70 text-slate-800'
+                            }`}>
+                              <Mic className={`w-4 h-4 animate-pulse ${isOutgoing ? 'text-purple-200' : 'text-purple-600'}`} />
+                              <span className="font-bold text-[11px]">Mensagem de Áudio</span>
+                            </div>
+                          )}
+
                           {/* Caption or text content */}
-                          {textContent && (!imageUrl || textContent !== rawMediaUrl) && (
+                          {textContent && !isAudioMsg && (!imageUrl || textContent !== rawMediaUrl) && (
                             <p className="whitespace-pre-wrap break-words">{textContent}</p>
                           )}
 

@@ -877,6 +877,61 @@ class N8NService:
                 logger.error(f"Error calling Scrapper webhook: {e}")
                 return {"status": "error", "message": str(e)}
 
+def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
+    if not isinstance(raw_leads, list):
+        return []
+
+    unpacked = []
+    for item in raw_leads:
+        if not isinstance(item, dict):
+            continue
+
+        if "mensagens" in item and isinstance(item["mensagens"], list) and len(item["mensagens"]) > 0:
+            top_session_id = item.get("session_id", "")
+            contacts_map = {}
+            for m in item["mensagens"]:
+                if not isinstance(m, dict):
+                    continue
+
+                c_jid = m.get("contact_jid") or m.get("jid") or item.get("contact_jid") or item.get("jid") or ""
+                if not c_jid:
+                    c_jid = m.get("push_name") or m.get("display_phone") or "unknown_contact"
+
+                if c_jid not in contacts_map:
+                    profile_pic = m.get("profile_pic_url") or item.get("profile_pic_url") or ""
+                    if profile_pic and profile_pic.startswith("/"):
+                        profile_pic = f"https://whats.dominuslabs.online{profile_pic}"
+
+                    contacts_map[c_jid] = {
+                        "jid": c_jid,
+                        "contact_jid": c_jid,
+                        "push_name": m.get("push_name") or item.get("push_name") or "Contato Sem Nome",
+                        "display_phone": m.get("display_phone") or item.get("display_phone") or "",
+                        "profile_pic_url": profile_pic,
+                        "session_id": m.get("session_id") or top_session_id,
+                        "created_at": m.get("created_at") or m.get("message_timestamp") or item.get("created_at"),
+                        "mensagens": []
+                    }
+
+                if m.get("push_name") and m.get("push_name") != "Desconhecido":
+                    contacts_map[c_jid]["push_name"] = m.get("push_name")
+                if m.get("display_phone"):
+                    contacts_map[c_jid]["display_phone"] = m.get("display_phone")
+                if m.get("profile_pic_url") and m.get("profile_pic_url") != "changed":
+                    pic = m.get("profile_pic_url")
+                    if pic and pic.startswith("/"):
+                        pic = f"https://whats.dominuslabs.online{pic}"
+                    contacts_map[c_jid]["profile_pic_url"] = pic
+
+                contacts_map[c_jid]["mensagens"].append(m)
+
+            for c_info in contacts_map.values():
+                unpacked.append(c_info)
+        else:
+            unpacked.append(item)
+
+    return unpacked
+
     @staticmethod
     async def get_leads() -> List[dict]:
         url = settings.CRM_GET_LEADS_WEBHOOK_URL
@@ -910,6 +965,8 @@ class N8NService:
                     raw_leads = data
                 elif isinstance(data, dict) and "leads" in data:
                     raw_leads = data["leads"]
+                elif isinstance(data, dict) and "mensagens" in data:
+                    raw_leads = [data]
             except Exception as e:
                 logger.error(f"Error calling GET leads webhook: {e}. Falling back to mock data.")
 
@@ -922,6 +979,7 @@ class N8NService:
             N8NService._leads_cache_url = url
             return mapped_mock
 
+        raw_leads = unpack_n8n_raw_leads(raw_leads)
         mapped_leads = [map_n8n_lead(l) for l in raw_leads if isinstance(l, dict)]
         mapped_leads.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
         mapped_leads.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
@@ -1171,14 +1229,22 @@ class N8NService:
 
                 # Map and flatten messages
                 existing_ids = {m.get("id") for m in all_msgs if m.get("id")}
+                target_id_str = str(lead_id).strip()
                 for m in raw_msgs:
                     if isinstance(m, dict):
-                        # Filter by lead_id in Python if N8N returned all conversation histories
                         m_lead_id = str(m.get("lead_id") or m.get("leadId") or "")
-                        if m_lead_id and m_lead_id != str(lead_id):
+                        if m_lead_id and m_lead_id != target_id_str:
                             continue
                         mapped_list = map_n8n_message(m, lead_channel)
                         for mapped_msg in mapped_list:
+                            c_jid = str(mapped_msg.get("contact_jid") or mapped_msg.get("jid") or "")
+                            c_phone = str(mapped_msg.get("display_phone") or "")
+                            c_push = str(mapped_msg.get("push_name") or "")
+
+                            # Filter out messages belonging to other contacts
+                            if c_jid and target_id_str not in (c_jid, c_phone, c_push) and c_jid not in target_id_str:
+                                continue
+
                             if mapped_msg.get("id") not in existing_ids:
                                 all_msgs.append(mapped_msg)
                                 existing_ids.add(mapped_msg.get("id"))
