@@ -145,12 +145,25 @@ def safe_parse_json(val: Any) -> dict:
     return {}
 
 def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
-    lead_id = str(lead.get("jid") or lead.get("contact_jid") or lead.get("id") or lead.get("lead_id") or lead.get("_id") or "")
-    if not lead_id or lead_id.lower() == "none":
-        lead_id = str(lead.get("id", lead.get("lead_id", lead.get("_id", ""))))
+    raw_id = str(lead.get("id") or lead.get("lead_id") or lead.get("_id") or "")
+    c_jid = str(lead.get("contact_jid") or lead.get("jid") or "")
+    session_id = lead.get("session_id") or lead.get("whatsapp_instance") or ""
+
+    if raw_id and "___" in raw_id:
+        lead_id = raw_id
+    elif c_jid and session_id and session_id != "default":
+        lead_id = f"{c_jid}___{session_id}"
+    elif c_jid:
+        lead_id = c_jid
+    elif raw_id:
+        lead_id = raw_id
+    else:
+        lead_id = "unknown_lead"
 
     if lead_id and lead_id.lower() != "none" and lead_id != "":
         RAW_LEADS_CACHE[lead_id] = copy.deepcopy(lead)
+        if c_jid and c_jid != lead_id and c_jid not in RAW_LEADS_CACHE:
+            RAW_LEADS_CACHE[c_jid] = copy.deepcopy(lead)
 
     raw_payload = lead.get("payload")
     payload_dict = safe_parse_json(raw_payload) if isinstance(raw_payload, str) else (raw_payload or {})
@@ -263,15 +276,18 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     last_interaction = lead.get("last_interaction") or lead.get("updated_at") or lead.get("updatedAt") or lead.get("created_at") or lead.get("data_coleta")
     created_at = lead.get("created_at") or lead.get("createdAt") or lead.get("data_coleta")
 
-    ultima_mensagem = ""
+    ultima_mensagem = lead.get("ultima_mensagem") or lead.get("content") or lead.get("message") or ""
     if "mensagens" in lead and isinstance(lead["mensagens"], list) and len(lead["mensagens"]) > 0:
         has_messages = True
-        last_m = lead["mensagens"][-1]
-        if isinstance(last_m, dict):
-            ultima_mensagem = last_m.get("content") or last_m.get("message") or ""
-            ts_last = last_m.get("message_timestamp") or last_m.get("created_at")
-            if ts_last and (not last_interaction or ts_last > str(last_interaction)):
-                last_interaction = ts_last
+        for m in reversed(lead["mensagens"]):
+            if isinstance(m, dict):
+                m_txt = m.get("content") or m.get("message") or ""
+                if m_txt:
+                    ultima_mensagem = m_txt
+                    ts_last = m.get("message_timestamp") or m.get("created_at")
+                    if ts_last and (not last_interaction or ts_last > str(last_interaction)):
+                        last_interaction = ts_last
+                    break
 
     raw_falha = lead.get("falha_identificada")
     falha_identificada = ""
@@ -466,7 +482,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             mapped.append({
                 "id": msg_id,
                 "message_id": msg_id,
-                "session_id": session_id,
+                "session_id": m.get("session_id") or session_id,
                 "contact_jid": contact_jid,
                 "is_from_me": is_from_me,
                 "sender": sender,
@@ -868,19 +884,22 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
         if not isinstance(item, dict):
             continue
 
-        if "mensagens" in item and isinstance(item["mensagens"], list) and len(item["mensagens"]) > 0:
+        c_jid = item.get("contact_jid") or item.get("jid") or ""
+        s_id = item.get("session_id") or item.get("whatsapp_instance") or ""
+
+        if "mensagens" in item and isinstance(item["mensagens"], list) and len(item["mensagens"]) > 0 and not c_jid:
             top_session_id = item.get("session_id", "")
             contacts_map = {}
             for m in item["mensagens"]:
                 if not isinstance(m, dict):
                     continue
 
-                c_jid = m.get("contact_jid") or m.get("jid") or item.get("contact_jid") or item.get("jid") or ""
-                if not c_jid:
-                    c_jid = m.get("push_name") or m.get("display_phone") or "unknown_contact"
+                m_c_jid = m.get("contact_jid") or m.get("jid") or ""
+                if not m_c_jid:
+                    m_c_jid = m.get("push_name") or m.get("display_phone") or "unknown_contact"
 
                 m_session_id = m.get("session_id") or top_session_id or ""
-                group_key = f"{c_jid}___{m_session_id}" if m_session_id else c_jid
+                group_key = f"{m_c_jid}___{m_session_id}" if m_session_id else m_c_jid
 
                 if group_key not in contacts_map:
                     profile_pic = m.get("profile_pic_url") or item.get("profile_pic_url") or ""
@@ -889,8 +908,8 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
 
                     contacts_map[group_key] = {
                         "id": group_key,
-                        "jid": c_jid,
-                        "contact_jid": c_jid,
+                        "jid": m_c_jid,
+                        "contact_jid": m_c_jid,
                         "push_name": m.get("push_name") or item.get("push_name") or "Contato Sem Nome",
                         "display_phone": m.get("display_phone") or item.get("display_phone") or "",
                         "profile_pic_url": profile_pic,
@@ -915,7 +934,12 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
             for c_info in contacts_map.values():
                 unpacked.append(c_info)
         else:
-            unpacked.append(item)
+            item_copy = copy.deepcopy(item)
+            if c_jid and s_id and s_id != "default":
+                group_key = f"{c_jid}___{s_id}"
+                item_copy["id"] = group_key
+                item_copy["lead_id"] = group_key
+            unpacked.append(item_copy)
 
     return unpacked
 
@@ -1207,32 +1231,58 @@ class N8NService:
     async def get_messages(lead_id: str) -> List[dict]:
         all_msgs = list(MOCK_CONVERSATIONS.get(lead_id, []))
         url = settings.CRM_GET_MESSAGES_WEBHOOK_URL
+
+        target_id_str = str(lead_id).strip()
+        target_jid = target_id_str
+        target_session = None
+        if "___" in target_id_str:
+            parts = target_id_str.split("___", 1)
+            target_jid = parts[0]
+            target_session = parts[1]
+
+        cached_lead = RAW_LEADS_CACHE.get(lead_id)
+        if not cached_lead:
+            cached_lead = RAW_LEADS_CACHE.get(target_jid)
+        if cached_lead and "mensagens" in cached_lead and isinstance(cached_lead["mensagens"], list):
+            embedded_msgs = []
+            seen_keys = set()
+            lead_channel = cached_lead.get("origin", "whatsapp").lower()
+            for m in cached_lead["mensagens"]:
+                if not isinstance(m, dict):
+                    continue
+                mapped_list = map_n8n_message(m, lead_channel)
+                for mapped_msg in mapped_list:
+                    msg_id = str(mapped_msg.get("id") or mapped_msg.get("message_id") or "")
+                    content = str(mapped_msg.get("content") or mapped_msg.get("message") or "").strip()
+                    is_from_me = mapped_msg.get("is_from_me", False)
+                    ts = str(mapped_msg.get("timestamp") or mapped_msg.get("message_timestamp") or "")
+
+                    if msg_id and not msg_id.startswith("temp_") and msg_id.lower() not in ("none", "null", ""):
+                        dedup_key = f"id:{msg_id}"
+                    else:
+                        dedup_key = f"msg:{content}:{is_from_me}:{ts[:16]}"
+
+                    if dedup_key not in seen_keys:
+                        seen_keys.add(dedup_key)
+                        embedded_msgs.append(mapped_msg)
+
+            embedded_msgs.sort(key=lambda x: x.get("timestamp") or "")
+            if len(embedded_msgs) > 0:
+                MOCK_CONVERSATIONS[lead_id] = embedded_msgs
+
         if not url:
-            return all_msgs
+            return MOCK_CONVERSATIONS.get(lead_id, all_msgs)
 
-        # Resolve lid from cache or lead list
         lid = None
-        if lead_id in RAW_LEADS_CACHE:
-            cached = RAW_LEADS_CACHE[lead_id]
-            lid = cached.get("lid") or cached.get("LID") or cached.get("Lid")
-        
-        if not lid:
-            try:
-                leads = await N8NService.get_leads()
-                lead_obj = next((l for l in leads if l["id"] == lead_id), None)
-                if lead_obj:
-                    lid = lead_obj.get("lid")
-                    if not lid and lead_id in RAW_LEADS_CACHE:
-                        cached = RAW_LEADS_CACHE[lead_id]
-                        lid = cached.get("lid") or cached.get("LID") or cached.get("Lid")
-            except Exception:
-                pass
+        if cached_lead:
+            lid = cached_lead.get("lid") or cached_lead.get("LID") or cached_lead.get("Lid")
 
-        # Append action parameter to CRM N8N query parameters
         sep = "&" if "?" in url else "?"
-        endpoint_url = f"{url}{sep}action=get&lead_id={lead_id}"
+        endpoint_url = f"{url}{sep}action=get&lead_id={target_jid}"
         if lid:
             endpoint_url += f"&lid={lid}"
+        if target_session:
+            endpoint_url += f"&session_id={target_session}"
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
@@ -1243,51 +1293,31 @@ class N8NService:
                 if body:
                     data = response.json()
                     if isinstance(data, list):
-                        raw_msgs = data
+                        for d in data:
+                            if isinstance(d, dict):
+                                d_sess = str(d.get("session_id") or d.get("whatsapp_instance") or "")
+                                if target_session and d_sess and normalize_session_name(d_sess) != normalize_session_name(target_session):
+                                    continue
+                                if "mensagens" in d and isinstance(d["mensagens"], list):
+                                    raw_msgs.extend(d["mensagens"])
+                                else:
+                                    raw_msgs.append(d)
                     elif isinstance(data, dict):
-                        # Support if N8N returns the lead object with its messages nested
                         raw_msgs = data.get("messages") or data.get("conversas") or data.get("historico") or data.get("history") or []
                         if not isinstance(raw_msgs, list):
                             raw_msgs = [data]
 
-                # Fetch lead to get correct channel (origin)
                 lead_channel = "whatsapp"
-                try:
-                    leads = await N8NService.get_leads()
-                    lead_obj = next((l for l in leads if l["id"] == lead_id), None)
-                    if lead_obj and lead_obj.get("origin"):
-                        lead_channel = lead_obj["origin"].lower()
-                except Exception:
-                    pass
-
-                # Map, filter and deduplicate messages from n8n
-                target_id_str = str(lead_id).strip()
-                target_jid = target_id_str
-                target_session = None
-                if "___" in target_id_str:
-                    parts = target_id_str.split("___", 1)
-                    target_jid = parts[0]
-                    target_session = parts[1]
+                if cached_lead and cached_lead.get("origin"):
+                    lead_channel = cached_lead["origin"].lower()
 
                 fresh_msgs = []
                 seen_keys = set()
 
                 for m in raw_msgs:
                     if isinstance(m, dict):
-                        m_lead_id = str(m.get("lead_id") or m.get("leadId") or "")
-                        if m_lead_id and m_lead_id not in (target_id_str, target_jid):
-                            continue
                         mapped_list = map_n8n_message(m, lead_channel)
                         for mapped_msg in mapped_list:
-                            c_jid = str(mapped_msg.get("contact_jid") or mapped_msg.get("jid") or "")
-                            c_phone = str(mapped_msg.get("display_phone") or "")
-                            c_push = str(mapped_msg.get("push_name") or "")
-
-                            # Filter out messages belonging to other contacts
-                            if c_jid and target_jid not in (c_jid, c_phone, c_push) and c_jid not in target_jid:
-                                continue
-
-                            # Filter out messages belonging to other sessions if target_session is specified
                             msg_session = str(mapped_msg.get("session_id") or m.get("session_id") or "")
                             if target_session and msg_session:
                                 if normalize_session_name(msg_session) != normalize_session_name(target_session):
@@ -1315,8 +1345,8 @@ class N8NService:
 
                 return MOCK_CONVERSATIONS.get(lead_id, [])
             except Exception as e:
-                logger.error(f"Error calling GET messages webhook: {e}. Returning mock.")
-                return all_msgs
+                logger.error(f"Error calling GET messages webhook: {e}. Returning cached.")
+                return MOCK_CONVERSATIONS.get(lead_id, all_msgs)
 
     @staticmethod
     def _extract_n8n_error_message(resp_data) -> Optional[str]:

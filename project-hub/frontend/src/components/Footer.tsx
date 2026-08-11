@@ -126,7 +126,7 @@ export default function Footer({ onTabSelect }: FooterProps) {
             <ul className="space-y-2.5 text-sm">
               <li>
                 <a 
-                  href="https://wa.me/5500000000000" 
+                  href="https://wa.me/5547991362164" 
                   target="_blank" 
                   rel="noopener noreferrer" 
                   className="hover:text-white transition-colors duration-200 flex items-center gap-1 group"
@@ -137,7 +137,7 @@ export default function Footer({ onTabSelect }: FooterProps) {
               </li>
               <li>
                 <a 
-                  href="https://wa.me/5500000000000" 
+                  href="https://wa.me/5547991362164" 
                   target="_blank" 
                   rel="noopener noreferrer" 
                   className="hover:text-white transition-colors duration-200 flex items-center gap-1 group"
@@ -148,7 +148,7 @@ export default function Footer({ onTabSelect }: FooterProps) {
               </li>
               <li>
                 <a 
-                  href="https://wa.me/5500000000000" 
+                  href="https://wa.me/5547991362164" 
                   target="_blank" 
                   rel="noopener noreferrer" 
                   className="hover:text-white transition-colors duration-200 flex items-center gap-1 group"
@@ -226,7 +226,7 @@ export default function Footer({ onTabSelect }: FooterProps) {
             <ul className="space-y-2.5 text-sm">
               <li>
                 <a 
-                  href="https://wa.me/5500000000000" 
+                  href="https://wa.me/5547991362164" 
                   target="_blank" 
                   rel="noopener noreferrer" 
                   className="hover:text-white transition-colors duration-200 flex items-center gap-1 group font-semibold text-emerald-400"
