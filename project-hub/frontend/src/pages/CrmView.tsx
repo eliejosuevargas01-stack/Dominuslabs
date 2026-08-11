@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Users, UserCheck, MessageSquare, Check, 
   Search, Loader2, Sparkles, MessageCircle, AlertCircle,
@@ -7,74 +8,16 @@ import {
 import { API_BASE, fetchWithAuth } from '../services/api';
 
 export default function CrmView() {
+  const navigate = useNavigate();
   const [leads, setLeads] = useState<any[]>([]);
   const [metrics, setMetrics] = useState<any>(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters state
-  const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem('dominus_statusFilter') || '');
-  const [origemFilter, setOrigemFilter] = useState(() => localStorage.getItem('dominus_origemFilter') || '');
-  const [nichoFilter, setNichoFilter] = useState(() => localStorage.getItem('dominus_nichoFilter') || '');
-  const [contactMethodFilter, setContactMethodFilter] = useState(() => localStorage.getItem('dominus_contactMethodFilter') || '');
-  const [temSiteProprioFilter, setTemSiteProprioFilter] = useState(() => localStorage.getItem('dominus_temSiteProprioFilter') || '');
-  const [siteModernoFilter, setSiteModernoFilter] = useState(() => localStorage.getItem('dominus_siteModernoFilter') || '');
-  const [empresaGrandeFilter, setEmpresaGrandeFilter] = useState(() => localStorage.getItem('dominus_empresaGrandeFilter') || '');
-  const [franquiaFilter, setFranquiaFilter] = useState(() => localStorage.getItem('dominus_franquiaFilter') || '');
-  const [proprietarioFilter, setProprietarioFilter] = useState(() => localStorage.getItem('dominus_proprietarioFilter') || '');
-  const [cnpjFilter, setCnpjFilter] = useState(() => localStorage.getItem('dominus_cnpjFilter') || '');
-  const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('dominus_searchTerm') || '');
-  const [kpiFilter, setKpiFilter] = useState<string | null>(() => localStorage.getItem('dominus_kpiFilter') || null);
-
-  useEffect(() => {
-    localStorage.setItem('dominus_statusFilter', statusFilter);
-    localStorage.setItem('dominus_origemFilter', origemFilter);
-    localStorage.setItem('dominus_nichoFilter', nichoFilter);
-    localStorage.setItem('dominus_contactMethodFilter', contactMethodFilter);
-    localStorage.setItem('dominus_temSiteProprioFilter', temSiteProprioFilter);
-    localStorage.setItem('dominus_siteModernoFilter', siteModernoFilter);
-    localStorage.setItem('dominus_empresaGrandeFilter', empresaGrandeFilter);
-    localStorage.setItem('dominus_franquiaFilter', franquiaFilter);
-    localStorage.setItem('dominus_proprietarioFilter', proprietarioFilter);
-    localStorage.setItem('dominus_cnpjFilter', cnpjFilter);
-    localStorage.setItem('dominus_searchTerm', searchTerm);
-    if (kpiFilter) {
-      localStorage.setItem('dominus_kpiFilter', kpiFilter);
-    } else {
-      localStorage.removeItem('dominus_kpiFilter');
-    }
-  }, [
-    statusFilter, origemFilter, nichoFilter, contactMethodFilter,
-    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter, cnpjFilter,
-    searchTerm, kpiFilter
-  ]);
-
-
-  // Dynamic filter lists extracted from loaded leads
-  const dynamicStatuses = useMemo(() => {
-    const s = new Set<string>();
-    leads.forEach(l => {
-      if (l.status) s.add(l.status);
-    });
-    return Array.from(s).sort();
-  }, [leads]);
-
-  const dynamicOrigens = useMemo(() => {
-    const s = new Set<string>();
-    leads.forEach(l => {
-      if (l.origem) s.add(l.origem);
-    });
-    return Array.from(s).sort();
-  }, [leads]);
-
-  const dynamicNichos = useMemo(() => {
-    const s = new Set<string>();
-    leads.forEach(l => {
-      if (l.nicho && l.nicho.trim() !== '') s.add(l.nicho);
-    });
-    return Array.from(s).sort();
-  }, [leads]);
+  // Search & KPI filter state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [kpiFilter, setKpiFilter] = useState<string | null>(null);
 
   // Fetch initial leads and dashboard metrics
   const fetchData = async () => {
@@ -85,16 +28,15 @@ export default function CrmView() {
     try {
       // 1. Fetch leads
       const leadsRes = await fetchWithAuth(`${API_BASE}/crm/leads`);
-      if (!leadsRes.ok) throw new Error('Falha ao buscar leads');
+      if (!leadsRes.ok) throw new Error('Falha ao buscar contatos');
       const leadsData = await leadsRes.json();
       
-      // 3. Auto-advance leads with chat history from Prospectado → Abordagem Enviada
+      // Auto-advance leads with chat history from Prospectado → Abordagem Enviada
       const leadsToAdvance = leadsData.filter(
         (l: any) => l.mensagem_enviada === true && l.status === 'Prospectado'
       );
 
       if (leadsToAdvance.length > 0) {
-        // Fire all PUT requests in parallel
         await Promise.allSettled(
           leadsToAdvance.map((l: any) =>
             fetchWithAuth(`${API_BASE}/crm/leads/${l.id}`, {
@@ -104,7 +46,6 @@ export default function CrmView() {
           )
         );
 
-        // Reflect changes locally
         leadsData.forEach((l: any) => {
           if (l.mensagem_enviada === true && l.status === 'Prospectado') {
             l.status = 'Abordagem Enviada';
@@ -139,68 +80,17 @@ export default function CrmView() {
     fetchData();
   }, []);
 
-
-
   // Filter and sort leads locally
   const filteredLeads = useMemo(() => {
     const filtered = leads.filter(lead => {
-      const matchesStatus = statusFilter ? lead.status === statusFilter : true;
-      const matchesOrigem = origemFilter ? lead.origem === origemFilter : true;
-      const matchesNicho = nichoFilter ? lead.nicho === nichoFilter : true;
-
-      // Contact Method Logic
-      let matchesContactMethod = true;
-      if (contactMethodFilter === 'whatsapp') {
-        const phone = lead.telefone_contato || lead.whatsapp;
-        matchesContactMethod = !!phone && String(phone).trim() !== '' && String(phone).trim().toLowerCase() !== 'null' && String(phone).trim().toLowerCase() !== 'none';
-      } else if (contactMethodFilter === 'instagram') {
-        const ig = lead.instagram;
-        matchesContactMethod = !!ig && String(ig).trim() !== '' && String(ig).trim().toLowerCase() !== 'null' && String(ig).trim().toLowerCase() !== 'none';
-      } else if (contactMethodFilter === 'email') {
-        const mail = lead.email_contato || lead.email;
-        matchesContactMethod = !!mail && String(mail).trim() !== '' && String(mail).trim().toLowerCase() !== 'null' && String(mail).trim().toLowerCase() !== 'none';
-      }
-
-      // Payload specific filters
-      const hasSite = lead.payload?.["possui site"] === true || 
-                      lead.payload?.["possui site"] === 'true' || 
-                      lead.payload?.tem_site_proprio === true || 
-                      lead.payload?.tem_site_proprio === 'true' ||
-                      (lead.payload?.site && String(lead.payload.site).trim() !== '' && String(lead.payload.site).toLowerCase() !== 'null');
-      const matchesSite = temSiteProprioFilter ? (temSiteProprioFilter === 'true' ? hasSite : !hasSite) : true;
-
-      const isSiteModerno = lead.payload?.["site moderno"] === true || lead.payload?.["site moderno"] === 'true';
-      const matchesSiteModerno = siteModernoFilter ? (siteModernoFilter === 'true' ? isSiteModerno : !isSiteModerno) : true;
-
-      const isEmpresaGrande = lead.payload?.["empresa grande"] === true || lead.payload?.["empresa grande"] === 'true';
-      const matchesEmpresaGrande = empresaGrandeFilter ? (empresaGrandeFilter === 'true' ? isEmpresaGrande : !isEmpresaGrande) : true;
-
-      const isFranquia = lead.payload?.["franquia"] === true || lead.payload?.["franquia"] === 'true';
-      const matchesFranquia = franquiaFilter ? (franquiaFilter === 'true' ? isFranquia : !isFranquia) : true;
-
-      const hasProprietario = !!lead.payload?.["proprietario"] && 
-                              String(lead.payload["proprietario"]).trim() !== '' && 
-                              String(lead.payload["proprietario"]).toLowerCase() !== 'null' &&
-                              String(lead.payload["proprietario"]).toLowerCase() !== 'none';
-      const matchesProprietario = proprietarioFilter ? (proprietarioFilter === 'true' ? hasProprietario : !hasProprietario) : true;
-
-      const hasCnpj = !!lead.payload?.["cnpj"] && 
-                      String(lead.payload["cnpj"]).trim() !== '' && 
-                      String(lead.payload["cnpj"]).toLowerCase() !== 'null' &&
-                      String(lead.payload["cnpj"]).toLowerCase() !== 'none';
-      const matchesCnpj = cnpjFilter ? (cnpjFilter === 'true' ? hasCnpj : !hasCnpj) : true;
-      
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = searchTerm 
         ? (String(lead.id || '').toLowerCase().includes(searchLower) ||
            String(lead.lead_id || '').toLowerCase().includes(searchLower) ||
-           lead.empresa_nome?.toLowerCase().includes(searchLower) ||
-           lead.email_contato?.toLowerCase().includes(searchLower) ||
-           String(lead.telefone_contato || '').includes(searchTerm) ||
-           lead.instagram?.toLowerCase().includes(searchLower) ||
-           lead.nicho?.toLowerCase().includes(searchLower) ||
-           lead.localizacao?.toLowerCase().includes(searchLower) ||
-           lead.origem?.toLowerCase().includes(searchLower))
+           String(lead.push_name || '').toLowerCase().includes(searchLower) ||
+           String(lead.nome || '').toLowerCase().includes(searchLower) ||
+           String(lead.display_phone || lead.whatsapp || lead.phone || '').includes(searchLower) ||
+           String(lead.ultima_mensagem || '').toLowerCase().includes(searchLower))
         : true;
 
       // Card-specific KPI filters
@@ -215,21 +105,15 @@ export default function CrmView() {
         matchesKpi = lead.status === 'RESPONDED' || (lead.has_messages === true && lead.mensagem_enviada === false);
       }
         
-      return matchesStatus && matchesOrigem && matchesNicho && matchesContactMethod &&
-             matchesSite && matchesSiteModerno && matchesEmpresaGrande && matchesFranquia && matchesProprietario && matchesCnpj && matchesSearch && matchesKpi;
+      return matchesSearch && matchesKpi;
     });
 
-    // Sort: by updated_at or last_interaction descending
     return filtered.sort((a, b) => {
       const aDate = (a.updated_at || a.last_interaction) ? new Date(a.updated_at || a.last_interaction).getTime() : 0;
       const bDate = (b.updated_at || b.last_interaction) ? new Date(b.updated_at || b.last_interaction).getTime() : 0;
       return bDate - aDate;
     });
-  }, [
-    leads, statusFilter, origemFilter, nichoFilter, contactMethodFilter,
-    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter, cnpjFilter,
-    searchTerm, kpiFilter
-  ]);
+  }, [leads, searchTerm, kpiFilter]);
 
   // Pagination state and computation
   const [currentPage, setCurrentPage] = useState(1);
@@ -242,14 +126,9 @@ export default function CrmView() {
     return filteredLeads.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredLeads, currentPage]);
 
-  // Reset pagination to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [
-    statusFilter, origemFilter, nichoFilter, contactMethodFilter,
-    temSiteProprioFilter, siteModernoFilter, empresaGrandeFilter, franquiaFilter, proprietarioFilter, cnpjFilter,
-    searchTerm, kpiFilter
-  ]);
+  }, [searchTerm, kpiFilter]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -281,10 +160,10 @@ export default function CrmView() {
         <div>
           <h1 className="text-3xl font-display font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
             <Sparkles className="w-6 h-6 text-violet-600 animate-pulse" />
-            CRM Comercial
+            Gerenciamento de Contatos
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Centralize e gerencie sua esteira de vendas, leads prospectados, propostas e histórico de conversas.
+            Centralize e acompanhe todos os seus contatos e históricos de conversas.
           </p>
         </div>
       </div>
@@ -317,7 +196,7 @@ export default function CrmView() {
                 <Users className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Leads</p>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Contatos</p>
                 <p className="text-2xl font-display font-extrabold text-slate-800">{metrics.total_leads}</p>
               </div>
             </div>
@@ -385,333 +264,166 @@ export default function CrmView() {
         ) : null}
       </div>
 
-      {/* Main CRM Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-        {/* Leads Table Card */}
-        <div className="xl:col-span-12 glass-card p-6 bg-white/70 border border-violet-100/30">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <h2 className="text-lg font-bold text-slate-800">Funil de Leads</h2>
-            
-            {/* Filters */}
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Text Search */}
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Buscar lead..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 pr-4 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs outline-none focus:border-purple-400 transition-all font-semibold"
-                />
-              </div>
-
-              {/* Status Filter */}
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
-              >
-                <option value="">Status (Todos)</option>
-                {dynamicStatuses.map(st => (
-                  <option key={st} value={st}>{st}</option>
-                ))}
-              </select>
-
-              {/* Origem Filter */}
-              <select
-                value={origemFilter}
-                onChange={(e) => setOrigemFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
-              >
-                <option value="">Origem (Todos)</option>
-                {dynamicOrigens.map(or => (
-                  <option key={or} value={or}>{or}</option>
-                ))}
-              </select>
-
-              {/* Nicho Filter */}
-              <select
-                value={nichoFilter}
-                onChange={(e) => setNichoFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
-              >
-                <option value="">Nicho (Todos)</option>
-                {dynamicNichos.map(n => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-
-              {/* Contact Method Filter */}
-              <select
-                value={contactMethodFilter}
-                onChange={(e) => setContactMethodFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
-              >
-                <option value="">Meio de Contato (Todos)</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="instagram">Instagram</option>
-                <option value="email">E-mail</option>
-              </select>
-
-              {/* Tem Site Filter */}
-              <select
-                value={temSiteProprioFilter}
-                onChange={(e) => setTemSiteProprioFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
-              >
-                <option value="">Possui Site? (Todos)</option>
-                <option value="true">Sim</option>
-                <option value="false">Não</option>
-              </select>
-
-              {/* Site Moderno Filter */}
-              <select
-                value={siteModernoFilter}
-                onChange={(e) => setSiteModernoFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
-              >
-                <option value="">Site Moderno? (Todos)</option>
-                <option value="true">Sim</option>
-                <option value="false">Não</option>
-              </select>
-
-              {/* Empresa Grande Filter */}
-              <select
-                value={empresaGrandeFilter}
-                onChange={(e) => setEmpresaGrandeFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
-              >
-                <option value="">Empresa Grande? (Todos)</option>
-                <option value="true">Sim</option>
-                <option value="false">Não</option>
-              </select>
-
-              {/* Franquia Filter */}
-              <select
-                value={franquiaFilter}
-                onChange={(e) => setFranquiaFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
-              >
-                <option value="">Franquia? (Todos)</option>
-                <option value="true">Sim</option>
-                <option value="false">Não</option>
-              </select>
-
-              {/* Proprietário Filter */}
-              <select
-                value={proprietarioFilter}
-                onChange={(e) => setProprietarioFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
-              >
-                <option value="">Tem Proprietário? (Todos)</option>
-                <option value="true">Sim</option>
-                <option value="false">Não</option>
-              </select>
-
-              {/* CNPJ Filter */}
-              <select
-                value={cnpjFilter}
-                onChange={(e) => setCnpjFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-violet-100 bg-white/50 text-xs font-semibold outline-none focus:border-purple-400 cursor-pointer"
-              >
-                <option value="">Tem CNPJ? (Todos)</option>
-                <option value="true">Sim</option>
-                <option value="false">Não</option>
-              </select>
-
-              {/* Clear Filters Button */}
-              {(statusFilter || origemFilter || nichoFilter || contactMethodFilter || temSiteProprioFilter || siteModernoFilter || empresaGrandeFilter || franquiaFilter || proprietarioFilter || cnpjFilter || searchTerm || kpiFilter) && (
-                <button
-                  onClick={() => {
-                    setStatusFilter('');
-                    setOrigemFilter('');
-                    setNichoFilter('');
-                    setContactMethodFilter('');
-                    setTemSiteProprioFilter('');
-                    setSiteModernoFilter('');
-                    setEmpresaGrandeFilter('');
-                    setFranquiaFilter('');
-                    setProprietarioFilter('');
-                    setCnpjFilter('');
-                    setSearchTerm('');
-                    setKpiFilter(null);
-                  }}
-                  className="px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all cursor-pointer shadow-sm shadow-rose-100/50"
-                >
-                  Limpar Filtros
-                </button>
-              )}
+      {/* Main Table Card */}
+      <div className="glass-card p-6 bg-white/70 border border-violet-100/30">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <h2 className="text-lg font-bold text-slate-800">Lista de Contatos</h2>
+          
+          {/* Search Box */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar por nome ou telefone..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 pr-4 py-2 w-64 md:w-80 rounded-xl border border-violet-100 bg-white/50 text-xs outline-none focus:border-purple-400 transition-all font-semibold"
+              />
             </div>
-          </div>
 
-          {/* Table Container */}
-          <div className="overflow-x-auto">
-            {loadingLeads ? (
-              <div className="py-20 flex items-center justify-center">
-                <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
-              </div>
-            ) : filteredLeads.length === 0 ? (
-              <div className="py-20 text-center text-slate-400 text-sm font-semibold">
-                Nenhum lead encontrado com os filtros selecionados.
-              </div>
-            ) : (
-              <>
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-violet-100/50 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      <th className="py-3 px-2 max-w-[120px]">ID Contato</th>
-                      <th className="py-3 px-2">Contato / Nome</th>
-                      <th className="py-3 px-2">Nicho</th>
-                      <th className="py-3 px-2">Status</th>
-                      <th className="py-3 px-2">Origem</th>
-                      <th className="py-3 px-2">Canais</th>
-                      <th className="py-3 px-2">Assets</th>
-                      <th className="py-3 px-2">Última Atu.</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-violet-100/30 text-xs font-medium text-slate-600">
-                    {paginatedLeads.map((lead) => {
-                      const hasWhatsApp = !!(lead.telefone_contato || lead.whatsapp) && String(lead.telefone_contato || lead.whatsapp).trim() !== '' && String(lead.telefone_contato || lead.whatsapp).toLowerCase() !== 'none' && String(lead.telefone_contato || lead.whatsapp).toLowerCase() !== 'null';
-                      const hasInstagram = !!lead.instagram && String(lead.instagram).trim() !== '' && String(lead.instagram).toLowerCase() !== 'none' && String(lead.instagram).toLowerCase() !== 'null';
-                      const hasEmail = !!(lead.email_contato || lead.email) && String(lead.email_contato || lead.email).trim() !== '' && String(lead.email_contato || lead.email).toLowerCase() !== 'none' && String(lead.email_contato || lead.email).toLowerCase() !== 'null';
-                      const hasSite = lead.payload?.["possui site"] === true || 
-                                      lead.payload?.["possui site"] === 'true' || 
-                                      lead.payload?.tem_site_proprio === true || 
-                                      lead.payload?.tem_site_proprio === 'true' ||
-                                      (lead.payload?.site && String(lead.payload.site).trim() !== '' && String(lead.payload.site).toLowerCase() !== 'null');
-                      const isSiteModerno = lead.payload?.["site moderno"] === true || lead.payload?.["site moderno"] === 'true';
-                      const isEmpresaGrande = lead.payload?.["empresa grande"] === true || lead.payload?.["empresa grande"] === 'true';
-                      const isFranquia = lead.payload?.["franquia"] === true || lead.payload?.["franquia"] === 'true';
-
-                      const displayName = lead.push_name || lead.nome || lead.empresa_nome || lead.company_name || lead.display_phone || 'Contato Sem Nome';
-                      const displaySub = lead.display_phone || lead.whatsapp || lead.telefone_contato || lead.localizacao || '';
-
-                      return (
-                        <tr 
-                          key={lead.id} 
-                          onClick={() => window.open(`/crm/leads/${lead.id}`, '_blank')}
-                          className="hover:bg-violet-50/30 cursor-pointer transition-colors"
-                        >
-                          <td className="py-3.5 px-2 text-slate-400 max-w-[120px] truncate" title={lead.lead_id || lead.id}>
-                            #{lead.lead_id || lead.id}
-                          </td>
-                          <td className="py-3.5 px-2">
-                            <div className="font-bold text-slate-800">{displayName}</div>
-                            {displaySub && <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{displaySub}</div>}
-                          </td>
-                          <td className="py-3.5 px-2">
-                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
-                              {lead.nicho || lead.segmento || '-'}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-2">
-                            <span className={`px-2 py-0.5 rounded-full border text-[10px] uppercase font-bold tracking-wide ${getStatusColor(lead.status)}`}>
-                              {lead.status}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-2 text-slate-500 font-semibold">{lead.origem || lead.origin}</td>
-                          <td className="py-3.5 px-2">
-                            <div className="flex items-center gap-1.5">
-                              {hasWhatsApp && (
-                                <span title={lead.telefone_contato || lead.whatsapp}>
-                                  <MessageCircle className="w-4 h-4 text-emerald-500" />
-                                </span>
-                              )}
-                              {hasInstagram && (
-                                <span title={lead.instagram}>
-                                  <Sparkles className="w-4 h-4 text-pink-500" />
-                                </span>
-                              )}
-                              {hasEmail && (
-                                <span title={lead.email_contato || lead.email}>
-                                  <AlertCircle className="w-4 h-4 text-blue-500" />
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-2">
-                            <div className="flex gap-1">
-                              {hasSite && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Possui Site" />}
-                              {isSiteModerno && <span className="w-2 h-2 rounded-full bg-blue-400" title="Site Moderno" />}
-                              {isEmpresaGrande && <span className="w-2 h-2 rounded-full bg-purple-400" title="Empresa Grande" />}
-                              {isFranquia && <span className="w-2 h-2 rounded-full bg-amber-400" title="Franquia" />}
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-2 text-slate-400 whitespace-nowrap">
-                            {formatDate(lead.updated_at || lead.last_interaction)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-
-                {/* Pagination Controls */}
-                {filteredLeads.length > itemsPerPage && (
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 pt-4 border-t border-violet-100/30 text-xs font-semibold text-slate-500">
-                    <div>
-                      Exibindo <span className="font-bold text-slate-700">{Math.min((currentPage - 1) * itemsPerPage + 1, filteredLeads.length)}</span> a{' '}
-                      <span className="font-bold text-slate-700">{Math.min(currentPage * itemsPerPage, filteredLeads.length)}</span> de{' '}
-                      <span className="font-bold text-slate-700">{filteredLeads.length}</span> leads
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
-                        className="p-2 rounded-xl border border-violet-100 bg-white/50 hover:bg-violet-50 text-slate-600 disabled:opacity-40 disabled:hover:bg-white/50 transition-all cursor-pointer flex items-center justify-center animate-transition"
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                      </button>
-                      
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
-                        const isCurrent = page === currentPage;
-                        const isNear = Math.abs(page - currentPage) <= 1;
-                        const isFirstOrLast = page === 1 || page === totalPages;
-                        
-                        if (!isNear && !isFirstOrLast) {
-                          if (page === 2 && currentPage > 3) {
-                            return <span key="ellipsis-start" className="px-1 text-slate-400 select-none">...</span>;
-                          }
-                          if (page === totalPages - 1 && currentPage < totalPages - 2) {
-                            return <span key="ellipsis-end" className="px-1 text-slate-400 select-none">...</span>;
-                          }
-                          return null;
-                        }
-                        
-                        return (
-                          <button
-                            key={page}
-                            type="button"
-                            onClick={() => setCurrentPage(page)}
-                            className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                              isCurrent
-                                ? 'border-purple-600 bg-purple-600 text-white shadow-md shadow-purple-200'
-                                : 'border-violet-100 bg-white/50 hover:bg-violet-50 text-slate-600'
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        );
-                      })}
-
-                      <button
-                        type="button"
-                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                        disabled={currentPage === totalPages}
-                        className="p-2 rounded-xl border border-violet-100 bg-white/50 hover:bg-violet-50 text-slate-600 disabled:opacity-40 disabled:hover:bg-white/50 transition-all cursor-pointer flex items-center justify-center animate-transition"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
+            {(searchTerm || kpiFilter) && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setKpiFilter(null);
+                }}
+                className="px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all cursor-pointer shadow-sm"
+              >
+                Limpar Busca
+              </button>
             )}
           </div>
         </div>
 
+        {/* Table Container */}
+        <div className="overflow-x-auto">
+          {loadingLeads ? (
+            <div className="py-20 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
+            </div>
+          ) : filteredLeads.length === 0 ? (
+            <div className="py-20 text-center text-slate-400 text-sm font-semibold">
+              Nenhum contato encontrado.
+            </div>
+          ) : (
+            <>
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-violet-100/50 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="py-3 px-3 max-w-[140px]">ID Contato</th>
+                    <th className="py-3 px-3">Contato / Nome</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-3">Última Atuação</th>
+                    <th className="py-3 px-3 text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-violet-100/30 text-xs font-medium text-slate-600">
+                  {paginatedLeads.map((lead) => {
+                    const displayName = lead.push_name || lead.nome || lead.empresa_nome || lead.company_name || lead.display_phone || 'Contato Sem Nome';
+                    const displaySub = lead.display_phone || lead.whatsapp || lead.telefone_contato || '';
+
+                    return (
+                      <tr 
+                        key={lead.id} 
+                        onClick={() => navigate('/inbox')}
+                        className="hover:bg-violet-50/30 cursor-pointer transition-colors"
+                      >
+                        <td className="py-3.5 px-3 text-slate-400 max-w-[140px] truncate" title={lead.lead_id || lead.id}>
+                          #{lead.lead_id || lead.id}
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <div className="font-bold text-slate-800 text-sm">{displayName}</div>
+                          {displaySub && <div className="text-[11px] text-slate-400 truncate max-w-[200px]">{displaySub}</div>}
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <span className={`px-2.5 py-1 rounded-full border text-[10px] uppercase font-bold tracking-wide ${getStatusColor(lead.status)}`}>
+                            {lead.status}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3 text-slate-400 whitespace-nowrap">
+                          {formatDate(lead.updated_at || lead.last_interaction || lead.created_at)}
+                        </td>
+                        <td className="py-3.5 px-3 text-right">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate('/inbox');
+                            }}
+                            className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs rounded-xl border border-purple-200 transition-all cursor-pointer shadow-sm"
+                          >
+                            Abrir Chat
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Pagination Controls */}
+              {filteredLeads.length > itemsPerPage && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 pt-4 border-t border-violet-100/30 text-xs font-semibold text-slate-500">
+                  <div>
+                    Exibindo <span className="font-bold text-slate-700">{Math.min((currentPage - 1) * itemsPerPage + 1, filteredLeads.length)}</span> a{' '}
+                    <span className="font-bold text-slate-700">{Math.min(currentPage * itemsPerPage, filteredLeads.length)}</span> de{' '}
+                    <span className="font-bold text-slate-700">{filteredLeads.length}</span> contatos
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-xl border border-violet-100 bg-white/50 hover:bg-violet-50 text-slate-600 disabled:opacity-40 disabled:hover:bg-white/50 transition-all cursor-pointer flex items-center justify-center"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+                      const isCurrent = page === currentPage;
+                      const isNear = Math.abs(page - currentPage) <= 1;
+                      const isFirstOrLast = page === 1 || page === totalPages;
+                      
+                      if (!isNear && !isFirstOrLast) {
+                        if (page === 2 && currentPage > 3) {
+                          return <span key="ellipsis-start" className="px-1 text-slate-400 select-none">...</span>;
+                        }
+                        if (page === totalPages - 1 && currentPage < totalPages - 2) {
+                          return <span key="ellipsis-end" className="px-1 text-slate-400 select-none">...</span>;
+                        }
+                        return null;
+                      }
+                      
+                      return (
+                        <button
+                          key={page}
+                          type="button"
+                          onClick={() => setCurrentPage(page)}
+                          className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                            isCurrent
+                              ? 'border-purple-600 bg-purple-600 text-white shadow-md shadow-purple-200'
+                              : 'border-violet-100 bg-white/50 hover:bg-violet-50 text-slate-600'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-xl border border-violet-100 bg-white/50 hover:bg-violet-50 text-slate-600 disabled:opacity-40 disabled:hover:bg-white/50 transition-all cursor-pointer flex items-center justify-center"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
