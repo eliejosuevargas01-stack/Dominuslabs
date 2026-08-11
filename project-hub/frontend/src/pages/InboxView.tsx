@@ -350,29 +350,57 @@ export default function InboxView() {
     }
   };
 
+const normalizeSessionName = (name?: string) => {
+  if (!name) return '';
+  return name.toLowerCase().replace(/[-_\s]+/g, '');
+};
+
   const connectedSessionsList = useMemo(() => {
-    if (sessions.length > 0) return sessions;
-    const found = new Set<string>();
+    const list: Array<{ name: string; status: string }> = [];
+    const seenNorm = new Set<string>();
+
+    sessions.forEach(s => {
+      const sName = s.name || s.session_name || s.id;
+      if (sName) {
+        const norm = normalizeSessionName(sName);
+        if (!seenNorm.has(norm)) {
+          seenNorm.add(norm);
+          list.push({ name: sName, status: s.status || 'CONNECTED' });
+        }
+      }
+    });
+
     leads.forEach(l => {
       const sName = l.whatsapp_instance || l.session_id;
-      if (sName) found.add(sName);
+      if (sName) {
+        const norm = normalizeSessionName(sName);
+        if (!seenNorm.has(norm)) {
+          seenNorm.add(norm);
+          list.push({ name: sName, status: 'CONNECTED' });
+        }
+      }
     });
-    return Array.from(found).map(id => ({ name: id, status: 'CONNECTED' }));
+
+    return list;
   }, [sessions, leads]);
 
   const filteredLeads = useMemo(() => {
     return leads.filter(lead => {
       const leadSession = lead.whatsapp_instance || lead.session_id || 'default';
       
-      if (selectedSessionFilter !== 'ALL' && leadSession !== selectedSessionFilter) {
-        return false;
+      if (selectedSessionFilter !== 'ALL') {
+        const leadNorm = normalizeSessionName(leadSession);
+        const filterNorm = normalizeSessionName(selectedSessionFilter);
+        if (leadNorm !== filterNorm && !leadNorm.includes(filterNorm) && !filterNorm.includes(leadNorm)) {
+          return false;
+        }
       }
 
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
-        const nameMatch = (lead.nome || '').toLowerCase().includes(query);
+        const nameMatch = (lead.nome || lead.push_name || '').toLowerCase().includes(query);
         const companyMatch = (lead.nome_empresa || '').toLowerCase().includes(query);
-        const phoneMatch = (lead.whatsapp || lead.phone || '').includes(query);
+        const phoneMatch = (lead.whatsapp || lead.phone || lead.display_phone || '').includes(query);
         const msgMatch = (lead.ultima_mensagem || '').toLowerCase().includes(query);
         return nameMatch || companyMatch || phoneMatch || msgMatch;
       }
@@ -441,10 +469,14 @@ export default function InboxView() {
           </button>
 
           {connectedSessionsList.map((session, index) => {
-            const sName = session.name || session.session_name || `Instância ${index + 1}`;
+            const sName = session.name || `Instância ${index + 1}`;
+            const sNorm = normalizeSessionName(sName);
             const palette = getSessionColor(sName);
-            const isSelected = selectedSessionFilter === sName;
-            const chatCount = leads.filter(l => (l.whatsapp_instance || l.session_id) === sName).length;
+            const isSelected = selectedSessionFilter === sName || (selectedSessionFilter !== 'ALL' && normalizeSessionName(selectedSessionFilter) === sNorm);
+            const chatCount = leads.filter(l => {
+              const lNorm = normalizeSessionName(l.whatsapp_instance || l.session_id);
+              return lNorm === sNorm || (lNorm && sNorm && (lNorm.includes(sNorm) || sNorm.includes(lNorm)));
+            }).length;
 
             return (
               <button
