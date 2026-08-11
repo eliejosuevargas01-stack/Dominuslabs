@@ -170,7 +170,17 @@ export default function InboxView() {
       const res = await fetchWithAuth(`${API_BASE}/crm/conversations/${leadId}`);
       if (res.ok) {
         const data = await res.json();
-        setMessages(Array.isArray(data) ? data : []);
+        let extracted: any[] = [];
+        if (Array.isArray(data)) {
+          if (data.length > 0 && Array.isArray(data[0].mensagens)) {
+            extracted = data[0].mensagens;
+          } else {
+            extracted = data;
+          }
+        } else if (data && Array.isArray(data.mensagens)) {
+          extracted = data.mensagens;
+        }
+        setMessages(extracted);
       }
     } catch (err) {
       console.error("Erro ao carregar mensagens:", err);
