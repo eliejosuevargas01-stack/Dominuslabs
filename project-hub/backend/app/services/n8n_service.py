@@ -145,7 +145,7 @@ def safe_parse_json(val: Any) -> dict:
     return {}
 
 def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
-    lead_id = str(lead.get("id" if "id" in lead else "lead_id", lead.get("_id", "")))
+    lead_id = str(lead.get("jid") or lead.get("contact_jid") or lead.get("id") or lead.get("lead_id") or lead.get("_id") or "")
     if not lead_id or lead_id.lower() == "none":
         lead_id = str(lead.get("id", lead.get("lead_id", lead.get("_id", ""))))
 
@@ -157,10 +157,11 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     if not isinstance(payload_dict, dict):
         payload_dict = {}
 
-    company_name = lead.get("nome_empresa") or lead.get("empresa_nome") or lead.get("company_name") or "Empresa Sem Nome"
+    person_name = lead.get("push_name") or lead.get("nome") or lead.get("nome_empresa") or lead.get("empresa_nome") or lead.get("company_name") or lead.get("display_phone") or "Contato Sem Nome"
+    company_name = person_name
 
-    raw_tel = lead.get("telefone") or lead.get("telefone_contato")
-    raw_wa = lead.get("whatsapp")
+    raw_tel = lead.get("display_phone") or lead.get("telefone") or lead.get("telefone_contato")
+    raw_wa = lead.get("whatsapp") or lead.get("phone")
     whatsapp = ""
     for val in (raw_tel, raw_wa):
         if val is not None and str(val).strip().lower() not in ("null", ""):
@@ -289,20 +290,33 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     if raw_solucao is not None and str(raw_solucao).strip().lower() not in ("null", ""):
         solucao_recomendada = str(raw_solucao).strip()
 
+    profile_pic = lead.get("profile_pic_url") or lead.get("avatar") or ""
+    session_id = lead.get("session_id") or lead.get("whatsapp_instance") or ""
+    if not session_id and profile_pic and "/api/sessions/" in profile_pic:
+        try:
+            session_id = profile_pic.split("/api/sessions/")[1].split("/")[0]
+        except Exception:
+            pass
+    if not session_id:
+        session_id = "default"
+
+    if profile_pic and profile_pic.startswith("/"):
+        profile_pic = f"https://whats.dominuslabs.online{profile_pic}"
+
     mapped_lead = {
         **lead,
         "id": lead_id,
-        "push_name": lead.get("push_name") or lead.get("nome") or company_name,
-        "nome": lead.get("push_name") or lead.get("nome") or company_name,
-        "company_name": company_name,
-        "empresa_nome": company_name,
-        "display_phone": lead.get("display_phone") or whatsapp,
+        "push_name": person_name,
+        "nome": person_name,
+        "company_name": person_name,
+        "empresa_nome": person_name,
+        "display_phone": whatsapp or lead.get("display_phone") or "",
         "whatsapp": whatsapp or lead.get("display_phone") or "",
         "telefone_contato": whatsapp or lead.get("display_phone") or "",
-        "session_id": lead.get("session_id") or lead.get("whatsapp_instance") or "default",
-        "whatsapp_instance": lead.get("session_id") or lead.get("whatsapp_instance") or "default",
-        "contact_jid": lead.get("contact_jid") or lead.get("jid") or "",
-        "profile_pic_url": f"https://whats.dominuslabs.online{lead['profile_pic_url']}" if lead.get("profile_pic_url", "").startswith("/") else (lead.get("profile_pic_url") or ""),
+        "session_id": session_id,
+        "whatsapp_instance": session_id,
+        "contact_jid": lead.get("jid") or lead.get("contact_jid") or "",
+        "profile_pic_url": profile_pic,
         "instagram": instagram,
         "email": email,
         "email_contato": email,

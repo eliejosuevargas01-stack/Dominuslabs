@@ -560,8 +560,8 @@ export default function CrmView() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-violet-100/50 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      <th className="py-3 px-2 max-w-[120px]">Lead ID</th>
-                      <th className="py-3 px-2">Empresa</th>
+                      <th className="py-3 px-2 max-w-[120px]">ID Contato</th>
+                      <th className="py-3 px-2">Contato / Nome</th>
                       <th className="py-3 px-2">Nicho</th>
                       <th className="py-3 px-2">Status</th>
                       <th className="py-3 px-2">Origem</th>
@@ -584,6 +584,9 @@ export default function CrmView() {
                       const isEmpresaGrande = lead.payload?.["empresa grande"] === true || lead.payload?.["empresa grande"] === 'true';
                       const isFranquia = lead.payload?.["franquia"] === true || lead.payload?.["franquia"] === 'true';
 
+                      const displayName = lead.push_name || lead.nome || lead.empresa_nome || lead.company_name || lead.display_phone || 'Contato Sem Nome';
+                      const displaySub = lead.display_phone || lead.whatsapp || lead.telefone_contato || lead.localizacao || '';
+
                       return (
                         <tr 
                           key={lead.id} 
@@ -594,8 +597,8 @@ export default function CrmView() {
                             #{lead.lead_id || lead.id}
                           </td>
                           <td className="py-3.5 px-2">
-                            <div className="font-bold text-slate-800">{lead.empresa_nome || lead.company_name}</div>
-                            <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{lead.localizacao}</div>
+                            <div className="font-bold text-slate-800">{displayName}</div>
+                            {displaySub && <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{displaySub}</div>}
                           </td>
                           <td className="py-3.5 px-2">
                             <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
