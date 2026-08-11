@@ -262,12 +262,15 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     last_interaction = lead.get("last_interaction") or lead.get("updated_at") or lead.get("updatedAt") or lead.get("created_at") or lead.get("data_coleta")
     created_at = lead.get("created_at") or lead.get("createdAt") or lead.get("data_coleta")
 
-    if conversations_map and lead_id in conversations_map and conversations_map[lead_id]:
-        latest_msg = max(conversations_map[lead_id], key=lambda x: x.get("data") or x.get("timestamp") or x.get("createdAt") or "")
-        latest_ts = latest_msg.get("data") or latest_msg.get("timestamp") or latest_msg.get("createdAt")
-        if latest_ts:
-            if not last_interaction or latest_ts > last_interaction:
-                last_interaction = latest_ts
+    ultima_mensagem = ""
+    if "mensagens" in lead and isinstance(lead["mensagens"], list) and len(lead["mensagens"]) > 0:
+        has_messages = True
+        last_m = lead["mensagens"][-1]
+        if isinstance(last_m, dict):
+            ultima_mensagem = last_m.get("content") or last_m.get("message") or ""
+            ts_last = last_m.get("message_timestamp") or last_m.get("created_at")
+            if ts_last and (not last_interaction or ts_last > str(last_interaction)):
+                last_interaction = ts_last
 
     raw_falha = lead.get("falha_identificada")
     falha_identificada = ""
@@ -315,6 +318,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         "segmento": segmento,
         "solucao_recomendada": solucao_recomendada,
         "mensagem_enviada": mensagem_enviada,
+        "ultima_mensagem": ultima_mensagem or lead.get("ultima_mensagem") or "",
         "payload": payload_dict
     }
 
@@ -395,7 +399,59 @@ def parse_embedded_timestamp(text: str) -> tuple[str, str | None]:
 def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
     mapped = []
 
-    # Support direct whats-api / n8n incoming message object
+    # 1. Support nested "mensagens" array format from n8n chat history payload
+    if "mensagens" in msg and isinstance(msg["mensagens"], list):
+        session_id = msg.get("session_id")
+        contact_jid = msg.get("contact_jid")
+        push_name = msg.get("push_name")
+        display_phone = msg.get("display_phone")
+        parent_is_from_me = msg.get("is_from_me", False)
+        
+        profile_pic_url = msg.get("profile_pic_url") or ""
+        if profile_pic_url and profile_pic_url.startswith("/"):
+            profile_pic_url = f"https://whats.dominuslabs.online{profile_pic_url}"
+
+        for m in msg["mensagens"]:
+            if not isinstance(m, dict):
+                continue
+            msg_id = str(m.get("message_id") or m.get("id") or "")
+            is_from_me = m.get("is_from_me") if "is_from_me" in m else parent_is_from_me
+            sender = "user" if is_from_me else "lead"
+            direction = "outgoing" if is_from_me else "incoming"
+
+            raw_text = m.get("content") or m.get("message") or m.get("text") or m.get("body") or m.get("caption") or ""
+            image_url = m.get("image_url") or m.get("media_url") or m.get("url") or m.get("file_url") or m.get("image") or ""
+            if image_url and image_url.startswith("/"):
+                image_url = f"https://whats.dominuslabs.online{image_url}"
+
+            ts = m.get("message_timestamp") or m.get("created_at") or m.get("timestamp") or m.get("createdAt") or msg.get("created_at")
+
+            mapped.append({
+                "id": msg_id,
+                "message_id": msg_id,
+                "session_id": session_id,
+                "contact_jid": contact_jid,
+                "is_from_me": is_from_me,
+                "sender": sender,
+                "direction": direction,
+                "sent_by_user": is_from_me,
+                "message": raw_text,
+                "content": raw_text,
+                "caption": m.get("caption", ""),
+                "message_type": m.get("message_type", "conversation"),
+                "chat_kind": msg.get("chat_kind", "private"),
+                "image_url": image_url,
+                "media_url": image_url,
+                "push_name": push_name,
+                "display_phone": display_phone,
+                "profile_pic_url": profile_pic_url,
+                "channel": lead_channel,
+                "timestamp": ts,
+                "status": m.get("status") or msg.get("status", "received")
+            })
+        return mapped
+
+    # 2. Support direct whats-api / n8n single incoming message object
     if "is_from_me" in msg or "message_id" in msg or "contact_jid" in msg or "push_name" in msg or "session_id" in msg:
         msg_id = str(msg.get("message_id") or msg.get("id") or "")
         is_from_me = msg.get("is_from_me", False)
