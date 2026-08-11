@@ -772,7 +772,7 @@ const normalizeSessionName = (name?: string) => {
                     className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
                   >
                     {connectedSessionsList.map((s, idx) => {
-                      const name = s.name || s.session_name || `WhatsApp ${idx + 1}`;
+                      const name = s.name || (s as any).session_name || `WhatsApp ${idx + 1}`;
                       return (
                         <option key={name} value={name}>
                           ● {name} ({s.status || 'Ativo'})
