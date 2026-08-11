@@ -299,7 +299,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         "session_id": lead.get("session_id") or lead.get("whatsapp_instance") or "default",
         "whatsapp_instance": lead.get("session_id") or lead.get("whatsapp_instance") or "default",
         "contact_jid": lead.get("contact_jid") or lead.get("jid") or "",
-        "profile_pic_url": lead.get("profile_pic_url") or "",
+        "profile_pic_url": f"https://whats.dominuslabs.online{lead['profile_pic_url']}" if lead.get("profile_pic_url", "").startswith("/") else (lead.get("profile_pic_url") or ""),
         "instagram": instagram,
         "email": email,
         "email_contato": email,
@@ -401,7 +401,16 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         is_from_me = msg.get("is_from_me", False)
         sender = "user" if is_from_me else "lead"
         direction = "outgoing" if is_from_me else "incoming"
-        raw_text = msg.get("message") or msg.get("content") or msg.get("text") or msg.get("body") or msg.get("conversation") or ""
+        
+        raw_text = msg.get("caption") or msg.get("message") or msg.get("content") or msg.get("text") or msg.get("body") or msg.get("conversation") or ""
+        image_url = msg.get("image_url") or msg.get("media_url") or msg.get("url") or msg.get("file_url") or msg.get("image") or ""
+        profile_pic_url = msg.get("profile_pic_url") or ""
+
+        if profile_pic_url and profile_pic_url.startswith("/"):
+            profile_pic_url = f"https://whats.dominuslabs.online{profile_pic_url}"
+        if image_url and image_url.startswith("/"):
+            image_url = f"https://whats.dominuslabs.online{image_url}"
+
         ts = msg.get("message_timestamp") or msg.get("created_at") or msg.get("timestamp") or msg.get("createdAt")
 
         mapped.append({
@@ -415,9 +424,14 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             "sent_by_user": is_from_me,
             "message": raw_text,
             "content": raw_text,
+            "caption": msg.get("caption", ""),
+            "message_type": msg.get("message_type", "conversation"),
+            "chat_kind": msg.get("chat_kind", "private"),
+            "image_url": image_url,
+            "media_url": image_url,
             "push_name": msg.get("push_name"),
             "display_phone": msg.get("display_phone"),
-            "profile_pic_url": msg.get("profile_pic_url"),
+            "profile_pic_url": profile_pic_url,
             "channel": lead_channel,
             "timestamp": ts,
             "status": msg.get("status", "received")

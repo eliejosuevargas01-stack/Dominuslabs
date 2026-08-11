@@ -89,6 +89,13 @@ export const WHATSAPP_COLOR_PALETTES = [
   }
 ];
 
+export function resolveMediaUrl(url: string | undefined | null): string {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
+  if (url.startsWith('/')) return `https://whats.dominuslabs.online${url}`;
+  return url;
+}
+
 export function getSessionColor(sessionId: string | undefined | null) {
   if (!sessionId) return WHATSAPP_COLOR_PALETTES[0];
   let hash = 0;
@@ -582,20 +589,45 @@ export default function InboxView() {
                   </div>
                 ) : (
                   messages.map((msg, idx) => {
-                    const isOutgoing = msg.direction === 'outgoing' || msg.sent_by_user === true;
+                    const isOutgoing = msg.is_from_me === true || msg.direction === 'outgoing' || msg.sent_by_user === true || msg.sender === 'user';
+                    const textContent = msg.content || msg.message || msg.text || msg.body || '';
+                    const rawMediaUrl = msg.image_url || msg.media_url || msg.url || msg.file_url || (msg.message_type === 'imageMessage' || msg.message_type === 'image' ? textContent : '');
+                    const imageUrl = resolveMediaUrl(rawMediaUrl);
+                    const isImageMsg = msg.message_type === 'imageMessage' || msg.message_type === 'image' || (!!imageUrl && (imageUrl.match(/\.(jpeg|jpg|gif|png|webp)/i) || imageUrl.includes('avatar') || imageUrl.includes('image')));
+
                     return (
                       <div
-                        key={idx}
+                        key={msg.id || msg.message_id || idx}
                         className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'}`}
                       >
                         <div
-                          className={`max-w-[85%] md:max-w-[75%] px-4 py-3 rounded-2xl text-xs font-medium leading-relaxed shadow-sm ${
+                          className={`max-w-[85%] md:max-w-[75%] p-3.5 rounded-2xl text-xs font-medium leading-relaxed shadow-sm ${
                             isOutgoing
                               ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-br-none'
                               : 'bg-slate-100 text-slate-800 rounded-bl-none border border-slate-200/50'
                           }`}
                         >
-                          <p className="whitespace-pre-wrap break-words">{msg.content || msg.message}</p>
+                          {/* Image rendering */}
+                          {imageUrl && (
+                            <div className="mb-2 overflow-hidden rounded-xl bg-slate-900/10 border border-slate-200/40">
+                              <a href={imageUrl} target="_blank" rel="noopener noreferrer" title="Clique para abrir a imagem em tamanho real">
+                                <img
+                                  src={imageUrl}
+                                  alt={textContent || 'Imagem do WhatsApp'}
+                                  className="w-full max-h-72 object-cover rounded-xl hover:opacity-95 transition-all cursor-pointer"
+                                  onError={(e) => {
+                                    (e.target as HTMLElement).style.display = 'none';
+                                  }}
+                                />
+                              </a>
+                            </div>
+                          )}
+
+                          {/* Caption or text content */}
+                          {textContent && (!imageUrl || textContent !== rawMediaUrl) && (
+                            <p className="whitespace-pre-wrap break-words">{textContent}</p>
+                          )}
+
                           <div className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${
                             isOutgoing ? 'text-purple-200' : 'text-slate-400'
                           }`}>
