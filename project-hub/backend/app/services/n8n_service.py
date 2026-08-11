@@ -854,6 +854,11 @@ def sanitize_outgoing_payload(payload: dict) -> dict:
 
     return sanitized
 
+def normalize_session_name(name: str) -> str:
+    if not name:
+        return ""
+    return name.lower().replace("-", "").replace("_", "").replace(" ", "")
+
 def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
     if not isinstance(raw_leads, list):
         return []
@@ -874,33 +879,38 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
                 if not c_jid:
                     c_jid = m.get("push_name") or m.get("display_phone") or "unknown_contact"
 
-                if c_jid not in contacts_map:
+                m_session_id = m.get("session_id") or top_session_id or ""
+                group_key = f"{c_jid}___{m_session_id}" if m_session_id else c_jid
+
+                if group_key not in contacts_map:
                     profile_pic = m.get("profile_pic_url") or item.get("profile_pic_url") or ""
                     if profile_pic and profile_pic.startswith("/"):
                         profile_pic = f"https://whats.dominuslabs.online{profile_pic}"
 
-                    contacts_map[c_jid] = {
+                    contacts_map[group_key] = {
+                        "id": group_key,
                         "jid": c_jid,
                         "contact_jid": c_jid,
                         "push_name": m.get("push_name") or item.get("push_name") or "Contato Sem Nome",
                         "display_phone": m.get("display_phone") or item.get("display_phone") or "",
                         "profile_pic_url": profile_pic,
-                        "session_id": m.get("session_id") or top_session_id,
+                        "session_id": m_session_id,
+                        "whatsapp_instance": m_session_id,
                         "created_at": m.get("created_at") or m.get("message_timestamp") or item.get("created_at"),
                         "mensagens": []
                     }
 
                 if m.get("push_name") and m.get("push_name") != "Desconhecido":
-                    contacts_map[c_jid]["push_name"] = m.get("push_name")
+                    contacts_map[group_key]["push_name"] = m.get("push_name")
                 if m.get("display_phone"):
-                    contacts_map[c_jid]["display_phone"] = m.get("display_phone")
+                    contacts_map[group_key]["display_phone"] = m.get("display_phone")
                 if m.get("profile_pic_url") and m.get("profile_pic_url") != "changed":
                     pic = m.get("profile_pic_url")
                     if pic and pic.startswith("/"):
                         pic = f"https://whats.dominuslabs.online{pic}"
-                    contacts_map[c_jid]["profile_pic_url"] = pic
+                    contacts_map[group_key]["profile_pic_url"] = pic
 
-                contacts_map[c_jid]["mensagens"].append(m)
+                contacts_map[group_key]["mensagens"].append(m)
 
             for c_info in contacts_map.values():
                 unpacked.append(c_info)
@@ -1252,13 +1262,20 @@ class N8NService:
 
                 # Map, filter and deduplicate messages from n8n
                 target_id_str = str(lead_id).strip()
+                target_jid = target_id_str
+                target_session = None
+                if "___" in target_id_str:
+                    parts = target_id_str.split("___", 1)
+                    target_jid = parts[0]
+                    target_session = parts[1]
+
                 fresh_msgs = []
                 seen_keys = set()
 
                 for m in raw_msgs:
                     if isinstance(m, dict):
                         m_lead_id = str(m.get("lead_id") or m.get("leadId") or "")
-                        if m_lead_id and m_lead_id != target_id_str:
+                        if m_lead_id and m_lead_id not in (target_id_str, target_jid):
                             continue
                         mapped_list = map_n8n_message(m, lead_channel)
                         for mapped_msg in mapped_list:
@@ -1267,8 +1284,14 @@ class N8NService:
                             c_push = str(mapped_msg.get("push_name") or "")
 
                             # Filter out messages belonging to other contacts
-                            if c_jid and target_id_str not in (c_jid, c_phone, c_push) and c_jid not in target_id_str:
+                            if c_jid and target_jid not in (c_jid, c_phone, c_push) and c_jid not in target_jid:
                                 continue
+
+                            # Filter out messages belonging to other sessions if target_session is specified
+                            msg_session = str(mapped_msg.get("session_id") or m.get("session_id") or "")
+                            if target_session and msg_session:
+                                if normalize_session_name(msg_session) != normalize_session_name(target_session):
+                                    continue
 
                             msg_id = str(mapped_msg.get("id") or mapped_msg.get("message_id") or "")
                             content = str(mapped_msg.get("content") or mapped_msg.get("message") or "").strip()
