@@ -831,52 +831,6 @@ def sanitize_outgoing_payload(payload: dict) -> dict:
 
     return sanitized
 
-class N8NService:
-    # Leads cache state
-    _leads_cache = None
-    _leads_cache_time = 0.0
-    _leads_cache_url = None
-    CACHE_TTL = 10.0  # seconds
-
-    @staticmethod
-    def invalidate_leads_cache():
-        N8NService._leads_cache = None
-        N8NService._leads_cache_time = 0.0
-        N8NService._leads_cache_url = None
-        logger.info("CRM Leads Cache explicitly invalidated.")
-
-    @staticmethod
-    async def run_scrapper(payload: dict, platform: str = "meta_ads") -> dict:
-        fallback_url = settings.SCRAPPER_META_WEBHOOK_URL if platform == "meta_ads" else settings.SCRAPPER_MAPS_WEBHOOK_URL
-        url = payload.get("webhook_url") or fallback_url
-        if not url:
-            logger.info("SCRAPPER Webhook URL not configured. Returning mock success.")
-            return {"status": "success", "message": "Scrapper triggered (MOCK Mode)", "data": payload}
-
-        outgoing_payload = {
-            "queries": payload.get("queries", []),
-            "min_results": payload.get("min_results", 10),
-            "max_results": payload.get("max_results", 20),
-        }
-        if "target_platform" in payload and payload["target_platform"]:
-            outgoing_payload["target_platform"] = payload["target_platform"]
-            # If target_platform is whatsapp or instagram, also set contact_channel for maximum N8N compatibility
-            if payload["target_platform"] in ("whatsapp", "instagram"):
-                outgoing_payload["contact_channel"] = payload["target_platform"]
-        if "contact_channel" in payload and payload["contact_channel"]:
-            outgoing_payload["contact_channel"] = payload["contact_channel"]
-        if "objective" in payload and payload["objective"]:
-            outgoing_payload["objective"] = payload["objective"]
-
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            try:
-                response = await client.post(url, json=outgoing_payload, timeout=30.0)
-                response.raise_for_status()
-                return clean_n8n_response(response.json())
-            except Exception as e:
-                logger.error(f"Error calling Scrapper webhook: {e}")
-                return {"status": "error", "message": str(e)}
-
 def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
     if not isinstance(raw_leads, list):
         return []
@@ -931,6 +885,52 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
             unpacked.append(item)
 
     return unpacked
+
+class N8NService:
+    # Leads cache state
+    _leads_cache = None
+    _leads_cache_time = 0.0
+    _leads_cache_url = None
+    CACHE_TTL = 10.0  # seconds
+
+    @staticmethod
+    def invalidate_leads_cache():
+        N8NService._leads_cache = None
+        N8NService._leads_cache_time = 0.0
+        N8NService._leads_cache_url = None
+        logger.info("CRM Leads Cache explicitly invalidated.")
+
+    @staticmethod
+    async def run_scrapper(payload: dict, platform: str = "meta_ads") -> dict:
+        fallback_url = settings.SCRAPPER_META_WEBHOOK_URL if platform == "meta_ads" else settings.SCRAPPER_MAPS_WEBHOOK_URL
+        url = payload.get("webhook_url") or fallback_url
+        if not url:
+            logger.info("SCRAPPER Webhook URL not configured. Returning mock success.")
+            return {"status": "success", "message": "Scrapper triggered (MOCK Mode)", "data": payload}
+
+        outgoing_payload = {
+            "queries": payload.get("queries", []),
+            "min_results": payload.get("min_results", 10),
+            "max_results": payload.get("max_results", 20),
+        }
+        if "target_platform" in payload and payload["target_platform"]:
+            outgoing_payload["target_platform"] = payload["target_platform"]
+            # If target_platform is whatsapp or instagram, also set contact_channel for maximum N8N compatibility
+            if payload["target_platform"] in ("whatsapp", "instagram"):
+                outgoing_payload["contact_channel"] = payload["target_platform"]
+        if "contact_channel" in payload and payload["contact_channel"]:
+            outgoing_payload["contact_channel"] = payload["contact_channel"]
+        if "objective" in payload and payload["objective"]:
+            outgoing_payload["objective"] = payload["objective"]
+
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            try:
+                response = await client.post(url, json=outgoing_payload, timeout=30.0)
+                response.raise_for_status()
+                return clean_n8n_response(response.json())
+            except Exception as e:
+                logger.error(f"Error calling Scrapper webhook: {e}")
+                return {"status": "error", "message": str(e)}
 
     @staticmethod
     async def get_leads() -> List[dict]:
