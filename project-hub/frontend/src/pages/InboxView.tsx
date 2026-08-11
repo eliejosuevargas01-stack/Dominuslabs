@@ -377,6 +377,19 @@ const normalizeSessionName = (name?: string) => {
     const list: Array<{ name: string; status: string }> = [];
     const seenNorm = new Set<string>();
 
+    // 1. Instâncias ativas que possuem conversas no CRM
+    leads.forEach(l => {
+      const sName = l.whatsapp_instance || l.session_id;
+      if (sName && sName !== 'default') {
+        const norm = normalizeSessionName(sName);
+        if (!seenNorm.has(norm)) {
+          seenNorm.add(norm);
+          list.push({ name: sName, status: 'CONNECTED' });
+        }
+      }
+    });
+
+    // 2. Instâncias de WhatsApp conectadas via API que ainda não têm leads
     sessions.forEach(s => {
       const sName = s.name || s.session_name || s.id;
       if (sName) {
@@ -384,17 +397,6 @@ const normalizeSessionName = (name?: string) => {
         if (!seenNorm.has(norm)) {
           seenNorm.add(norm);
           list.push({ name: sName, status: s.status || 'CONNECTED' });
-        }
-      }
-    });
-
-    leads.forEach(l => {
-      const sName = l.whatsapp_instance || l.session_id;
-      if (sName) {
-        const norm = normalizeSessionName(sName);
-        if (!seenNorm.has(norm)) {
-          seenNorm.add(norm);
-          list.push({ name: sName, status: 'CONNECTED' });
         }
       }
     });
@@ -409,7 +411,7 @@ const normalizeSessionName = (name?: string) => {
       if (selectedSessionFilter !== 'ALL') {
         const leadNorm = normalizeSessionName(leadSession);
         const filterNorm = normalizeSessionName(selectedSessionFilter);
-        if (leadNorm !== filterNorm && !leadNorm.includes(filterNorm) && !filterNorm.includes(leadNorm)) {
+        if (leadNorm !== filterNorm) {
           return false;
         }
       }
@@ -426,6 +428,23 @@ const normalizeSessionName = (name?: string) => {
       return true;
     });
   }, [leads, selectedSessionFilter, searchTerm]);
+
+  // Atualiza lead ativo quando o filtro por sessão muda
+  useEffect(() => {
+    if (selectedSessionFilter !== 'ALL') {
+      const filterNorm = normalizeSessionName(selectedSessionFilter);
+      if (activeLead) {
+        const activeNorm = normalizeSessionName(activeLead.whatsapp_instance || activeLead.session_id);
+        if (activeNorm !== filterNorm) {
+          const firstMatching = leads.find(l => normalizeSessionName(l.whatsapp_instance || l.session_id) === filterNorm);
+          setActiveLead(firstMatching || null);
+        }
+      } else {
+        const firstMatching = leads.find(l => normalizeSessionName(l.whatsapp_instance || l.session_id) === filterNorm);
+        if (firstMatching) setActiveLead(firstMatching);
+      }
+    }
+  }, [selectedSessionFilter, leads]);
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-4 md:p-8 space-y-6">
@@ -493,7 +512,7 @@ const normalizeSessionName = (name?: string) => {
             const isSelected = selectedSessionFilter === sName || (selectedSessionFilter !== 'ALL' && normalizeSessionName(selectedSessionFilter) === sNorm);
             const chatCount = leads.filter(l => {
               const lNorm = normalizeSessionName(l.whatsapp_instance || l.session_id);
-              return lNorm === sNorm || (lNorm && sNorm && (lNorm.includes(sNorm) || sNorm.includes(lNorm)));
+              return lNorm === sNorm;
             }).length;
 
             return (

@@ -137,15 +137,17 @@ def test_scrapper_endpoints(client):
     assert res.status_code == 401
 
     # Test authorized scrapper run
-    res = client.post("/api/v1/scrapper/run", json={
-        "queries": ["Clínicas odontológicas São Paulo"],
-        "platforms": ["Google Maps"],
-        "min_results": 5,
-        "max_results": 20
-    }, headers=headers)
-    assert res.status_code == 200
-    scrapper_result = res.json()
-    assert scrapper_result["status"] in ("success", "accepted")
+    from unittest.mock import patch
+    with patch("app.services.n8n_service.n8n_service.run_scrapper", return_value={"status": "success", "message": "Scrapper triggered"}):
+        res = client.post("/api/v1/scrapper/run", json={
+            "queries": ["Clínicas odontológicas São Paulo"],
+            "platforms": ["Google Maps"],
+            "min_results": 5,
+            "max_results": 20
+        }, headers=headers)
+        assert res.status_code == 200
+        scrapper_result = res.json()
+        assert scrapper_result["status"] in ("success", "accepted")
 
 from unittest.mock import patch
 from app.services.n8n_service import n8n_service

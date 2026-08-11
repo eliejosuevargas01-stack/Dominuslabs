@@ -485,7 +485,7 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
                 Entre em contato conosco hoje mesmo para desenharmos juntos a solução perfeita de landing pages, integrações, CRMs ou automações.
               </p>
               <a
-                href="https://wa.me/5500000000000"
+                href="https://wa.me/5547991362164"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 bg-white text-violet-800 hover:bg-violet-50 px-6 py-3 rounded-2xl font-extrabold text-sm shadow-md transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
@@ -677,7 +677,7 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
                     </a>
                   )}
                   <a
-                    href="https://wa.me/5500000000000"
+                    href="https://wa.me/5547991362164"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
