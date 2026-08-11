@@ -1227,9 +1227,11 @@ class N8NService:
                 except Exception:
                     pass
 
-                # Map and flatten messages
-                existing_ids = {m.get("id") for m in all_msgs if m.get("id")}
+                # Map, filter and deduplicate messages from n8n
                 target_id_str = str(lead_id).strip()
+                fresh_msgs = []
+                seen_keys = set()
+
                 for m in raw_msgs:
                     if isinstance(m, dict):
                         m_lead_id = str(m.get("lead_id") or m.get("leadId") or "")
@@ -1245,13 +1247,27 @@ class N8NService:
                             if c_jid and target_id_str not in (c_jid, c_phone, c_push) and c_jid not in target_id_str:
                                 continue
 
-                            if mapped_msg.get("id") not in existing_ids:
-                                all_msgs.append(mapped_msg)
-                                existing_ids.add(mapped_msg.get("id"))
+                            msg_id = str(mapped_msg.get("id") or mapped_msg.get("message_id") or "")
+                            content = str(mapped_msg.get("content") or mapped_msg.get("message") or "").strip()
+                            is_from_me = mapped_msg.get("is_from_me", False)
+                            ts = str(mapped_msg.get("timestamp") or mapped_msg.get("message_timestamp") or "")
 
-                all_msgs.sort(key=lambda x: x.get("timestamp") or "")
-                MOCK_CONVERSATIONS[lead_id] = all_msgs
-                return all_msgs
+                            if msg_id and not msg_id.startswith("temp_") and msg_id.lower() not in ("none", "null", ""):
+                                dedup_key = f"id:{msg_id}"
+                            else:
+                                dedup_key = f"msg:{content}:{is_from_me}:{ts[:16]}"
+
+                            if dedup_key not in seen_keys:
+                                seen_keys.add(dedup_key)
+                                fresh_msgs.append(mapped_msg)
+
+                fresh_msgs.sort(key=lambda x: x.get("timestamp") or "")
+                
+                if len(fresh_msgs) > 0:
+                    MOCK_CONVERSATIONS[lead_id] = fresh_msgs
+                    return fresh_msgs
+
+                return MOCK_CONVERSATIONS.get(lead_id, [])
             except Exception as e:
                 logger.error(f"Error calling GET messages webhook: {e}. Returning mock.")
                 return all_msgs

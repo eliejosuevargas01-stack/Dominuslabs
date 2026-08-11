@@ -180,7 +180,31 @@ export default function InboxView() {
         } else if (data && Array.isArray(data.mensagens)) {
           extracted = data.mensagens;
         }
-        setMessages(extracted);
+
+        // Deduplicate messages strictly
+        const deduped: any[] = [];
+        const seen = new Set<string>();
+        for (const m of extracted) {
+          if (!m || typeof m !== 'object') continue;
+          const msgId = String(m.id || m.message_id || '');
+          const content = String(m.content || m.message || '').trim();
+          const isFromMe = m.is_from_me === true || m.sent_by_user === true || m.direction === 'outgoing' || m.sender === 'user';
+          const ts = String(m.timestamp || m.message_timestamp || '').slice(0, 16);
+
+          let dedupKey = '';
+          if (msgId && !msgId.startsWith('temp_') && msgId.toLowerCase() !== 'null' && msgId.toLowerCase() !== 'none') {
+            dedupKey = `id_${msgId}`;
+          } else {
+            dedupKey = `msg_${isFromMe}_${content}_${ts}`;
+          }
+
+          if (!seen.has(dedupKey)) {
+            seen.add(dedupKey);
+            deduped.push(m);
+          }
+        }
+
+        setMessages(deduped);
       }
     } catch (err) {
       console.error("Erro ao carregar mensagens:", err);
@@ -226,8 +250,14 @@ export default function InboxView() {
           const data = JSON.parse(event.data);
           if (data.event === 'reload') {
             loadLeads(true);
-            if (activeLead && String(activeLead.id) === String(data.lead_id)) {
-              loadConversation(data.lead_id, true);
+            if (activeLead) {
+              const targetId = String(data.lead_id || '');
+              const activeId = String(activeLead.id || '');
+              const activeJid = String(activeLead.contact_jid || activeLead.jid || '');
+              const activePhone = String(activeLead.display_phone || activeLead.whatsapp || '');
+              if (!targetId || targetId === activeId || targetId === activeJid || targetId === activePhone || activeJid.includes(targetId)) {
+                loadConversation(activeLead.id, true);
+              }
             }
           }
         } catch (e) {
@@ -239,7 +269,6 @@ export default function InboxView() {
       };
 
       eventSource.onerror = (_err) => {
-        console.warn('SSE disconnected notice:', _err);
         if (eventSource) eventSource.close();
         reconnectTimeout = setTimeout(connectSSE, 5000);
       };
@@ -267,19 +296,40 @@ export default function InboxView() {
     if (e) e.preventDefault();
     if (!replyText.trim() || !activeLead || sending) return;
 
+    const messageText = replyText.trim();
+    setReplyText('');
     setSending(true);
+
+    // Mensagem temporária ilustrativa instantânea no frontend
+    const tempId = `temp_${Date.now()}`;
+    const tempMsg = {
+      id: tempId,
+      message_id: tempId,
+      content: messageText,
+      message: messageText,
+      direction: 'outgoing',
+      sent_by_user: true,
+      is_from_me: true,
+      timestamp: new Date().toISOString(),
+      session_id: replySessionId || activeLead.whatsapp_instance || activeLead.session_id,
+      contact_jid: activeLead.contact_jid || activeLead.jid || activeLead.id,
+      push_name: activeLead.push_name || activeLead.nome || '',
+      display_phone: activeLead.display_phone || activeLead.whatsapp || '',
+      status: 'sending'
+    };
+
+    setMessages((prev) => [...prev, tempMsg]);
+
     try {
       const payload = {
         lead_id: String(activeLead.id),
         phone: activeLead.whatsapp || activeLead.phone || activeLead.id,
-        message: replyText.trim(),
+        message: messageText,
         session_id: replySessionId || activeLead.whatsapp_instance || activeLead.session_id || undefined,
       };
 
       await sendWhatsappMessage(payload);
-      setReplyText('');
       await loadConversation(activeLead.id, true);
-      await loadLeads(true);
     } catch (err: any) {
       alert(`Falha ao enviar mensagem: ${err.message || err}`);
     } finally {
