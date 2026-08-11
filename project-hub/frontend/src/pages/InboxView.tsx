@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  MessageSquare, Search, Send, Loader2, Sparkles, CheckCheck,
+  MessageSquare, Search, Send, Loader2, Sparkles, CheckCheck, Check, Clock, AlertCircle,
   RefreshCw, Filter, Phone, Radio, ArrowLeft, Mic
 } from 'lucide-react';
 import { API_BASE, fetchWithAuth, fetchWhatsappSessions, sendWhatsappMessage } from '../services/api';
@@ -773,7 +773,49 @@ const normalizeSessionName = (name?: string) => {
                             <span>
                               {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                             </span>
-                            {isOutgoing && <CheckCheck className="w-3 h-3 text-purple-200" />}
+                            {isOutgoing && (() => {
+                              const st = String(msg.status || '').toLowerCase();
+                              if (st === 'read' || st === 'lido' || st === 'played') {
+                                return (
+                                  <span title="Lida (Read)">
+                                    <CheckCheck className="w-3.5 h-3.5 text-cyan-300 font-extrabold" />
+                                  </span>
+                                );
+                              }
+                              if (st === 'received' || st === 'delivered' || st === 'entregue' || st === 'delivery_ack') {
+                                return (
+                                  <span title="Entregue (Received)">
+                                    <CheckCheck className="w-3.5 h-3.5 text-purple-200" />
+                                  </span>
+                                );
+                              }
+                              if (st === 'sent' || st === 'enviado' || st === 'server_ack') {
+                                return (
+                                  <span title="Enviada (Sent)">
+                                    <Check className="w-3.5 h-3.5 text-purple-200" />
+                                  </span>
+                                );
+                              }
+                              if (st === 'pending' || st === 'sending') {
+                                return (
+                                  <span title="Enviando...">
+                                    <Clock className="w-3 h-3 text-purple-300 animate-pulse" />
+                                  </span>
+                                );
+                              }
+                              if (st === 'failed' || st === 'error') {
+                                return (
+                                  <span title="Falha no envio">
+                                    <AlertCircle className="w-3 h-3 text-rose-300" />
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span title="Enviada">
+                                  <CheckCheck className="w-3.5 h-3.5 text-purple-200" />
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>
