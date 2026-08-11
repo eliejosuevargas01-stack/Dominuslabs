@@ -593,7 +593,6 @@ export default function InboxView() {
                     const textContent = msg.content || msg.message || msg.text || msg.body || '';
                     const rawMediaUrl = msg.image_url || msg.media_url || msg.url || msg.file_url || (msg.message_type === 'imageMessage' || msg.message_type === 'image' ? textContent : '');
                     const imageUrl = resolveMediaUrl(rawMediaUrl);
-                    const isImageMsg = msg.message_type === 'imageMessage' || msg.message_type === 'image' || (!!imageUrl && (imageUrl.match(/\.(jpeg|jpg|gif|png|webp)/i) || imageUrl.includes('avatar') || imageUrl.includes('image')));
 
                     return (
                       <div
