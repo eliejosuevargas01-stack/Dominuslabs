@@ -63,10 +63,10 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:messages:send") -> 
                 logger.info(f"[IDENTITY-WORKER] ✅ JWT M2M emitido com sucesso para tenant_id={tenant_id} (exp={expires_in}s)")
                 return token
             elif resp.status_code in (401, 403):
-                logger.error(f"[IDENTITY-WORKER] ❌ Autenticação/Permissão recusada pelo Identity Worker: status={resp.status_code}")
+                logger.error(f"[IDENTITY-WORKER] ❌ Autenticação/Permissão recusada pelo Identity Worker: status={resp.status_code}, body={resp.text}")
                 raise HTTPException(
                     status_code=resp.status_code,
-                    detail=f"Acesso M2M negado pelo Identity Worker (status {resp.status_code})."
+                    detail=f"Acesso M2M negado pelo Identity Worker (status {resp.status_code}): {resp.text}"
                 )
             else:
                 logger.error(f"[IDENTITY-WORKER] Falha na emissão do JWT M2M: status={resp.status_code}, body={resp.text[:200]}")
