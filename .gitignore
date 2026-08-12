@@ -16,7 +16,11 @@ project-hub/frontend/dist/
 .eslintcache
 .vite/
 
-# Environment variables and secrets
+# Environment variables, certificates and secrets
 .env
 .env.*
 *.env
+certs/
+*.crt
+*.key
+*.pem
