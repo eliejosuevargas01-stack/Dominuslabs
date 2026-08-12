@@ -35,10 +35,18 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:messages:send") -> 
     base_url = settings.IDENTITY_WORKER_URL.rstrip("/")
     url = f"{base_url}/v1/tokens"
 
+    headers = {
+        "Content-Type": "application/json",
+        "cf-client-cert-presented": "1",
+        "cf-client-cert-subject-dn": "CN=dominus-prod",
+        "cf-client-cert-issuer-dn": "CN=dominus-prod"
+    }
+
     payload = {
         "client_id": "dominus-prod",
         "tenant_id": tenant_id,
         "scope": scope,
+        "aud": "whatsapp-api",
         "audience": "whatsapp-api"
     }
 
@@ -46,7 +54,7 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:messages:send") -> 
 
     try:
         async with get_mtls_async_client(timeout=10.0) as client:
-            resp = await client.post(url, json=payload)
+            resp = await client.post(url, json=payload, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
                 token = data.get("access_token")
