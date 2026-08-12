@@ -22,8 +22,10 @@ async def get_user_token(email: str, db: Session) -> str:
     try:
         # Usa o fluxo M2M OAuth com cache para obter o token JWT
         return await get_oauth_token(user, db)
-    except ValueError as e:
-        # Se não há credenciais M2M vinculadas ainda, retorna 412 para o frontend não deslogar
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        # Se não há credenciais M2M vinculadas ainda, retorna 412
         raise HTTPException(
             status_code=status.HTTP_412_PRECONDITION_FAILED,
             detail=f"WhatsApp não vinculado. {str(e)}"
@@ -88,12 +90,20 @@ async def list_sessions(
     """
     List all sessions (WhatsApp and Instagram) belonging to the authenticated user.
     """
-    token = await get_user_token(current_user, db)
-    return await make_whatsapp_api_request(
-        "GET",
-        "/api/sessions",
-        headers={"x-session-token": token}
-    )
+    try:
+        token = await get_user_token(current_user, db)
+        return await make_whatsapp_api_request(
+            "GET",
+            "/api/sessions",
+            headers={"x-session-token": token}
+        )
+    except HTTPException as he:
+        if he.status_code in (412, 502, 503):
+            return []
+        raise he
+    except Exception as e:
+        print(f"[WA-SESSIONS] Erro em list_sessions: {e}", flush=True)
+        return []
 
 @router.post("/sessions")
 async def create_session(

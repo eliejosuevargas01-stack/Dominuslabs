@@ -15,6 +15,7 @@ from app.models.task import ProjectTask
 from app.models.logs import CommitLog, DeployLog
 from app.models.feedback import Feedback
 from app.models.user import User
+from app.models.whatsapp_account import WhatsappAccount
 
 # Create persistent upload folders and database tables
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "images"), exist_ok=True)
@@ -24,15 +25,15 @@ os.makedirs(os.path.join(settings.UPLOAD_DIR, "documents"), exist_ok=True)
 
 Base.metadata.create_all(bind=engine)
 
-# Automatic database migration for users columns
-try:
-    from sqlalchemy import text
-    with engine.connect() as conn:
-        db_type = engine.url.drivername
-        if "sqlite" in db_type:
-            from sqlalchemy import inspect
-            inspector = inspect(engine)
-            columns = [c["name"] for c in inspector.get_columns("users")]
+# Automatic database migration for users and whatsapp_accounts columns
+from sqlalchemy import text
+db_type = engine.url.drivername
+if "sqlite" in db_type:
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("users")]
+        with engine.begin() as conn:
             if "tenant_id" not in columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN tenant_id VARCHAR(255);"))
             if "whatsapp_token" not in columns:
@@ -45,19 +46,31 @@ try:
                 conn.execute(text("ALTER TABLE users ADD COLUMN token_issued_at DATETIME;"))
             if "token_expires_at" not in columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN token_expires_at DATETIME;"))
-            conn.commit()
-        else:
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);"))
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_token VARCHAR(255) UNIQUE;"))
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS access_token TEXT;"))
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token TEXT;"))
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_issued_at TIMESTAMP;"))
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMP;"))
-            conn.execute(text("ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);"))
-            conn.commit()
-        print("Database migration: users and whatsapp_accounts tenant_id columns checked/added successfully.")
-except Exception as e:
-    print(f"Database migration warning/error: {e}")
+            
+            wa_columns = [c["name"] for c in inspector.get_columns("whatsapp_accounts")] if inspector.has_table("whatsapp_accounts") else []
+            if "tenant_id" not in wa_columns and inspector.has_table("whatsapp_accounts"):
+                conn.execute(text("ALTER TABLE whatsapp_accounts ADD COLUMN tenant_id VARCHAR(255);"))
+        print("SQLite migration: users and whatsapp_accounts tenant_id columns checked/added successfully.")
+    except Exception as e:
+        print(f"SQLite migration warning: {e}")
+else:
+    # Postgres DDL executions in separate transactions
+    ddl_statements = [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_token VARCHAR(255);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS access_token TEXT;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token TEXT;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_issued_at TIMESTAMP;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMP;",
+        "ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);"
+    ]
+    for stmt in ddl_statements:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(stmt))
+        except Exception as stmt_err:
+            print(f"Postgres migration DDL notice ({stmt}): {stmt_err}")
+    print("PostgreSQL migration: users and whatsapp_accounts columns migration completed.")
 
 # Seed database users
 def seed_database_users():
