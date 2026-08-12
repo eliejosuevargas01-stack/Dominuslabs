@@ -9,6 +9,7 @@ Responsável por:
 import logging
 import httpx
 from cachetools import TTLCache
+from fastapi import HTTPException, status
 from app.core.config import settings
 from app.core.mtls_client import get_mtls_async_client
 
@@ -21,8 +22,9 @@ _identity_token_cache: TTLCache = TTLCache(maxsize=512, ttl=300)
 
 async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:messages:send") -> str:
     """
-    Obtém um JWT M2M para o tenant_id e scope especificados.
+    Obtém um JWT M2M estrito para o tenant_id e scope especificados.
     Tenta primeiro o cache local; se não existir, chama o Identity Worker via mTLS.
+    Sem fallbacks ou bypasses de segurança em caso de falha.
     """
     cache_key = (tenant_id, scope)
     cached_token = _identity_token_cache.get(cache_key)
@@ -51,38 +53,33 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:messages:send") -> 
                 expires_in = data.get("expires_in", 300)
 
                 if not token:
-                    raise ValueError(f"Identity Worker retornou resposta sem access_token: {data}")
+                    logger.error(f"[IDENTITY-WORKER] Resposta incompleta: {data}")
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="Identity Worker retornou credencial incompleta."
+                    )
 
                 _identity_token_cache[cache_key] = token
                 logger.info(f"[IDENTITY-WORKER] ✅ JWT M2M emitido com sucesso para tenant_id={tenant_id} (exp={expires_in}s)")
                 return token
-            else:
-                logger.error(
-                    f"[IDENTITY-WORKER] Falha na emissão do JWT M2M. Status={resp.status_code}, Body={resp.text[:200]}"
+            elif resp.status_code in (401, 403):
+                logger.error(f"[IDENTITY-WORKER] ❌ Autenticação/Permissão recusada pelo Identity Worker: status={resp.status_code}")
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=f"Acesso M2M negado pelo Identity Worker (status {resp.status_code})."
                 )
-                raise ValueError(f"Identity Worker recusou a solicitação mTLS/JWT: status={resp.status_code}")
+            else:
+                logger.error(f"[IDENTITY-WORKER] Falha na emissão do JWT M2M: status={resp.status_code}, body={resp.text[:200]}")
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Identity Worker recusou a solicitação M2M (status {resp.status_code})."
+                )
     except httpx.RequestError as e:
-        logger.warning(
-            f"[IDENTITY-WORKER] Conexão direta com Identity Worker falhou ({e}). "
-            "Operando em fallback de simulação local de token M2M para testes."
+        logger.error(f"[IDENTITY-WORKER] ❌ Erro de conexão com Identity Worker em {url}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Serviço Identity Worker inacessível ({url}). Verifique a URL e a conexão mTLS."
         )
-        # Fallback de desenvolvimento local se o Worker ainda não estiver publicado no endpoint externo
-        import jwt, time
-        fallback_token = jwt.encode(
-            {
-                "iss": "https://identity.dominus.online",
-                "aud": "whatsapp-api",
-                "sub": "dominus-prod",
-                "tenant_id": tenant_id,
-                "scope": scope,
-                "exp": int(time.time()) + 300,
-                "jti": f"fallback_{tenant_id}_{int(time.time())}"
-            },
-            settings.SECRET_KEY,
-            algorithm="HS256"
-        )
-        _identity_token_cache[cache_key] = fallback_token
-        return fallback_token
 
 
 def invalidate_m2m_token(tenant_id: str, scope: str = "whatsapp:messages:send") -> None:

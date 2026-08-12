@@ -12,6 +12,7 @@ import logging
 import httpx
 from cachetools import TTLCache
 from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
 
 from app.core.config import settings
 from app.core.mtls_client import get_mtls_async_client
@@ -62,7 +63,7 @@ async def check_token_validity(token: str) -> bool:
 
 async def get_oauth_token(user: User, db: Session) -> str:
     """
-    Função de compatibilidade: obtém o JWT M2M do Identity Worker para o tenant do usuário.
+    Obtém o JWT M2M do Identity Worker para o tenant do usuário.
     """
     tenant_id = await get_tenant_id_for_user(user, db)
     return await get_m2m_jwt(tenant_id=tenant_id, scope="whatsapp:messages:send")
@@ -88,7 +89,7 @@ async def send_whatsapp_message(
     # 1. Identifica o tenant do usuário
     tenant_id = await get_tenant_id_for_user(user, db)
 
-    # 2. Requisita JWT M2M ao Identity Worker via mTLS
+    # 2. Requisita JWT M2M ao Identity Worker via mTLS (sem fallbacks ou bypasses)
     scope = "whatsapp:messages:send"
     jwt_token = await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
 
@@ -120,25 +121,21 @@ async def send_whatsapp_message(
             if resp.status_code in (200, 201):
                 logger.info(f"[WA-M2M] ✅ Mensagem enviada com sucesso para {to_phone}!")
                 return resp.json()
-            elif resp.status_code == 403:
+            elif resp.status_code in (401, 403):
                 logger.error(f"[WA-M2M] ❌ Tenant Lock ou Permissão recusada pela WhatsApp API: {resp.text[:200]}")
-                raise PermissionError(f"Acesso negado pela WhatsApp API (Tenant Lock / Scope): {resp.text[:200]}")
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=f"Acesso negado pela WhatsApp API (Tenant Lock / Scope): {resp.text[:200]}"
+                )
             else:
                 logger.error(f"[WA-M2M] Erro no envio WhatsApp API. Status: {resp.status_code}, Body: {resp.text[:200]}")
-                raise ValueError(f"Falha na chamada à WhatsApp API: status={resp.status_code}")
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Falha na chamada à WhatsApp API (status {resp.status_code})."
+                )
     except httpx.RequestError as e:
-        logger.warning(
-            f"[WA-M2M] Endpoint externo da WhatsApp API não respondeu ({e}). "
-            f"Retornando resposta simulada de sucesso para a cadeia mTLS/JWT M2M."
+        logger.error(f"[WA-M2M] ❌ Conexão com WhatsApp API falhou em {url}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Serviço WhatsApp API inacessível em {url}."
         )
-        return {
-            "status": "success",
-            "message_id": f"msg_m2m_{tenant_id}_simulated",
-            "tenant_id": tenant_id,
-            "to": to_phone,
-            "security": {
-                "mtls_verified": True,
-                "jwt_scope": scope,
-                "tenant_lock": "passed"
-            }
-        }
