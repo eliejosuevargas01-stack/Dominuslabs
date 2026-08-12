@@ -46,7 +46,8 @@ async def make_whatsapp_api_request(
         if "Authorization" not in req_headers and token:
             req_headers["Authorization"] = f"Bearer {token}"
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    from app.core.mtls_client import get_mtls_async_client
+    async with get_mtls_async_client(timeout=timeout) as client:
         try:
             response = await client.request(
                 method,
@@ -411,23 +412,26 @@ async def provision_whatsapp(
 
     print(f"\n[M2M-AUTH-FLOW] >>> Solicitado VÍNCULO MANUAL para {user.email}", flush=True)
 
+    from app.core.mtls_client import get_mtls_async_client
+    from app.services.whatsapp_service import get_tenant_id_for_user
+
+    tenant_id = await get_tenant_id_for_user(user, db)
+
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            print(f"[M2M-AUTH-FLOW] >>> Enviando solicitação de provisionamento M2M para a WhatsApp API: email={user.email}", flush=True)
+        async with get_mtls_async_client(timeout=20.0) as client:
+            print(f"[M2M-AUTH-FLOW] >>> Enviando solicitação mTLS de provisionamento M2M para WhatsApp API: email={user.email}, tenant_id={tenant_id}", flush=True)
             resp = await client.post(
                 provision_url,
-                json={"email": user.email, "password": user.hashed_password},
+                json={"email": user.email, "tenant_id": tenant_id, "password": user.hashed_password},
             )
 
-            # Caso já exista na WhatsApp API (conflito 409), podemos tentar obter as chaves?
-            # A API WhatsApp não permite obter o client_secret (apenas hash).
-            # Mas podemos chamar a rota de /reprovision para resetar o secret e obter o novo!
+            # Caso já exista na WhatsApp API (conflito 409), tenta reprovisionar
             if resp.status_code == 409:
-                print(f"[M2M-AUTH-FLOW] >>> Usuário já cadastrado na WhatsApp API (409). Tentando REPROVISIONAR para gerar novas credenciais...", flush=True)
+                print(f"[M2M-AUTH-FLOW] >>> Usuário/Tenant já cadastrado na WhatsApp API (409). Tentando REPROVISIONAR...", flush=True)
                 reprovision_url = f"{base_url}/api/v1/clients/reprovision"
                 resp = await client.post(
                     reprovision_url,
-                    json={"email": user.email, "password": user.hashed_password},
+                    json={"email": user.email, "tenant_id": tenant_id, "password": user.hashed_password},
                 )
 
             if resp.status_code not in (200, 201):
@@ -446,25 +450,25 @@ async def provision_whatsapp(
                 raise HTTPException(status_code=502, detail="WhatsApp API retornou resposta incompleta.")
 
             print(f"[M2M-AUTH-FLOW] >>> Cópia de client_id e client_secret recebida com sucesso!", flush=True)
-            print(f"[M2M-AUTH-FLOW] >>> client_id: {client_id}", flush=True)
-            print(f"[M2M-AUTH-FLOW] >>> client_secret: {client_secret[:8]}****************", flush=True)
 
-            # Salva no banco de dados Dominus
+            # Salva no banco de dados Dominus com vinculação explicita ao tenant_id
             account = db.query(WhatsappAccount).filter(
                 WhatsappAccount.user_id == user.id
             ).first()
             if account:
                 account.client_id = client_id
                 account.client_secret = client_secret
-                print(f"[M2M-AUTH-FLOW] >>> Atualizando credenciais M2M existentes na tabela whatsapp_accounts...", flush=True)
+                account.tenant_id = tenant_id
+                print(f"[M2M-AUTH-FLOW] >>> Atualizando credenciais M2M existentes com tenant_id={tenant_id}...", flush=True)
             else:
                 account = WhatsappAccount(
                     user_id=user.id,
+                    tenant_id=tenant_id,
                     client_id=client_id,
                     client_secret=client_secret
                 )
                 db.add(account)
-                print(f"[M2M-AUTH-FLOW] >>> Criando novo registro na tabela whatsapp_accounts...", flush=True)
+                print(f"[M2M-AUTH-FLOW] >>> Criando novo registro whatsapp_accounts vinculado ao tenant_id={tenant_id}...", flush=True)
 
             db.commit()
             print(f"[M2M-AUTH-FLOW] ✅ Credenciais M2M vinculadas e salvas no banco com sucesso!\n", flush=True)

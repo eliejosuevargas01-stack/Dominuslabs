@@ -33,6 +33,8 @@ try:
             from sqlalchemy import inspect
             inspector = inspect(engine)
             columns = [c["name"] for c in inspector.get_columns("users")]
+            if "tenant_id" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN tenant_id VARCHAR(255);"))
             if "whatsapp_token" not in columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN whatsapp_token VARCHAR;"))
             if "access_token" not in columns:
@@ -45,13 +47,15 @@ try:
                 conn.execute(text("ALTER TABLE users ADD COLUMN token_expires_at DATETIME;"))
             conn.commit()
         else:
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);"))
             conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_token VARCHAR(255) UNIQUE;"))
             conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS access_token TEXT;"))
             conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token TEXT;"))
             conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_issued_at TIMESTAMP;"))
             conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMP;"))
+            conn.execute(text("ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);"))
             conn.commit()
-        print("Database migration: users table token columns checked/added successfully.")
+        print("Database migration: users and whatsapp_accounts tenant_id columns checked/added successfully.")
 except Exception as e:
     print(f"Database migration warning/error: {e}")
 

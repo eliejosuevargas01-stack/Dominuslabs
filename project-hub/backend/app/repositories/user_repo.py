@@ -15,9 +15,12 @@ class UserRepository:
         return db.query(User).offset(skip).limit(limit).all()
 
     def create(self, db: Session, obj_in: UserCreate) -> User:
+        import uuid
+        tenant_id = obj_in.tenant_id if obj_in.tenant_id else f"tenant_{uuid.uuid4().hex[:12]}"
         db_obj = User(
             email=obj_in.email,
             hashed_password=get_password_hash(obj_in.password),
+            tenant_id=tenant_id,
             role=obj_in.role,
             can_create_projects=obj_in.can_create_projects,
             can_edit_projects=obj_in.can_edit_projects,

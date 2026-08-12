@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     CRM_CREATE_ACTIVITY_WEBHOOK_URL: str = os.getenv("CRM_CREATE_ACTIVITY_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
     
     WHATSAPP_API_URL: str = os.getenv("WHATSAPP_API_URL", "http://localhost:3000")
+    IDENTITY_WORKER_URL: str = os.getenv("IDENTITY_WORKER_URL", "https://identity.dominus.online")
+
+    # mTLS Security Settings
+    MTLS_CERT_PATH: str = os.getenv("MTLS_CERT_PATH", "")
+    MTLS_KEY_PATH: str = os.getenv("MTLS_KEY_PATH", "")
+    MTLS_CA_CERT_PATH: str = os.getenv("MTLS_CA_CERT_PATH", "")
+    ENABLE_MTLS: bool = os.getenv("ENABLE_MTLS", "false").lower() in ("true", "1")
 
     class Config:
         case_sensitive = True
