@@ -33,7 +33,7 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:messages:send") -> 
         return cached_token
 
     base_url = settings.IDENTITY_WORKER_URL.rstrip("/")
-    url = f"{base_url}/api/v1/auth/m2m/token"
+    url = f"{base_url}/v1/tokens"
 
     payload = {
         "client_id": "dominus-prod",

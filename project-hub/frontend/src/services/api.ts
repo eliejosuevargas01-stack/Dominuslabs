@@ -55,6 +55,7 @@ export async function fetchWithAuth(
   });
 
   if (response.status === 401) {
+    const isSubServiceRoute = url.includes("/whatsapp/") || url.includes("/scrapper/");
     const refreshToken = localStorage.getItem("admin_refresh_token");
     if (refreshToken && refreshToken !== "null" && refreshToken !== "undefined") {
       try {
@@ -85,14 +86,19 @@ export async function fetchWithAuth(
               headers: mergedHeaders,
             });
 
-            if (response.status !== 401) {
-              return response;
-            }
+            // Se o refresh do login foi um sucesso, o usuário está autenticado no Dominius.
+            // Retorna a resposta (mesmo se for 401 do sub-serviço) sem deslogar o usuário.
+            return response;
           }
         }
       } catch (err) {
         console.error("Token refresh failed:", err);
       }
+    }
+
+    // Se for rota de sub-serviço (como /whatsapp/), não desloga o usuário do Dominius
+    if (isSubServiceRoute) {
+      return response;
     }
 
     localStorage.removeItem("admin_token");
