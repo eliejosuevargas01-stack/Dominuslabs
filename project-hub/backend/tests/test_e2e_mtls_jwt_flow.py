@@ -66,7 +66,7 @@ async def test_full_m2m_flow():
         )
 
         async def mock_post(url, json=None, headers=None):
-            if "m2m/token" in url:
+            if "tokens" in url:
                 return httpx.Response(200, json={"access_token": fake_jwt, "expires_in": 300})
             elif "messages/send" in url:
                 return httpx.Response(200, json={"status": "success", "message_id": f"msg_{user.tenant_id}"})
