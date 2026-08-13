@@ -47,13 +47,40 @@ async def delete_lead(lead_id: str, current_user: str = Depends(check_crm_permis
     result = await n8n_service.delete_lead(lead_id)
     return result
 
+@router.get("/contacts")
+async def read_contacts(current_user: str = Depends(get_current_user)):
+    """
+    Step 1: Fetch basic contact identity (contacts table).
+    """
+    contacts = await n8n_service.get_leads()
+    return contacts
+
+@router.get("/conversations")
+async def read_conversations_list(current_user: str = Depends(get_current_user)):
+    """
+    Step 2: Fetch conversation inbox state (conversations table).
+    """
+    conversations = await n8n_service.get_conversations()
+    return conversations
+
 @router.get("/conversations/{lead_id}", response_model=List[Message])
 async def read_conversation_messages(lead_id: str, current_user: str = Depends(get_current_user)):
     """
-    Get all messages for a specific lead's conversation history.
+    Step 3: Get all messages for a specific lead's conversation history (messages table).
     """
     messages = await n8n_service.get_messages(lead_id)
     return messages
+
+@router.get("/progressive/{contact_jid}")
+async def get_progressive_assembled_profile(contact_jid: str, current_user: str = Depends(get_current_user)):
+    """
+    Retorna o perfil completo montado progressivamente no cache pelo contact_jid.
+    """
+    from app.services.n8n_service import ProgressiveContactCache
+    profile = ProgressiveContactCache.get_assembled_payload(contact_jid)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Perfil não encontrado no cache")
+    return profile
 
 # ---------------------------------------------------------------------------
 # Preferência de sessão WhatsApp

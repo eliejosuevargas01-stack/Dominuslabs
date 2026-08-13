@@ -950,6 +950,79 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
 
     return unpacked
 
+class ProgressiveContactCache:
+    """
+    Thread-safe in-memory progressive cache keyed by contact_jid.
+    Maintains profile state across 3 requests:
+    Request 1 (Basic Info from contacts table)
+    -> Request 2 (Inbox State from conversations table)
+    -> Request 3 (Chat History from messages table).
+    """
+    _cache: Dict[str, dict] = {}
+
+    @classmethod
+    def get(cls, jid: str) -> Optional[dict]:
+        if not jid:
+            return None
+        return cls._cache.get(jid)
+
+    @classmethod
+    def set_contact(cls, jid: str, contact_data: dict) -> dict:
+        if not jid:
+            return contact_data
+        existing = cls._cache.get(jid, {})
+        existing.update({
+            "contact_jid": jid,
+            "push_name": contact_data.get("push_name") or existing.get("push_name") or "Contato Sem Nome",
+            "profile_pic_url": contact_data.get("profile_pic_url") or existing.get("profile_pic_url") or "",
+            "display_phone": contact_data.get("display_phone") or existing.get("display_phone") or "",
+            "whatsapp": contact_data.get("whatsapp") or existing.get("whatsapp") or "",
+            "email": contact_data.get("email") or existing.get("email") or "",
+            "status": contact_data.get("status") or existing.get("status") or "Prospectado",
+            "updated_at": datetime.utcnow().isoformat() + "Z"
+        })
+        for k in ("session_id", "unread_count", "last_message_preview", "mensagens", "messages"):
+            if k in contact_data:
+                existing[k] = contact_data[k]
+        cls._cache[jid] = existing
+        return existing
+
+    @classmethod
+    def set_conversation(cls, jid: str, conv_data: dict) -> dict:
+        if not jid:
+            return conv_data
+        existing = cls._cache.get(jid, {"contact_jid": jid})
+        existing["session_id"] = conv_data.get("session_id") or existing.get("session_id", "default")
+        existing["unread_count"] = conv_data.get("unread_count", 0)
+        existing["last_message_preview"] = conv_data.get("last_message_preview") or conv_data.get("content", "")
+        if conv_data.get("push_name") and conv_data.get("push_name") not in ("Desconhecido", "Contato Sem Nome"):
+            existing["push_name"] = conv_data["push_name"]
+        if conv_data.get("profile_pic_url"):
+            existing["profile_pic_url"] = conv_data["profile_pic_url"]
+        existing["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        cls._cache[jid] = existing
+        return existing
+
+    @classmethod
+    def set_messages(cls, jid: str, messages_list: List[dict]) -> dict:
+        if not jid:
+            return {}
+        existing = cls._cache.get(jid, {"contact_jid": jid})
+        existing["mensagens"] = messages_list
+        existing["messages"] = messages_list
+        existing["has_messages"] = len(messages_list) > 0
+        existing["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        cls._cache[jid] = existing
+        return existing
+
+    @classmethod
+    def get_assembled_payload(cls, jid: str) -> dict:
+        return cls._cache.get(jid, {"contact_jid": jid, "mensagens": []})
+
+    @classmethod
+    def clear(cls):
+        cls._cache.clear()
+
 class N8NService:
     # Leads cache state
     _leads_cache = None
@@ -1032,12 +1105,16 @@ class N8NService:
                 elif isinstance(data, dict) and "mensagens" in data:
                     raw_leads = [data]
             except Exception as e:
-                logger.error(f"Error calling GET leads webhook: {e}. Falling back to mock data.")
+                logger.error(f"Error calling GET leads webhook: {e}. Falling back to mock data.", exc_info=True)
 
-        if raw_leads is None:
+        if not raw_leads:
             mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
             mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
             mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
+            for m in mapped_mock:
+                c_jid = m.get("contact_jid") or m.get("jid") or m.get("id")
+                if c_jid:
+                    ProgressiveContactCache.set_contact(c_jid, m)
             N8NService._leads_cache = mapped_mock
             N8NService._leads_cache_time = time.time()
             N8NService._leads_cache_url = url
@@ -1047,6 +1124,13 @@ class N8NService:
         mapped_leads = [map_n8n_lead(l) for l in raw_leads if isinstance(l, dict)]
         mapped_leads.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
         mapped_leads.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
+        
+        # Step 1: Cache basic info by contact_jid
+        for m in mapped_leads:
+            c_jid = m.get("contact_jid") or m.get("jid") or m.get("id")
+            if c_jid:
+                ProgressiveContactCache.set_contact(c_jid, m)
+
         N8NService._leads_cache = mapped_leads
         N8NService._leads_cache_time = time.time()
         N8NService._leads_cache_url = url
@@ -1077,6 +1161,13 @@ class N8NService:
                 
                 unpacked = unpack_n8n_raw_leads(raw_convs)
                 mapped = [map_n8n_lead(l) for l in unpacked if isinstance(l, dict)]
+                
+                # Step 2: Append conversation inbox state to cached contact profile
+                for m in mapped:
+                    c_jid = m.get("contact_jid") or m.get("jid") or m.get("id")
+                    if c_jid:
+                        ProgressiveContactCache.set_conversation(c_jid, m)
+
                 return mapped
             except Exception as e:
                 logger.error(f"Error calling GET conversations webhook: {e}")
@@ -1383,6 +1474,9 @@ class N8NService:
 
                 fresh_msgs.sort(key=lambda x: x.get("timestamp") or "")
                 
+                # Step 3: Append full chat history to cached contact profile
+                ProgressiveContactCache.set_messages(target_jid, fresh_msgs)
+
                 if len(fresh_msgs) > 0:
                     MOCK_CONVERSATIONS[lead_id] = fresh_msgs
                     return fresh_msgs
