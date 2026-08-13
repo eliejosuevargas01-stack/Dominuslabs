@@ -1636,9 +1636,11 @@ class N8NService:
             outgoing_payload["whatsapp_token"] = payload["whatsapp_token"]
         if payload.get("session_id"):
             outgoing_payload["session_id"] = payload["session_id"]
-            base_url = settings.WHATSAPP_API_URL.rstrip("/")
-            outgoing_payload["whatsapp_api_url"] = settings.WHATSAPP_API_URL
-            outgoing_payload["whatsapp_send_url"] = f"{base_url}/api/sessions/{payload['session_id']}/messages/send"
+            public_url = getattr(settings, "WHATSAPP_PUBLIC_URL", "https://whats.dominuslabs.online").rstrip("/")
+            if "hkossco0sgg" in public_url or "localhost" in public_url or "10.0.1." in public_url:
+                public_url = "https://whats.dominuslabs.online"
+            outgoing_payload["whatsapp_api_url"] = public_url
+            outgoing_payload["whatsapp_send_url"] = f"{public_url}/api/sessions/{payload['session_id']}/messages/send"
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
