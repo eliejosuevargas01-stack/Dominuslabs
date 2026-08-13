@@ -119,67 +119,54 @@ async def set_session_preference(
 # ---------------------------------------------------------------------------
 
 @router.post("/messages/send", response_model=Message)
-async def send_whatsapp_message(
+async def send_crm_whatsapp_message(
     payload: MessageSendPayload,
     db: Session = Depends(get_db),
     current_user: str = Depends(check_crm_permission),
 ):
     """
-    Envia mensagem WhatsApp para o lead.
-    - Resolve a sessão: usa payload.session_id ou preferred_session_id do usuário.
-    - Obtém token temporário via OAuth (com cache TTL).
-    - Repassa { phone, message, session_id, whatsapp_token } ao n8n.
+    Envia mensagem WhatsApp DIRETAMENTE para a WhatsApp API via mTLS + JWT (Sem n8n).
     """
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=401, detail="Usuário não encontrado.")
 
-    # Resolve sessão: payload > preferência salva
     session_id = payload.session_id or user.preferred_session_id
     if not session_id:
         raise HTTPException(
             status_code=400,
-            detail="Nenhuma sessão WhatsApp selecionada. Escolha uma sessão ou defina uma preferência em Conexões."
+            detail="Nenhuma sessão WhatsApp selecionada. Escolha uma sessão em Conexões."
+        )
+
+    to_phone = payload.phone or payload.jid
+    if not to_phone:
+        raise HTTPException(
+            status_code=400,
+            detail="Telefone/JID do destinatário é obrigatório."
         )
 
     try:
-        # Fase 2: obtém token temporário (OAuth com cache)
-        whatsapp_token = await get_oauth_token(user, db)
-        
-        # Verifica se o token é válido antes de enviar para o n8n
-        if not await check_token_validity(whatsapp_token):
-            print(f"[M2M-AUTH-FLOW] >>> Token retornado do cache/db é inválido. Forçando novo OAuth antes do envio para o n8n...", flush=True)
-            invalidate_token(user.id)
-            whatsapp_token = await get_oauth_token(user, db)
-    except ValueError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        res = await send_whatsapp_message(
+            user=user,
+            db=db,
+            to_phone=to_phone,
+            message_text=payload.message,
+            session_id=session_id
+        )
+        default_id = res.get("message", {}).get("id") or f"msg_{int(datetime.utcnow().timestamp())}"
+        default_ts = datetime.utcnow().isoformat() + "Z"
 
-    try:
-        data = payload.model_dump()
-        data["updated_by"] = current_user
-        data["session_id"] = session_id
-        data["whatsapp_token"] = whatsapp_token
-
-        message = await n8n_service.send_whatsapp_message(data)
-        return message
-    except ValueError as e:
-        # Se for erro de autenticação detectado no n8n, tenta renovar o token e re-enviar
-        if str(e) == "AUTH_ERROR_N8N_BAD_REQUEST":
-            print(f"[M2M-AUTH-FLOW] >>> Detectado erro de autenticação n8n (ERR_BAD_REQUEST). Forçando novo OAuth e retentando...", flush=True)
-            invalidate_token(user.id)
-            try:
-                new_token = await get_oauth_token(user, db)
-                data["whatsapp_token"] = new_token
-                print(f"[M2M-AUTH-FLOW] >>> Novo token obtido com sucesso. Re-enviando mensagem...", flush=True)
-                message = await n8n_service.send_whatsapp_message(data)
-                return message
-            except Exception as retry_err:
-                print(f"[M2M-AUTH-FLOW] >>> ❌ Falha na retentativa de envio após renovação: {retry_err}", flush=True)
-                raise HTTPException(status_code=400, detail=f"Erro de autenticação na retentativa: {str(retry_err)}")
-        
-        # Se token inválido (outro erro de validação), invalida cache e lança HTTP 400
-        invalidate_token(user.id)
-        raise HTTPException(status_code=400, detail=str(e))
+        return Message(
+            id=default_id,
+            sender="user",
+            message=payload.message,
+            channel="whatsapp",
+            timestamp=default_ts
+        )
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao enviar mensagem: {e}")
 
 @router.get("/dashboard", response_model=CrmDashboardMetrics)
 async def get_dashboard_metrics(current_user: str = Depends(get_current_user)):
