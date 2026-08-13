@@ -39,6 +39,8 @@ async def make_whatsapp_api_request(
     timeout: float = 10.0
 ) -> Any:
     base_url = settings.WHATSAPP_API_URL.rstrip("/")
+    if "whats-api:3000" in base_url and base_url.startswith("https://"):
+        base_url = base_url.replace("https://", "http://")
     clean_path = path if path.startswith("/") else f"/{path}"
     url = f"{base_url}{clean_path}"
 
