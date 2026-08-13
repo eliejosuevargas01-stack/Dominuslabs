@@ -170,7 +170,14 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     if not isinstance(payload_dict, dict):
         payload_dict = {}
 
-    person_name = lead.get("push_name") or lead.get("nome") or lead.get("nome_empresa") or lead.get("empresa_nome") or lead.get("company_name") or lead.get("display_phone") or "Contato Sem Nome"
+    person_name = ""
+    for name_key in ("push_name", "nome", "nome_empresa", "empresa_nome", "company_name", "display_phone", "contact_jid", "jid"):
+        val = lead.get(name_key)
+        if val and isinstance(val, str) and val.strip() and val.strip().lower() not in ("desconhecido", "unknown", "null", "none"):
+            person_name = val.strip()
+            break
+    if not person_name:
+        person_name = lead.get("display_phone") or lead.get("contact_jid") or "Contato Sem Nome"
     company_name = person_name
 
     raw_tel = lead.get("display_phone") or lead.get("telefone") or lead.get("telefone_contato")
@@ -1010,7 +1017,7 @@ class N8NService:
             return mapped_mock
 
         sep = "&" if "?" in url else "?"
-        endpoint_url = f"{url}{sep}action=get_leads"
+        endpoint_url = f"{url}{sep}action=get_contacts"
 
         raw_leads = None
         async with httpx.AsyncClient(follow_redirects=True) as client:
@@ -1044,6 +1051,43 @@ class N8NService:
         N8NService._leads_cache_time = time.time()
         N8NService._leads_cache_url = url
         return mapped_leads
+
+    @staticmethod
+    async def get_conversations() -> List[dict]:
+        """
+        Obtém a lista de conversas ativas via action=get_conversations no webhook CRM.
+        """
+        url = settings.CRM_GET_MESSAGES_WEBHOOK_URL or settings.CRM_GET_LEADS_WEBHOOK_URL
+        if not url:
+            return []
+
+        sep = "&" if "?" in url else "?"
+        endpoint_url = f"{url}{sep}action=get_conversations"
+
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            try:
+                response = await client.get(endpoint_url, timeout=30.0)
+                response.raise_for_status()
+                data = response.json()
+                raw_convs = []
+                if isinstance(data, list):
+                    raw_convs = data
+                elif isinstance(data, dict):
+                    raw_convs = data.get("conversas") or data.get("conversations") or data.get("leads") or [data]
+                
+                unpacked = unpack_n8n_raw_leads(raw_convs)
+                mapped = [map_n8n_lead(l) for l in unpacked if isinstance(l, dict)]
+                return mapped
+            except Exception as e:
+                logger.error(f"Error calling GET conversations webhook: {e}")
+                return []
+
+    @staticmethod
+    async def get_chat_history(lead_id: str) -> List[dict]:
+        """
+        Alias para get_messages utilizando action=get_chat_history.
+        """
+        return await N8NService.get_messages(lead_id)
 
     @staticmethod
     async def update_lead(lead_id: str, payload: dict, current_user: str = None) -> dict:
@@ -1278,7 +1322,7 @@ class N8NService:
             lid = cached_lead.get("lid") or cached_lead.get("LID") or cached_lead.get("Lid")
 
         sep = "&" if "?" in url else "?"
-        endpoint_url = f"{url}{sep}action=get&lead_id={target_jid}"
+        endpoint_url = f"{url}{sep}action=get_chat_history&lead_id={target_jid}"
         if lid:
             endpoint_url += f"&lid={lid}"
         if target_session:
