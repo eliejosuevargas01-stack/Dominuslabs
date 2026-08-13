@@ -115,7 +115,7 @@ async def send_whatsapp_message(
     )
 
     try:
-        async with get_mtls_async_client(timeout=15.0) as client:
+        async with get_mtls_async_client(timeout=15.0, service_name="whatsapp") as client:
             resp = await client.post(url, json=payload, headers=headers)
 
             if resp.status_code in (200, 201):

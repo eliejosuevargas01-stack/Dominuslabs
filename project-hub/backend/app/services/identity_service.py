@@ -53,7 +53,7 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:messages:send") -> 
     logger.info(f"[IDENTITY-WORKER] Requisitando novo JWT M2M via mTLS para tenant_id={tenant_id}, scope={scope}...")
 
     try:
-        async with get_mtls_async_client(timeout=10.0) as client:
+        async with get_mtls_async_client(timeout=10.0, service_name="identity") as client:
             resp = await client.post(url, json=payload, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
