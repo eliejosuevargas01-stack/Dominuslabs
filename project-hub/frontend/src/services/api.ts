@@ -130,9 +130,21 @@ export function decodeJwtExp(token: string): number | null {
   }
 }
 
+export function handleExpiredSessionRedirect() {
+  localStorage.removeItem("admin_token");
+  localStorage.removeItem("admin_refresh_token");
+  localStorage.removeItem("whatsapp_token");
+  if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    window.location.href = "/login";
+  }
+}
+
 export async function refreshAuthTokenPreventively(): Promise<string | null> {
   const refreshToken = localStorage.getItem("admin_refresh_token");
-  if (!refreshToken || refreshToken === "null" || refreshToken === "undefined") return null;
+  if (!refreshToken || refreshToken === "null" || refreshToken === "undefined") {
+    handleExpiredSessionRedirect();
+    return null;
+  }
 
   try {
     const res = await fetch(`${API_BASE}/auth/refresh`, {
@@ -151,11 +163,14 @@ export async function refreshAuthTokenPreventively(): Promise<string | null> {
         if (data.whatsapp_token) {
           localStorage.setItem("whatsapp_token", data.whatsapp_token);
         }
-        console.log("[PREVENTIVE-REAUTH] ✅ Token re-autenticado com sucesso 1-10s antes da expiração (~59.8 min)!");
+        console.log("[PREVENTIVE-REAUTH] ✅ Token re-autenticado com sucesso 1s antes da expiração!");
         window.dispatchEvent(new CustomEvent("token_refreshed", { detail: { token: data.access_token } }));
         schedulePreventiveTokenRefresh();
         return data.access_token;
       }
+    } else if (res.status === 401 || res.status === 403) {
+      console.warn("[PREVENTIVE-REAUTH] ⚠️ Refresh token expirado ou inválido. Redirecionando para login.");
+      handleExpiredSessionRedirect();
     }
   } catch (err) {
     console.error("[PREVENTIVE-REAUTH] Erro ao re-autenticar preventivamente:", err);
@@ -178,11 +193,17 @@ export function schedulePreventiveTokenRefresh() {
   const nowInSeconds = Math.floor(Date.now() / 1000);
   const secondsRemaining = exp - nowInSeconds;
 
-  // Agenda disparo preventivo 10s antes do token expirar (ex: 3588s = 59.8 min)
-  const leadTimeSeconds = 10;
-  const delayMs = Math.max((secondsRemaining - leadTimeSeconds), 1) * 1000;
+  if (secondsRemaining <= 0) {
+    refreshAuthTokenPreventively();
+    return;
+  }
 
-  console.log(`[PREVENTIVE-REAUTH] Re-autenticação preventiva agendada em ${Math.round(delayMs / 1000)}s (~${(delayMs / 60000).toFixed(1)} min).`);
+  // Agenda disparo preventivo exatamente 1s antes do token expirar
+  const leadTimeSeconds = 1;
+  const targetDelaySec = Math.max(secondsRemaining - leadTimeSeconds, 1);
+  const delayMs = targetDelaySec * 1000;
+
+  console.log(`[PREVENTIVE-REAUTH] Re-autenticação preventiva agendada em ${targetDelaySec}s (~${(targetDelaySec / 60).toFixed(1)} min).`);
 
   preventiveTimerId = setTimeout(() => {
     refreshAuthTokenPreventively();
