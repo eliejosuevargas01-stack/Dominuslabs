@@ -7,6 +7,7 @@ import os
 import ssl
 import logging
 import httpx
+import re
 from app.core.config import settings
 
 logger = logging.getLogger("mtls_client")
@@ -15,11 +16,23 @@ logger = logging.getLogger("mtls_client")
 def clean_pem_content(raw_pem: str) -> str:
     """
     Sanitiza strings PEM vindas de variáveis de ambiente:
-    Remove aspas externas, substitui \\n por quebras de linha reais e garante final de linha.
+    Trata tanto quebras com \\n quanto blocos colados em linha única separados por espaços.
     """
     if not raw_pem:
         return ""
     cleaned = raw_pem.strip().strip('"').strip("'").replace("\\n", "\n").strip()
+
+    # Se o PEM foi colado numa única linha com espaços separando o base64 (ex: "-----BEGIN CERTIFICATE----- MIID...")
+    if "-----BEGIN" in cleaned and "\n" not in cleaned:
+        # Extrai o tipo do bloco PEM (CERTIFICATE ou PRIVATE KEY)
+        match = re.search(r"-----BEGIN ([A-Z0-9\s]+)-----\s*(.*?)\s*-----END \1-----", cleaned)
+        if match:
+            header_type = match.group(1)
+            body = match.group(2).replace(" ", "")
+            # Quebra o corpo em linhas de 64 caracteres como manda o padrão X.509/PEM
+            formatted_body = "\n".join(body[i:i+64] for i in range(0, len(body), 64))
+            cleaned = f"-----BEGIN {header_type}-----\n{formatted_body}\n-----END {header_type}-----\n"
+
     if not cleaned.endswith("\n"):
         cleaned += "\n"
     return cleaned
