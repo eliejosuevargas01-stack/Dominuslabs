@@ -191,9 +191,9 @@ async def test_n8n_double_requests_matching():
             pass
 
     async def mock_get(url, *args, **kwargs):
-        if "action=get_leads" in url:
+        if "action=get_contacts" in url or "action=get_leads" in url:
             return MockResponse(mock_leads_response)
-        elif "action=get_messages" in url:
+        elif "action=get_messages" in url or "action=get_chat_history" in url:
             return MockResponse(mock_conversations_response)
         return MockResponse([])
 
