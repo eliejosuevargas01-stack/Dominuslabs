@@ -114,9 +114,14 @@ def create_ssl_context(service_name: str = "default") -> ssl.SSLContext | None:
 def get_mtls_async_client(timeout: float = 15.0, service_name: str = "default") -> httpx.AsyncClient:
     """
     Retorna uma instância de httpx.AsyncClient pronta para realizar requisições mTLS para o serviço alvo.
+    Gera logs explícitos para auditoria de quando o mTLS foi necessário e ativado vs quando não foi necessário.
     """
     ssl_context = create_ssl_context(service_name=service_name)
     if ssl_context:
+        logger.info(f"[mTLS-STATUS] 🔒 mTLS NECESSÁRIO E ATIVO para o serviço '{service_name}'. Certificados cliente validados e anexados.")
+        print(f"[mTLS-STATUS] 🔒 mTLS NECESSÁRIO E ATIVO para o serviço '{service_name}'. Certificados cliente validados.", flush=True)
         return httpx.AsyncClient(verify=ssl_context, timeout=timeout)
     else:
+        logger.info(f"[mTLS-STATUS] 🔓 mTLS NÃO NECESSÁRIO / NÃO UTILIZADO para o serviço '{service_name}'. Operando via conexão HTTP/HTTPS padrão.")
+        print(f"[mTLS-STATUS] 🔓 mTLS NÃO NECESSÁRIO para o serviço '{service_name}'. Conexão padrão ativada.", flush=True)
         return httpx.AsyncClient(timeout=timeout)

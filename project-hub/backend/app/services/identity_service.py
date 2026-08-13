@@ -52,6 +52,7 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:messages:send whats
     }
 
     logger.info(f"[IDENTITY-WORKER] Requisitando novo JWT M2M via mTLS para tenant_id={tenant_id}, scope={scope}...")
+    print(f"[mTLS-AUDIT] 🔐 Conexão mTLS com Identity Worker NECESSÁRIA (autenticação de certificado cliente Cloudflare): URL={url}", flush=True)
 
     try:
         async with get_mtls_async_client(timeout=10.0, service_name="identity") as client:
