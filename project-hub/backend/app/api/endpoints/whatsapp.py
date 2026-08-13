@@ -59,11 +59,25 @@ async def make_whatsapp_api_request(
                 headers=req_headers,
                 json=json_data
             )
-        except httpx.HTTPError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
-            )
+        except (httpx.ConnectError, httpx.HTTPError) as e:
+            # Fallback para IP direto ou aliases dinamicos caso o sufixo do container no Coolify mude
+            import socket
+            fallback_hosts = ["hkossco0sggwwwss0cwk4w0s-180603298536", "10.0.1.20", "whats-api"]
+            response = None
+            for alt_host in fallback_hosts:
+                try:
+                    ip = socket.gethostbyname(alt_host)
+                    fb_url = f"http://{ip}:3000{clean_path}"
+                    response = await client.request(method, fb_url, headers=req_headers, json=json_data)
+                    if response:
+                        break
+                except Exception:
+                    continue
+            if not response:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
+                )
         
         # Verify content-type and try to decode JSON
         try:
