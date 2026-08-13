@@ -21,8 +21,8 @@ def base64url_decode(data: str) -> bytes:
     padding = '=' * (4 - (len(data) % 4))
     return base64.urlsafe_b64decode(data + padding)
 
-def create_access_token(data: dict, expires_in: int = 3600) -> str:
-    """Create JWT token valid for 1h by default"""
+def create_access_token(data: dict, expires_in: int = 2592000) -> str:
+    """Create JWT token valid for 30 days by default"""
     header = {"alg": "HS256", "typ": "JWT"}
     payload = data.copy()
     payload["exp"] = int(time.time()) + expires_in
