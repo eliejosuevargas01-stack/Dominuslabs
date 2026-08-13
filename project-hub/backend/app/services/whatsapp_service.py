@@ -61,12 +61,12 @@ async def check_token_validity(token: str) -> bool:
         return False
 
 
-async def get_oauth_token(user: User, db: Session) -> str:
+async def get_oauth_token(user: User, db: Session, scope: str = "whatsapp:messages:send whatsapp:sessions:read whatsapp:sessions:write") -> str:
     """
     Obtém o JWT M2M do Identity Worker para o tenant do usuário.
     """
     tenant_id = await get_tenant_id_for_user(user, db)
-    return await get_m2m_jwt(tenant_id=tenant_id, scope="whatsapp:messages:send")
+    return await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
 
 
 def invalidate_token(user_id: int) -> None:

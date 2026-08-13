@@ -10,7 +10,7 @@ from app.models.user import User
 
 router = APIRouter()
 
-async def get_user_token(email: str, db: Session) -> str:
+async def get_user_token(email: str, db: Session, scope: str = "whatsapp:messages:send whatsapp:sessions:read whatsapp:sessions:write") -> str:
     user = db.query(User).filter(User.email == email).first()
     if not user:
         raise HTTPException(
@@ -20,8 +20,8 @@ async def get_user_token(email: str, db: Session) -> str:
     # Import inside to avoid circular import issues
     from app.services.whatsapp_service import get_oauth_token
     try:
-        # Usa o fluxo M2M OAuth com cache para obter o token JWT
-        return await get_oauth_token(user, db)
+        # Usa o fluxo M2M OAuth com cache para obter o token JWT com os escopos requisitados
+        return await get_oauth_token(user, db, scope=scope)
     except HTTPException as he:
         raise he
     except Exception as e:
