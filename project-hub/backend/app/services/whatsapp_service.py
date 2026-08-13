@@ -31,7 +31,7 @@ async def get_tenant_id_for_user(user: User, db: Session) -> str:
     Se o usuário for admin, retorna 'admin' para permitir acesso universal às sessões master.
     """
     if user.role == "admin" or user.email == settings.ADMIN_USERNAME:
-        return "admin"
+        return settings.ADMIN_TENANT_ID
 
     if user.tenant_id:
         return user.tenant_id
