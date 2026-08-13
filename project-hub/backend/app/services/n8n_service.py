@@ -171,13 +171,24 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         payload_dict = {}
 
     person_name = ""
-    for name_key in ("push_name", "nome", "nome_empresa", "empresa_nome", "company_name", "display_phone", "contact_jid", "jid"):
+    for name_key in ("push_name", "nome", "nome_empresa", "empresa_nome", "company_name"):
         val = lead.get(name_key)
-        if val and isinstance(val, str) and val.strip() and val.strip().lower() not in ("desconhecido", "unknown", "null", "none"):
+        if val and isinstance(val, str) and val.strip() and val.strip().lower() not in ("desconhecido", "unknown", "null", "none") and "@lid" not in val.lower() and "@s.whatsapp.net" not in val.lower():
             person_name = val.strip()
             break
+
     if not person_name:
-        person_name = lead.get("display_phone") or lead.get("contact_jid") or "Contato Sem Nome"
+        raw_phone = lead.get("display_phone") or lead.get("whatsapp") or lead.get("telefone_contato") or lead.get("phone")
+        if raw_phone and isinstance(raw_phone, str) and raw_phone.strip() and raw_phone.strip().lower() not in ("null", "none"):
+            person_name = raw_phone.strip()
+
+    if not person_name:
+        raw_jid = lead.get("contact_jid") or lead.get("jid") or lead.get("id")
+        if raw_jid and isinstance(raw_jid, str) and raw_jid.strip() and raw_jid.strip().lower() not in ("null", "none"):
+            person_name = raw_jid.strip()
+        else:
+            person_name = "Contato Sem Nome"
+
     company_name = person_name
 
     raw_tel = lead.get("display_phone") or lead.get("telefone") or lead.get("telefone_contato")
@@ -942,6 +953,24 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
                 unpacked.append(c_info)
         else:
             item_copy = copy.deepcopy(item)
+            nested_msgs = item.get("messages") if isinstance(item.get("messages"), list) else (item.get("mensagens") if isinstance(item.get("mensagens"), list) else [])
+            for m in nested_msgs:
+                if isinstance(m, dict):
+                    m_pname = m.get("push_name")
+                    if m_pname and isinstance(m_pname, str) and m_pname.strip() and m_pname.strip().lower() not in ("desconhecido", "unknown", "null", "none") and "@lid" not in m_pname.lower() and "@s.whatsapp.net" not in m_pname.lower():
+                        if not item_copy.get("push_name"):
+                            item_copy["push_name"] = m_pname.strip()
+
+                    m_phone = m.get("display_phone") or m.get("whatsapp")
+                    if m_phone and not item_copy.get("display_phone"):
+                        item_copy["display_phone"] = m_phone.strip()
+
+                    m_pic = m.get("profile_pic_url") or m.get("avatar")
+                    if m_pic and m_pic != "changed" and str(m_pic).lower() not in ("null", "none", "") and not item_copy.get("profile_pic_url"):
+                        if str(m_pic).startswith("/"):
+                            m_pic = f"https://whats.dominuslabs.online{m_pic}"
+                        item_copy["profile_pic_url"] = str(m_pic)
+
             if c_jid and s_id and s_id != "default":
                 group_key = f"{c_jid}___{s_id}"
                 item_copy["id"] = group_key
