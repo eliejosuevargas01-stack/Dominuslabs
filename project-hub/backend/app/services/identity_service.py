@@ -45,6 +45,7 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:messages:send whats
     payload = {
         "client_id": "dominus-prod",
         "tenant_id": tenant_id,
+        "role": "admin",
         "scope": scope,
         "aud": "whatsapp-api",
         "audience": "whatsapp-api"
