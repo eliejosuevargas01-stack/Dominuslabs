@@ -35,14 +35,34 @@ async def make_whatsapp_api_request(
     method: str,
     path: str,
     headers: Optional[Dict[str, str]] = None,
-    json_data: Optional[Any] = None,
-    timeout: float = 10.0
+    json_data: Optional[Dict[str, Any]] = None,
+    timeout: float = 15.0
 ) -> Any:
-    base_url = settings.WHATSAPP_API_URL.rstrip("/")
-    if base_url.startswith("https://") and (":3000" in base_url or "whats-api" in base_url):
-        base_url = base_url.replace("https://", "http://", 1)
     clean_path = path if path.startswith("/") else f"/{path}"
+    base_url = settings.WHATSAPP_API_URL.rstrip("/")
+    if base_url.startswith("http://") and ":3000" in base_url:
+        base_url = base_url.replace("http://", "https://", 1)
+    
     url = f"{base_url}{clean_path}"
+    import urllib.parse, socket
+    parsed = urllib.parse.urlparse(base_url)
+    if parsed.hostname:
+        try:
+            socket.gethostbyname(parsed.hostname)
+        except Exception:
+            # Se a resolucao de nome falhar (ex: sufixo do container do Coolify mudou), descobre o IP na rede Docker
+            async def check_ip(ip: str):
+                try:
+                    reader, writer = await asyncio.wait_for(asyncio.open_connection(ip, 3000), timeout=0.2)
+                    writer.close()
+                    await writer.wait_closed()
+                    return ip
+                except Exception:
+                    return None
+            ips = await asyncio.gather(*[check_ip(f"10.0.1.{i}") for i in range(2, 50)])
+            valid = [ip for ip in ips if ip]
+            if valid:
+                url = f"https://{valid[0]}:3000{clean_path}"
 
     req_headers = dict(headers) if headers else {}
     if "x-session-token" in req_headers:
@@ -60,24 +80,10 @@ async def make_whatsapp_api_request(
                 json=json_data
             )
         except Exception as e:
-            # Fallback para IP direto ou aliases dinamicos caso o sufixo do container no Coolify mude
-            import socket
-            fallback_hosts = ["hkossco0sggwwwss0cwk4w0s-180603298536", "10.0.1.20", "whats-api"]
-            response = None
-            for alt_host in fallback_hosts:
-                try:
-                    ip = socket.gethostbyname(alt_host)
-                    fb_url = f"http://{ip}:3000{clean_path}"
-                    response = await client.request(method, fb_url, headers=req_headers, json=json_data)
-                    if response:
-                        break
-                except Exception:
-                    continue
-            if not response:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
-                )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
+            )
         
         # Verify content-type and try to decode JSON
         try:
