@@ -94,59 +94,41 @@ async def send_whatsapp_message(
     session_id: str | None = None
 ) -> dict:
     """
-    Executa o envio de mensagem WhatsApp utilizando a cadeia M2M mTLS + JWT:
+    Executa o envio DIRETO de mensagem WhatsApp utilizando mTLS + JWT sem n8n:
     Dominius ⇄ mTLS ⇄ Identity Worker ──(JWT)──► Dominius ⇄ mTLS ⇄ WhatsApp API
     """
-    # 1. Identifica o tenant do usuário
     tenant_id = await get_tenant_id_for_user(user, db)
-
-    # 2. Requisita JWT M2M ao Identity Worker via mTLS (sem fallbacks ou bypasses)
     scope = "whatsapp:messages:send"
     jwt_token = await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
 
-    # 3. Define URL da WhatsApp API
-    base_url = settings.WHATSAPP_API_URL.rstrip("/")
-    url = f"{base_url}/api/messages/send"
+    target_session = session_id or user.preferred_session_id
+    if not target_session:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sessão do WhatsApp não especificada."
+        )
 
-    headers = {
-        "Authorization": f"Bearer {jwt_token}",
-        "x-tenant-id": tenant_id,
-        "Content-Type": "application/json"
-    }
-
+    from app.api.endpoints.whatsapp import make_whatsapp_api_request
+    clean_path = f"/api/sessions/{target_session}/messages/send"
     payload = {
-        "to": to_phone,
-        "message": message_text,
-        "session_id": session_id or user.preferred_session_id
+        "number": to_phone,
+        "message": message_text
+    }
+    headers = {
+        "x-session-token": jwt_token,
+        "x-tenant-id": tenant_id,
+        "Authorization": f"Bearer {jwt_token}"
     }
 
     logger.info(
-        f"[WA-M2M] Enviando mensagem via mTLS + JWT para WhatsApp API. "
-        f"Tenant: {tenant_id}, Destinatário: {to_phone}"
+        f"[WA-M2M] Enviando mensagem DIRETA via mTLS + JWT para WhatsApp API. "
+        f"Tenant: {tenant_id}, Sessão: {target_session}, Destinatário: {to_phone}"
     )
 
-    try:
-        async with get_mtls_async_client(timeout=15.0, service_name="whatsapp") as client:
-            resp = await client.post(url, json=payload, headers=headers)
-
-            if resp.status_code in (200, 201):
-                logger.info(f"[WA-M2M] ✅ Mensagem enviada com sucesso para {to_phone}!")
-                return resp.json()
-            elif resp.status_code in (401, 403):
-                logger.error(f"[WA-M2M] ❌ Tenant Lock ou Permissão recusada pela WhatsApp API: {resp.text[:200]}")
-                raise HTTPException(
-                    status_code=resp.status_code,
-                    detail=f"Acesso negado pela WhatsApp API (Tenant Lock / Scope): {resp.text[:200]}"
-                )
-            else:
-                logger.error(f"[WA-M2M] Erro no envio WhatsApp API. Status: {resp.status_code}, Body: {resp.text[:200]}")
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f"Falha na chamada à WhatsApp API (status {resp.status_code})."
-                )
-    except httpx.RequestError as e:
-        logger.error(f"[WA-M2M] ❌ Conexão com WhatsApp API falhou em {url}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Serviço WhatsApp API inacessível em {url}."
-        )
+    return await make_whatsapp_api_request(
+        "POST",
+        clean_path,
+        headers=headers,
+        json_data=payload,
+        timeout=15.0
+    )
