@@ -12,10 +12,12 @@ from app.core.config import settings
 logger = logging.getLogger("mtls_client")
 
 
-def create_ssl_context() -> ssl.SSLContext | None:
+def create_ssl_context(service_name: str = "default") -> ssl.SSLContext | None:
     """
     Cria e retorna o SSLContext configurado com os certificados mTLS do Dominius.
-    Suporta tanto caminhos de arquivos (MTLS_CERT_PATH) quanto variáveis em memória (MTLS_CERT_CONTENT).
+    Suporta variáveis genéricas (MTLS_CERT_CONTENT) ou dedicadas por serviço:
+    - Identity Worker: IDENTITY_MTLS_CERT_CONTENT e IDENTITY_MTLS_KEY_CONTENT
+    - WhatsApp API: WHATSAPP_MTLS_CERT_CONTENT e WHATSAPP_MTLS_KEY_CONTENT
     """
     if not settings.ENABLE_MTLS:
         logger.debug("[mTLS] mTLS está desativado na configuração (ENABLE_MTLS=False)")
@@ -25,13 +27,26 @@ def create_ssl_context() -> ssl.SSLContext | None:
     key_path = settings.MTLS_KEY_PATH
     ca_path = settings.MTLS_CA_CERT_PATH
 
-    cert_content = os.getenv("MTLS_CERT_CONTENT", "").replace("\\n", "\n")
-    key_content = os.getenv("MTLS_KEY_CONTENT", "").replace("\\n", "\n")
+    cert_content = ""
+    key_content = ""
+
+    if service_name == "identity":
+        cert_content = os.getenv("IDENTITY_MTLS_CERT_CONTENT", "").replace("\\n", "\n")
+        key_content = os.getenv("IDENTITY_MTLS_KEY_CONTENT", "").replace("\\n", "\n")
+    elif service_name == "whatsapp":
+        cert_content = os.getenv("WHATSAPP_MTLS_CERT_CONTENT", "").replace("\\n", "\n")
+        key_content = os.getenv("WHATSAPP_MTLS_KEY_CONTENT", "").replace("\\n", "\n")
+
+    # Fallback para variáveis genéricas se as dedicadas não existirem
+    if not cert_content:
+        cert_content = os.getenv("MTLS_CERT_CONTENT", "").replace("\\n", "\n")
+    if not key_content:
+        key_content = os.getenv("MTLS_KEY_CONTENT", "").replace("\\n", "\n")
 
     # Se o certificado e a chave forem fornecidos via variável de ambiente em memória
     if cert_content and key_content:
-        tmp_cert = "/tmp/dominus_mtls_cert.pem"
-        tmp_key = "/tmp/dominus_mtls_key.pem"
+        tmp_cert = f"/tmp/dominus_{service_name}_mtls_cert.pem"
+        tmp_key = f"/tmp/dominus_{service_name}_mtls_key.pem"
         try:
             with open(tmp_cert, "w", encoding="utf-8") as f_cert:
                 f_cert.write(cert_content)
@@ -40,13 +55,13 @@ def create_ssl_context() -> ssl.SSLContext | None:
 
             cert_path = tmp_cert
             key_path = tmp_key
-            logger.info("[mTLS] Certificados mTLS carregados com sucesso a partir das variáveis de ambiente em memória.")
+            logger.info(f"[mTLS] Certificados mTLS para '{service_name}' carregados das variáveis em memória.")
         except Exception as e:
-            logger.error(f"[mTLS] Falha ao escrever certificados temporários da memória: {e}")
+            logger.error(f"[mTLS] Falha ao escrever certificados temporários para '{service_name}': {e}")
 
     if not cert_path or not key_path or not os.path.exists(cert_path) or not os.path.exists(key_path):
         logger.warning(
-            f"[mTLS] Certificados não encontrados ou inválidos: cert={cert_path}, key={key_path}. "
+            f"[mTLS] Certificados não encontrados para '{service_name}': cert={cert_path}, key={key_path}. "
             "Operando em modo SSL padrão sem cliente mTLS."
         )
         return None
@@ -56,17 +71,16 @@ def create_ssl_context() -> ssl.SSLContext | None:
         cafile=ca_path if ca_path and os.path.exists(ca_path) else None,
     )
     ssl_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
-    logger.info(f"[mTLS] SSLContext configurado com sucesso utilizando cert: {cert_path}")
+    logger.info(f"[mTLS] SSLContext configurado com sucesso para '{service_name}' com cert: {cert_path}")
     return ssl_context
 
 
-def get_mtls_async_client(timeout: float = 15.0) -> httpx.AsyncClient:
+def get_mtls_async_client(timeout: float = 15.0, service_name: str = "default") -> httpx.AsyncClient:
     """
-    Retorna uma instância de httpx.AsyncClient pronta para realizar requisições mTLS.
+    Retorna uma instância de httpx.AsyncClient pronta para realizar requisições mTLS para o serviço alvo.
     """
-    ssl_context = create_ssl_context()
+    ssl_context = create_ssl_context(service_name=service_name)
     if ssl_context:
         return httpx.AsyncClient(verify=ssl_context, timeout=timeout)
     else:
-        # Se mTLS não estiver ativo localmente, usa verificação TLS padrão ou httpx padrão
         return httpx.AsyncClient(timeout=timeout)
