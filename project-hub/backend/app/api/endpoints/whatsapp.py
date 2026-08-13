@@ -59,7 +59,7 @@ async def make_whatsapp_api_request(
                 headers=req_headers,
                 json=json_data
             )
-        except (httpx.ConnectError, httpx.HTTPError) as e:
+        except Exception as e:
             # Fallback para IP direto ou aliases dinamicos caso o sufixo do container no Coolify mude
             import socket
             fallback_hosts = ["hkossco0sggwwwss0cwk4w0s-180603298536", "10.0.1.20", "whats-api"]
