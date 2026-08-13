@@ -43,33 +43,37 @@ async def make_whatsapp_api_request(
     if base_url.startswith("http://") and ":3000" in base_url:
         base_url = base_url.replace("http://", "https://", 1)
     
-    url = f"{base_url}{clean_path}"
     import urllib.parse, socket, asyncio
     parsed = urllib.parse.urlparse(base_url)
+    is_resolvable = False
     if parsed.hostname:
         try:
             socket.gethostbyname(parsed.hostname)
+            is_resolvable = True
         except Exception:
-            # Se a resolucao de nome falhar (ex: sufixo do container do Coolify mudou), descobre o IP HTTPS da whats_api na rede Docker
-            import ssl
-            ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            
-            async def check_ip(ip: str):
-                try:
-                    async with httpx.AsyncClient(verify=ctx, timeout=0.5) as test_client:
-                        res = await test_client.get(f"https://{ip}:3000/api/health")
-                        if res.status_code in (200, 401, 403, 404):
-                            return ip
-                except Exception:
-                    pass
-                return None
-            
-            ips = await asyncio.gather(*[check_ip(f"10.0.1.{i}") for i in range(2, 50)])
-            valid = [ip for ip in ips if ip]
-            if valid:
-                url = f"https://{valid[0]}:3000{clean_path}"
+            is_resolvable = False
+
+    url = f"{base_url}{clean_path}"
+    if not is_resolvable:
+        import ssl
+        ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        
+        async def check_ip(ip: str):
+            try:
+                async with httpx.AsyncClient(verify=ctx, timeout=0.5) as test_client:
+                    res = await test_client.get(f"https://{ip}:3000/api/health")
+                    if res.status_code in (200, 401, 403, 404):
+                        return ip
+            except Exception:
+                pass
+            return None
+        
+        ips = await asyncio.gather(*[check_ip(f"10.0.1.{i}") for i in range(2, 50)])
+        valid = [ip for ip in ips if ip]
+        if valid:
+            url = f"https://{valid[0]}:3000{clean_path}"
 
     req_headers = dict(headers) if headers else {}
     if "x-session-token" in req_headers:
@@ -92,6 +96,9 @@ async def make_whatsapp_api_request(
                 detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
             )
         
+        if response.status_code in (301, 302, 303, 307) and response.headers.get("location"):
+            return {"url": response.headers.get("location")}
+
         # Verify content-type and try to decode JSON
         try:
             res_data = response.json()
@@ -110,6 +117,39 @@ async def make_whatsapp_api_request(
             )
             
         return res_data
+
+from fastapi.responses import RedirectResponse
+
+@router.get("/sessions/{session_id}/avatar")
+async def get_session_avatar(
+    session_id: str,
+    jid: str,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    """
+    Proxy de imagem de perfil de contato/grupo via mTLS.
+    Evita erros de NS_BINDING_ABORTED e SSL em requisições cross-origin do navegador.
+    """
+    try:
+        token = await get_user_token(current_user, db)
+        clean_path = f"/api/sessions/{session_id}/avatar?jid={jid}&json=true"
+        res = await make_whatsapp_api_request(
+            "GET",
+            clean_path,
+            headers={"x-session-token": token}
+        )
+        if isinstance(res, dict) and res.get("url"):
+            return RedirectResponse(
+                res["url"],
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "public, max-age=86400"
+                }
+            )
+    except Exception as e:
+        pass
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar não encontrado.")
 
 @router.get("/sessions")
 async def list_sessions(
