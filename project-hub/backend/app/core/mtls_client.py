@@ -61,11 +61,19 @@ def create_ssl_context(service_name: str = "default") -> ssl.SSLContext | None:
         cert_content = clean_pem_content(os.getenv("WHATSAPP_MTLS_CERT_CONTENT", ""))
         key_content = clean_pem_content(os.getenv("WHATSAPP_MTLS_KEY_CONTENT", ""))
 
-    # Fallback para variáveis genéricas se as dedicadas não existirem
+    # Fallback para variáveis dedicadas de qualquer serviço se as específicas não existirem
     if not cert_content:
-        cert_content = clean_pem_content(os.getenv("MTLS_CERT_CONTENT", ""))
+        cert_content = clean_pem_content(
+            os.getenv("WHATSAPP_MTLS_CERT_CONTENT", "")
+            or os.getenv("IDENTITY_MTLS_CERT_CONTENT", "")
+            or os.getenv("MTLS_CERT_CONTENT", "")
+        )
     if not key_content:
-        key_content = clean_pem_content(os.getenv("MTLS_KEY_CONTENT", ""))
+        key_content = clean_pem_content(
+            os.getenv("WHATSAPP_MTLS_KEY_CONTENT", "")
+            or os.getenv("IDENTITY_MTLS_KEY_CONTENT", "")
+            or os.getenv("MTLS_KEY_CONTENT", "")
+        )
 
     # Se o certificado e a chave forem fornecidos via variável de ambiente em memória
     if cert_content and key_content:
