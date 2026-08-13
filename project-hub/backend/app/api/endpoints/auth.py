@@ -166,14 +166,14 @@ async def login(
     background_tasks.add_task(_maybe_provision, user, db)
 
     token_data = _build_token_data(user)
-    access_token = create_access_token(data=token_data, expires_in=3600)
-    refresh_token = create_refresh_token(data=token_data, expires_in=604800)
+    access_token = create_access_token(data=token_data, expires_in=2592000)
+    refresh_token = create_refresh_token(data=token_data, expires_in=7776000)
 
     now = datetime.utcnow()
     user.access_token = access_token
     user.refresh_token = refresh_token
     user.token_issued_at = now
-    user.token_expires_at = now + timedelta(seconds=3600)
+    user.token_expires_at = now + timedelta(seconds=2592000)
     db.commit()
     db.refresh(user)
 
@@ -181,8 +181,8 @@ async def login(
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "expires_in": 3600,
-        "reauth_at_seconds": 3588,  # 59.8 minutos (12s / 1-10s antes de 3600s)
+        "expires_in": 2592000,
+        "reauth_at_seconds": 2591000,
         "whatsapp_token": user.whatsapp_token,
     }
 
@@ -209,14 +209,14 @@ async def refresh(
     background_tasks.add_task(_maybe_provision, user, db)
 
     token_data = _build_token_data(user)
-    new_access_token = create_access_token(data=token_data, expires_in=3600)
-    new_refresh_token = create_refresh_token(data=token_data, expires_in=604800)
+    new_access_token = create_access_token(data=token_data, expires_in=2592000)
+    new_refresh_token = create_refresh_token(data=token_data, expires_in=7776000)
 
     now = datetime.utcnow()
     user.access_token = new_access_token
     user.refresh_token = new_refresh_token
     user.token_issued_at = now
-    user.token_expires_at = now + timedelta(seconds=3600)
+    user.token_expires_at = now + timedelta(seconds=2592000)
     db.commit()
     db.refresh(user)
 
@@ -224,7 +224,7 @@ async def refresh(
         "access_token": new_access_token,
         "refresh_token": new_refresh_token,
         "token_type": "bearer",
-        "expires_in": 3600,
-        "reauth_at_seconds": 3588,  # 59.8 minutos
+        "expires_in": 2592000,
+        "reauth_at_seconds": 2591000,
         "whatsapp_token": user.whatsapp_token,
     }

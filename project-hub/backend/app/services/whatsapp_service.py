@@ -28,8 +28,11 @@ _legacy_token_cache: TTLCache = TTLCache(maxsize=256, ttl=600)
 async def get_tenant_id_for_user(user: User, db: Session) -> str:
     """
     Retorna o tenant_id associado ao usuário.
-    Se o usuário ainda não tiver um tenant_id definido no banco, atribui e persiste `tenant_{user.id}`.
+    Se o usuário for admin, retorna 'admin' para permitir acesso universal às sessões master.
     """
+    if user.role == "admin" or user.email == settings.ADMIN_USERNAME:
+        return "admin"
+
     if user.tenant_id:
         return user.tenant_id
 
