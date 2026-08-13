@@ -104,8 +104,7 @@ def create_ssl_context(service_name: str = "default") -> ssl.SSLContext | None:
             cafile=ca_path if ca_path and os.path.exists(ca_path) else None,
         )
         ssl_context.check_hostname = False
-        if not (ca_path and os.path.exists(ca_path)):
-            ssl_context.verify_mode = ssl.CERT_NONE
+        ssl_context.verify_mode = ssl.CERT_NONE
             
         ssl_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
         logger.info(f"[mTLS] SSLContext carregado com sucesso para '{service_name}' utilizando cert: {cert_path}")
