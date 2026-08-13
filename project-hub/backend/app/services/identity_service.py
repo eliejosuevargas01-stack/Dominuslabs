@@ -20,7 +20,7 @@ logger = logging.getLogger("identity_service")
 _identity_token_cache: TTLCache = TTLCache(maxsize=512, ttl=300)
 
 
-async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:messages:send") -> str:
+async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:messages:send whatsapp:sessions:read whatsapp:sessions:write") -> str:
     """
     Obtém um JWT M2M estrito para o tenant_id e scope especificados.
     Tenta primeiro o cache local; se não existir, chama o Identity Worker via mTLS.
