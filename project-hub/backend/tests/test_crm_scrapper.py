@@ -191,9 +191,10 @@ async def test_n8n_double_requests_matching():
             pass
 
     async def mock_get(url, *args, **kwargs):
-        if "action=get_contacts" in url or "action=get_leads" in url:
+        url_str = str(url)
+        if "action=get_contacts" in url_str or "action=get_leads" in url_str:
             return MockResponse(mock_leads_response)
-        elif "action=get_messages" in url or "action=get_chat_history" in url:
+        elif "action=get_messages" in url_str or "action=get_chat_history" in url_str or "action=get_conversations" in url_str:
             return MockResponse(mock_conversations_response)
         return MockResponse([])
 
@@ -358,6 +359,48 @@ def test_crm_chat_update_global_sse(client):
     # Clean up
     if ("admin@dominuslabs.online", queue) in crm_chat_listeners:
         crm_chat_listeners.remove(("admin@dominuslabs.online", queue))
+
+
+def test_progressive_contact_cache_flow():
+    from app.services.n8n_service import ProgressiveContactCache
+    ProgressiveContactCache.clear()
+    jid = "5511999998888@lid"
+
+    # Request 1: Basic Info (contacts table)
+    ProgressiveContactCache.set_contact(jid, {
+        "push_name": "Maria Silva",
+        "profile_pic_url": "https://img.com/avatar.jpg",
+        "display_phone": "+55 (11) 99999-8888"
+    })
+    profile = ProgressiveContactCache.get(jid)
+    assert profile["push_name"] == "Maria Silva"
+    assert profile["display_phone"] == "+55 (11) 99999-8888"
+
+    # Request 2: Inbox State (conversations table)
+    ProgressiveContactCache.set_conversation(jid, {
+        "session_id": "eliezer-sc",
+        "unread_count": 3,
+        "last_message_preview": "Olá, tudo bem?"
+    })
+    profile = ProgressiveContactCache.get(jid)
+    assert profile["session_id"] == "eliezer-sc"
+    assert profile["unread_count"] == 3
+    assert profile["last_message_preview"] == "Olá, tudo bem?"
+    assert profile["push_name"] == "Maria Silva" # Preserved
+
+    # Request 3: Chat History (messages table)
+    msgs = [
+        {"id": "m1", "content": "Olá", "is_from_me": False, "timestamp": "2026-08-13T00:00:00Z"},
+        {"id": "m2", "content": "Olá, tudo bem?", "is_from_me": True, "timestamp": "2026-08-13T00:01:00Z"}
+    ]
+    ProgressiveContactCache.set_messages(jid, msgs)
+
+    assembled = ProgressiveContactCache.get_assembled_payload(jid)
+    assert assembled["contact_jid"] == jid
+    assert assembled["push_name"] == "Maria Silva"
+    assert assembled["session_id"] == "eliezer-sc"
+    assert len(assembled["mensagens"]) == 2
+
 
 
 
