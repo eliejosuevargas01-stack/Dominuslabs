@@ -47,18 +47,26 @@ async def get_tenant_id_for_user(user: User, db: Session) -> str:
 
 async def check_token_validity(token: str) -> bool:
     """
-    Verifica se o token M2M/JWT é válido.
+    Verifica se o token M2M/JWT é válido sem depender de bibliotecas externas (PyJWT).
     """
-    if not token:
+    if not token or "." not in token:
         return False
     try:
-        import jwt
-        # Tenta decodificar o token sem verificar a assinatura para checar expiração
-        decoded = jwt.decode(token, options={"verify_signature": False})
+        import base64
+        import json
         import time
-        if decoded.get("exp", 0) > time.time():
-            return True
-        return False
+
+        parts = token.split(".")
+        if len(parts) != 3:
+            return False
+
+        payload_b64 = parts[1]
+        payload_b64 += "=" * (-len(payload_b64) % 4)
+        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+        payload = json.loads(payload_bytes.decode("utf-8"))
+
+        exp = payload.get("exp", 0)
+        return exp > time.time()
     except Exception as e:
         logger.warning(f"[WA-M2M] Token M2M/JWT inválido ou expirado: {e}")
         return False
