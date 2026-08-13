@@ -44,7 +44,7 @@ async def make_whatsapp_api_request(
         base_url = base_url.replace("http://", "https://", 1)
     
     url = f"{base_url}{clean_path}"
-    import urllib.parse, socket
+    import urllib.parse, socket, asyncio
     parsed = urllib.parse.urlparse(base_url)
     if parsed.hostname:
         try:
