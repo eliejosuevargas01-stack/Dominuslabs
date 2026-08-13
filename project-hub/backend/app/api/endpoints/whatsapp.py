@@ -39,8 +39,8 @@ async def make_whatsapp_api_request(
     timeout: float = 10.0
 ) -> Any:
     base_url = settings.WHATSAPP_API_URL.rstrip("/")
-    if "whats-api:3000" in base_url and base_url.startswith("https://"):
-        base_url = base_url.replace("https://", "http://")
+    if base_url.startswith("https://") and (":3000" in base_url or "whats-api" in base_url):
+        base_url = base_url.replace("https://", "http://", 1)
     clean_path = path if path.startswith("/") else f"/{path}"
     url = f"{base_url}{clean_path}"
 
@@ -51,7 +51,7 @@ async def make_whatsapp_api_request(
             req_headers["Authorization"] = f"Bearer {token}"
 
     from app.core.mtls_client import get_mtls_async_client
-    async with get_mtls_async_client(timeout=timeout) as client:
+    async with get_mtls_async_client(timeout=timeout, service_name="whatsapp") as client:
         try:
             response = await client.request(
                 method,
@@ -430,7 +430,7 @@ async def provision_whatsapp(
     tenant_id = await get_tenant_id_for_user(user, db)
 
     try:
-        async with get_mtls_async_client(timeout=20.0) as client:
+        async with get_mtls_async_client(timeout=20.0, service_name="whatsapp") as client:
             print(f"[M2M-AUTH-FLOW] >>> Enviando solicitação mTLS de provisionamento M2M para WhatsApp API: email={user.email}, tenant_id={tenant_id}", flush=True)
             resp = await client.post(
                 provision_url,
