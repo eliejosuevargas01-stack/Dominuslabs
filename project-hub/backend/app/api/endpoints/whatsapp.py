@@ -50,15 +50,22 @@ async def make_whatsapp_api_request(
         try:
             socket.gethostbyname(parsed.hostname)
         except Exception:
-            # Se a resolucao de nome falhar (ex: sufixo do container do Coolify mudou), descobre o IP na rede Docker
+            # Se a resolucao de nome falhar (ex: sufixo do container do Coolify mudou), descobre o IP HTTPS da whats_api na rede Docker
+            import ssl
+            ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            
             async def check_ip(ip: str):
                 try:
-                    reader, writer = await asyncio.wait_for(asyncio.open_connection(ip, 3000), timeout=0.2)
-                    writer.close()
-                    await writer.wait_closed()
-                    return ip
+                    async with httpx.AsyncClient(verify=ctx, timeout=0.5) as test_client:
+                        res = await test_client.get(f"https://{ip}:3000/api/health")
+                        if res.status_code in (200, 401, 403, 404):
+                            return ip
                 except Exception:
-                    return None
+                    pass
+                return None
+            
             ips = await asyncio.gather(*[check_ip(f"10.0.1.{i}") for i in range(2, 50)])
             valid = [ip for ip in ips if ip]
             if valid:
