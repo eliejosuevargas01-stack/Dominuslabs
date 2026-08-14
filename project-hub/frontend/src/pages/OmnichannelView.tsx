@@ -651,10 +651,7 @@ export default function OmnichannelView() {
       return c;
     }));
 
-    if (chat.contact_jid === "54177489223737@lid") {
-      setChatMessages(MOCK_MESSAGES_DANNYELIZ);
-      return;
-    }
+
 
     try {
       setLoadingHistory(true);
