@@ -646,7 +646,7 @@ const normalizeSessionName = (name?: string) => {
                       </div>
 
                       <p className="text-xs text-slate-500 truncate font-normal">
-                        {lead.ultima_mensagem || 'Sem histórico de texto...'}
+                        {lead.ultima_mensagem || lead.last_message_preview || lead.preview || 'Sem histórico de texto...'}
                       </p>
                     </div>
                   </div>

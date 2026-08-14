@@ -47,6 +47,8 @@ async def delete_lead(lead_id: str, current_user: str = Depends(check_crm_permis
     result = await n8n_service.delete_lead(lead_id)
     return result
 
+from urllib.parse import quote
+
 CONTACTS_CACHE: dict = {}
 
 @router.get("/contacts")
@@ -68,7 +70,7 @@ async def get_contacts_action(
         result = []
         for s in sessions:
             session_id = s.get("id") or s.get("sessionId")
-            if not session_id:
+            if not session_id or session_id == "sessao_desconhecida":
                 continue
 
             try:
@@ -78,8 +80,9 @@ async def get_contacts_action(
                 session_contacts = []
 
             for c in session_contacts:
-                c_jid = c.get("contact_jid")
+                c_jid = c.get("contact_jid") or c.get("jid")
                 if c_jid:
+                    c["profile_pic_url"] = f"/api/v1/whatsapp/sessions/{session_id}/avatar?jid={quote(c_jid)}"
                     cache_key = f"{session_id}:{c_jid}"
                     CONTACTS_CACHE[cache_key] = c
 
@@ -112,7 +115,7 @@ async def get_conversations_action(
         result = []
         for s in sessions:
             session_id = s.get("id") or s.get("sessionId")
-            if not session_id:
+            if not session_id or session_id == "sessao_desconhecida":
                 continue
 
             try:
@@ -133,19 +136,25 @@ async def get_conversations_action(
                 last_ts_sec = c.get("lastMessageTimestamp") or c.get("lastMessageAt") or int(datetime.utcnow().timestamp())
                 if last_ts_sec > 1e11:
                     last_ts_sec = int(last_ts_sec / 1000)
-                last_ts_iso = datetime.utcfromtimestamp(Number(last_ts_sec) if 'Number' in globals() else float(last_ts_sec)).isoformat() + "Z"
+                last_ts_iso = datetime.utcfromtimestamp(float(last_ts_sec)).isoformat() + "Z"
+
+                preview_text = c.get("preview") or c.get("last_message_preview") or c.get("ultima_mensagem") or ""
+                profile_pic = f"/api/v1/whatsapp/sessions/{session_id}/avatar?jid={quote(c_jid)}"
 
                 formatted_convos.append({
                     "contact_jid": c_jid,
                     "session_id": session_id,
                     "unread_count": c.get("unreadCount", 0),
-                    "last_message_preview": c.get("preview", ""),
+                    "last_message_preview": preview_text,
+                    "ultima_mensagem": preview_text,
+                    "preview": preview_text,
                     "last_message_timestamp": last_ts_iso,
+                    "last_interaction": last_ts_iso,
                     "created_at": last_ts_iso,
                     "updated_at": last_ts_iso,
                     "push_name": contact_info.get("push_name") or c.get("title"),
                     "display_phone": contact_info.get("display_phone") or c.get("displayJid"),
-                    "profile_pic_url": contact_info.get("profile_pic_url") or c.get("imgUrl")
+                    "profile_pic_url": profile_pic
                 })
 
             result.append({
