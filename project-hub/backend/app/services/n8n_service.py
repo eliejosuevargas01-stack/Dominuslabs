@@ -1719,8 +1719,12 @@ class N8NService:
             logger.info("CRM_SEND_WHATSAPP_WEBHOOK_URL not configured. Message logged locally in-memory.")
             return update_local_mock_state(default_id, message_text, default_ts)
 
+        sep = "&" if "?" in url else "?"
+        post_url = url if "action=" in url else f"{url}{sep}action=send_message"
+
         # Match Evolution API payload structure as well as direct params
         outgoing_payload = {
+            "action": "send_message",
             "jid": cleaned_phone,
             "text": message_text,
             "number": cleaned_phone,
@@ -1746,7 +1750,7 @@ class N8NService:
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
-                response = await client.post(url, json=outgoing_payload, timeout=30.0)
+                response = await client.post(post_url, json=outgoing_payload, timeout=30.0)
                 
                 # Check for the specific authentication error format returned by n8n
                 is_auth_error = False

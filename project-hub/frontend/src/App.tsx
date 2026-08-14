@@ -10,6 +10,7 @@ import ScrapperView from './pages/ScrapperView';
 import CrmView from './pages/CrmView';
 import LeadDetailView from './pages/LeadDetailView';
 import ConnectionsView from './pages/ConnectionsView';
+import OmnichannelView from './pages/OmnichannelView';
 import { LogOut } from 'lucide-react';
 import './App.css';
 import './index.css';
@@ -145,6 +146,16 @@ function App() {
               <ProtectedRoute>
                 <DashboardLayout>
                   <AdminProjectView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/omnichannel" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <OmnichannelView />
                 </DashboardLayout>
               </ProtectedRoute>
             } 
