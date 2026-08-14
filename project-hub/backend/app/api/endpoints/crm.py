@@ -134,6 +134,41 @@ async def get_chat_history_action(
     lookup_id = f"{contact_jid}___{session_id}" if session_id and session_id != "default" else contact_jid
     return await n8n_service.get_chat_history_response(lookup_id)
 
+from fastapi.responses import RedirectResponse, Response
+
+@router.get("/avatar")
+async def proxy_crm_avatar(
+    jid: str,
+    session: Optional[str] = None,
+    session_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Proxy de avatar público para ser consumido por tags <img> no Dominus CRM.
+    Recebe session/session_id e jid, consulta a Whats API via rede Docker mTLS e devolve
+    o redirecionamento para a CDN oficial do Meta (pps.whatsapp.net) ou a imagem.
+    """
+    target_session = session or session_id or "default"
+    if not jid:
+        raise HTTPException(status_code=400, detail="Parâmetro 'jid' é obrigatório.")
+
+    try:
+        from app.api.endpoints.whatsapp import make_whatsapp_api_request
+        clean_path = f"/api/sessions/{target_session}/avatar?jid={jid}&json=true"
+        res = await make_whatsapp_api_request("GET", clean_path)
+        if isinstance(res, dict) and res.get("url"):
+            return RedirectResponse(
+                res["url"],
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "public, max-age=86400"
+                }
+            )
+    except Exception as e:
+        print(f"[CRM-AVATAR] Aviso ao buscar avatar proxy para jid={jid}: {e}", flush=True)
+
+    raise HTTPException(status_code=404, detail="Avatar não encontrado.")
+
 
 
 
