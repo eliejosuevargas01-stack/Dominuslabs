@@ -104,7 +104,7 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
       <Sidebar handleLogout={handleLogout} isCollapsed={isCollapsed} setIsCollapsed={toggleSidebar} />
       <div className="flex-1 flex flex-col min-w-0">
         <Header />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 p-1 sm:p-3 lg:p-6 min-w-0">
           {children}
         </main>
       </div>

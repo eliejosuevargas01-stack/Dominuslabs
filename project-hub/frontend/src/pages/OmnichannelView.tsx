@@ -599,30 +599,30 @@ function playIncomingSound() {
   }, [contacts, searchTerm]);
 
   return (
-    <div className="h-[calc(100vh-6.5rem)] flex flex-col glass-card bg-white/80 border border-violet-100/50 rounded-2xl overflow-hidden shadow-xl">
+    <div className="h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-4.5rem)] lg:h-[calc(100vh-6.5rem)] flex flex-col glass-card bg-white/80 border border-violet-100/50 rounded-2xl overflow-hidden shadow-xl w-full">
       {/* Top Header / Omnichannel Controls */}
-      <div className="px-6 py-3.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between gap-4 border-b border-indigo-800/40 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-            <Radio className="w-5 h-5 text-white animate-pulse" />
+      <div className="px-4 py-3 sm:px-6 sm:py-3.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-indigo-800/40 shrink-0">
+        <div className="flex items-center gap-3 pl-8 lg:pl-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+            <Radio className="w-4 h-4 sm:w-5 sm:h-5 text-white animate-pulse" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-display font-black tracking-tight">Dominus Omnichannel</h2>
+              <h2 className="text-sm sm:text-base font-display font-black tracking-tight">Dominus Omnichannel</h2>
               <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
                 Whats API Sync
               </span>
             </div>
-            <p className="text-xs text-indigo-200/80">Centralização multi-sessão de atendimento em tempo real</p>
+            <p className="text-[11px] sm:text-xs text-indigo-200/80">Centralização multi-sessão em tempo real</p>
           </div>
         </div>
 
         {/* Action Controls & Session Filter */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 self-end sm:self-auto w-full sm:w-auto justify-between sm:justify-end">
           {/* Session Selector */}
-          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-xs">
-            <span className="text-indigo-200 font-bold text-[11px] uppercase tracking-wider">Sessão:</span>
+          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-xs flex-1 sm:flex-none justify-between">
+            <span className="text-indigo-200 font-bold text-[10px] sm:text-[11px] uppercase tracking-wider">Sessão:</span>
             <select
               value={selectedSession}
               onChange={(e) => setSelectedSession(e.target.value)}
@@ -643,7 +643,7 @@ function playIncomingSound() {
               loadContacts();
             }}
             title="Atualizar conversas"
-            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all cursor-pointer flex items-center justify-center"
+            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all cursor-pointer flex items-center justify-center shrink-0"
           >
             <RefreshCw className={`w-4 h-4 ${loadingList ? 'animate-spin' : ''}`} />
           </button>
@@ -651,12 +651,12 @@ function playIncomingSound() {
       </div>
 
       {/* Main Omnichannel Layout Container */}
-      <div className="flex-1 flex min-h-0 relative">
+      <div className="flex-1 flex min-h-0 relative w-full overflow-hidden">
         {/* ================================================================= */}
         {/* LEFT SIDEBAR: Conversations / Contacts List                      */}
         {/* ================================================================= */}
-        <div className={`w-full md:w-80 lg:w-96 border-r border-slate-200/80 bg-slate-50/70 flex flex-col transition-all duration-300 ${
-          mobileChatOpen ? 'hidden md:flex' : 'flex'
+        <div className={`w-full lg:w-80 xl:w-96 border-r border-slate-200/80 bg-slate-50/70 flex flex-col transition-all duration-300 ${
+          mobileChatOpen ? 'hidden lg:flex' : 'flex'
         }`}>
           {/* Search Bar & Tabs */}
           <div className="p-3.5 space-y-3 bg-white border-b border-slate-200/60">
@@ -850,20 +850,22 @@ function playIncomingSound() {
         {/* ================================================================= */}
         {/* RIGHT MAIN PANEL: Active Chat Area (Action 3 get_chat_history)    */}
         {/* ================================================================= */}
-        <div className={`flex-1 flex flex-col bg-[#efeae2] relative ${
-          !mobileChatOpen ? 'hidden md:flex' : 'flex'
+        <div className={`w-full lg:flex-1 flex flex-col bg-[#efeae2] relative ${
+          !mobileChatOpen ? 'hidden lg:flex' : 'flex'
         }`}>
           {selectedChat ? (
             <>
               {/* Chat Header Bar */}
-              <div className="p-3.5 bg-white border-b border-slate-200/80 flex items-center justify-between shadow-sm z-10">
-                <div className="flex items-center gap-3">
-                  {/* Mobile Back Button */}
+              <div className="p-3 sm:p-3.5 bg-white border-b border-slate-200/80 flex items-center justify-between shadow-sm z-10">
+                <div className="flex items-center gap-2.5">
+                  {/* Mobile/Tablet Back Button */}
                   <button
                     onClick={() => setMobileChatOpen(false)}
-                    className="md:hidden p-1.5 rounded-lg text-slate-600 hover:bg-slate-100"
+                    className="lg:hidden px-2.5 py-1.5 rounded-xl text-purple-700 font-bold bg-purple-50 hover:bg-purple-100 transition-all flex items-center gap-1 border border-purple-200 cursor-pointer shadow-sm shrink-0"
+                    title="Voltar para a lista de conversas"
                   >
                     <ChevronLeft className="w-5 h-5" />
+                    <span className="text-xs">Voltar</span>
                   </button>
 
                   {/* Avatar */}
