@@ -99,24 +99,29 @@ async def make_whatsapp_api_request(
         if response.status_code in (301, 302, 303, 307) and response.headers.get("location"):
             return {"url": response.headers.get("location")}
 
-        # Verify content-type and try to decode JSON
+        content_type = response.headers.get("content-type", "").lower()
+        
+        # Try decoding JSON if content-type is json or by default
         try:
             res_data = response.json()
+            if response.status_code >= 400:
+                detail_msg = res_data.get("message") or res_data.get("detail") or "Erro na API de WhatsApp."
+                raise HTTPException(status_code=response.status_code, detail=detail_msg)
+            return res_data
         except (ValueError, TypeError):
-            # The response is not JSON (e.g. HTML proxy error)
+            # If not JSON, but status is 200 OK, return binary data structure
+            if response.status_code < 400:
+                return {
+                    "_is_binary": True,
+                    "content": response.content,
+                    "content_type": content_type,
+                    "status_code": response.status_code,
+                    "url": response.headers.get("location") or str(response.url)
+                }
             raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"A API de WhatsApp retornou uma resposta inválida (status {response.status_code}). É provável que o serviço esteja offline ou instável."
+                status_code=response.status_code if response.status_code >= 400 else status.HTTP_502_BAD_GATEWAY,
+                detail=f"A API de WhatsApp retornou erro (status {response.status_code}): {response.text[:200]}"
             )
-            
-        if response.status_code >= 400:
-            detail_msg = res_data.get("message") or res_data.get("detail") or "Erro na API de WhatsApp."
-            raise HTTPException(
-                status_code=response.status_code,
-                detail=detail_msg
-            )
-            
-        return res_data
 
 from fastapi.responses import RedirectResponse
 

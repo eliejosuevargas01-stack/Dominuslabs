@@ -181,35 +181,73 @@ async def root_avatar_proxy(
     - /api/sessions/{session_id}/avatar?jid=...
     - /avatar?session={session_id}&jid=...
     """
-    target_session = session_id or session or "default"
+    target_session = session_id or session
     if not jid:
         raise HTTPException(status_code=400, detail="Parâmetro 'jid' é obrigatório.")
 
     try:
-        from app.api.endpoints.whatsapp import make_whatsapp_api_request
-        clean_path = f"/api/sessions/{target_session}/avatar?jid={jid}&json=true"
-        res = None
-        try:
-            res = await make_whatsapp_api_request("GET", clean_path)
-        except Exception:
-            fallback_path = f"/avatar?session={target_session}&jid={jid}&json=true"
-            res = await make_whatsapp_api_request("GET", fallback_path)
+        from app.core.mtls_client import get_mtls_async_client
+        paths_to_try = []
+        if target_session and target_session != "default":
+            paths_to_try.append(f"/api/sessions/{target_session}/avatar?jid={jid}&json=true")
+            paths_to_try.append(f"/avatar?session={target_session}&jid={jid}&json=true")
+            paths_to_try.append(f"/api/sessions/{target_session}/avatar?jid={jid}")
+            paths_to_try.append(f"/avatar?session={target_session}&jid={jid}")
 
-        url_target = None
-        if isinstance(res, dict):
-            url_target = res.get("url") or res.get("avatar_url") or res.get("profile_pic_url") or res.get("profile_url") or res.get("avatar")
+        async with get_mtls_async_client(timeout=15.0, service_name="whatsapp") as client:
+            base_url = settings.WHATSAPP_API_URL.rstrip("/")
+            if base_url.startswith("http://") and ":3000" in base_url:
+                base_url = base_url.replace("http://", "https://", 1)
 
-        if url_target:
-            return RedirectResponse(
-                url_target,
-                status_code=302,
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Cache-Control": "public, max-age=86400"
-                }
-            )
+            # Discover active sessions if target_session is missing or default
+            try:
+                sessions_res = await client.get(f"{base_url}/api/sessions")
+                if sessions_res.status_code == 200:
+                    sess_data = sessions_res.json()
+                    if isinstance(sess_data, list):
+                        for s in sess_data:
+                            s_id = s.get("name") or s.get("id") or s.get("session_id") or (s.get("session") if isinstance(s.get("session"), str) else None)
+                            if s_id and f"/api/sessions/{s_id}/avatar?jid={jid}&json=true" not in paths_to_try:
+                                paths_to_try.append(f"/api/sessions/{s_id}/avatar?jid={jid}&json=true")
+            except Exception:
+                pass
+
+            for clean_path in paths_to_try:
+                try:
+                    url = f"{base_url}{clean_path}"
+                    res = await client.get(url, follow_redirects=True)
+                    if res.status_code == 200:
+                        content_type = res.headers.get("content-type", "").lower()
+                        if "json" in content_type:
+                            try:
+                                json_data = res.json()
+                                url_target = json_data.get("url") or json_data.get("avatar_url") or json_data.get("profile_pic_url") or json_data.get("profile_url") or json_data.get("avatar")
+                                if url_target:
+                                    return RedirectResponse(
+                                        url_target,
+                                        status_code=302,
+                                        headers={
+                                            "Access-Control-Allow-Origin": "*",
+                                            "Cache-Control": "public, max-age=86400"
+                                        }
+                                    )
+                            except Exception:
+                                pass
+                        elif "image" in content_type or len(res.content) > 100:
+                            return Response(
+                                content=res.content,
+                                media_type=content_type or "image/jpeg",
+                                headers={
+                                    "Access-Control-Allow-Origin": "*",
+                                    "Cache-Control": "public, max-age=86400"
+                                }
+                            )
+                except Exception as ex:
+                    print(f"[AVATAR-PROXY] Tentativa em {clean_path} falhou: {ex}", flush=True)
+                    continue
+
     except Exception as e:
-        print(f"[ROOT-AVATAR-PROXY] Aviso ao buscar avatar para jid={jid}: {e}", flush=True)
+        print(f"[ROOT-AVATAR-PROXY] Erro ao buscar avatar para jid={jid}: {e}", flush=True)
 
     raise HTTPException(status_code=404, detail="Avatar não encontrado.")
 
