@@ -235,6 +235,27 @@ function formatTimestamp(isoString?: string): string {
   }
 }
 
+function getSenderColor(name: string): string {
+  if (!name) return 'text-purple-600 font-bold';
+  const colors = [
+    'text-emerald-600 font-bold',
+    'text-indigo-600 font-bold',
+    'text-purple-600 font-bold',
+    'text-amber-600 font-bold',
+    'text-teal-600 font-bold',
+    'text-blue-600 font-bold',
+    'text-rose-600 font-bold',
+    'text-cyan-600 font-bold',
+    'text-violet-600 font-bold'
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+}
+
 function getMediaUrl(mediaUrl?: string): string | null {
   if (!mediaUrl || typeof mediaUrl !== 'string' || !mediaUrl.trim()) return null;
   const trimmed = mediaUrl.trim();
@@ -893,6 +914,11 @@ function playIncomingSound() {
                         {/* Linha de Baixo (Rodapé) */}
                         <div className="flex items-center justify-between gap-2">
                           <span className="last-message text-xs text-slate-500 truncate whitespace-nowrap overflow-hidden text-ellipsis flex-1">
+                            {(item.participant_pushname || item.participant) && (item.contact_jid?.includes('@g.us') || item.chat_kind === 'group') ? (
+                              <span className="font-semibold text-slate-700">
+                                {(item.participant_pushname || item.participant)}: {' '}
+                              </span>
+                            ) : null}
                             {item.last_message_preview || 'Nova conversa'}
                           </span>
                           
@@ -1058,6 +1084,9 @@ function playIncomingSound() {
                       );
                     }
 
+                    const isGroup = (selectedChat?.contact_jid && selectedChat.contact_jid.includes('@g.us')) || msg.chat_kind === 'group' || selectedChat?.chat_kind === 'group';
+                    const senderName = !isMe && isGroup ? (msg.participant_pushname || msg.participant_name || msg.participant_push_name || msg.push_name || msg.participant || selectedChat?.participant_pushname || selectedChat?.participant) : null;
+
                     const isPlaceholderText = ['[imagem]', '[video]', '[audio]', '[documento]', '[mídia]'].includes(rawContent.toLowerCase());
                     const mediaElement = renderMessageMedia(msg);
 
@@ -1073,6 +1102,13 @@ function playIncomingSound() {
                               : 'bg-white text-slate-900 rounded-tl-none border border-slate-200/60'
                           }`}
                         >
+                          {/* Group Participant Header */}
+                          {senderName && (
+                            <div className={`text-[11px] mb-1 truncate select-none ${getSenderColor(senderName)}`}>
+                              ~ {senderName}
+                            </div>
+                          )}
+
                           {/* Render Media (Images, Videos, Audio, Files) */}
                           {mediaElement}
 
