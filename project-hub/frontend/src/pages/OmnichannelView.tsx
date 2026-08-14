@@ -275,17 +275,33 @@ function getSenderColor(name: string): string {
   return colors[index];
 }
 
-function getMediaUrl(mediaUrl?: string): string | null {
-  if (!mediaUrl || typeof mediaUrl !== 'string' || !mediaUrl.trim()) return null;
-  const trimmed = mediaUrl.trim();
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+function getMediaUrl(msg: any): string | null {
+  if (!msg) return null;
+  const rawUrl = msg.media_url || msg.image_url || msg.url || msg.file_url;
+  if (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) {
+    const trimmed = rawUrl.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+      return trimmed;
+    }
     return trimmed;
   }
-  return trimmed;
+  // Construct dynamic proxy route if session_id and message_id exist
+  const sessId = msg.session_id;
+  const msgId = msg.message_id || msg.id;
+  if (sessId && msgId) {
+    const msgType = (msg.message_type || msg.type || '').toLowerCase();
+    const contentText = (msg.content || msg.message || '').trim().toLowerCase();
+    const isMediaMsg = msgType.includes('audio') || msgType.includes('image') || msgType.includes('video') || msgType.includes('document') || msgType.includes('ptt') || ['[audio]', '[imagem]', '[video]', '[documento]'].includes(contentText);
+    
+    if (isMediaMsg) {
+      return `/api/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}`;
+    }
+  }
+  return null;
 }
 
 function renderMessageMedia(msg: any) {
-  const mediaSrc = getMediaUrl(msg.media_url || msg.image_url || msg.url || msg.file_url);
+  const mediaSrc = getMediaUrl(msg);
   const msgType = (msg.message_type || msg.type || '').toLowerCase();
   const contentText = (msg.content || msg.message || '').trim().toLowerCase();
 
