@@ -9,8 +9,7 @@ import {
   fetchContacts, 
   fetchChatHistory, 
   sendOmnichannelMessage,
-  fetchWhatsappSessions,
-  API_BASE
+  fetchWhatsappSessions
 } from '../services/api';
 
 // ============================================================================
@@ -454,60 +453,13 @@ function getAvatarColor(initials: string, name: string) {
 }
 
 function getAvatarSrc(url?: string, session_id?: string, jid?: string): string | null {
-  if (!url && session_id && jid) {
-    return `${API_BASE}/crm/avatar?session=${encodeURIComponent(session_id)}&jid=${encodeURIComponent(jid)}`;
+  if (url && typeof url === 'string' && url.trim()) {
+    return url.trim();
   }
-  if (!url) return null;
-
-  // 1. Meta Global CDN URL (pps.whatsapp.net) or external http(s) URL
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    if (url.includes('pps.whatsapp.net') || url.includes('mmg.whatsapp.net')) {
-      return url;
-    }
-    if (url.includes('/api/sessions/') || url.includes('/avatar?')) {
-      try {
-        const u = new URL(url);
-        const s = u.searchParams.get('session') || session_id || 'default';
-        const j = u.searchParams.get('jid') || jid || '';
-        if (j) {
-          return `${API_BASE}/crm/avatar?session=${encodeURIComponent(s)}&jid=${encodeURIComponent(j)}`;
-        }
-      } catch (e) {}
-    }
-    return url;
-  }
-
-  // 2. Relative URLs from Whats API / n8n (/avatar?session=... or /api/sessions/...)
-  if (url.startsWith('/avatar?')) {
-    try {
-      const queryStr = url.split('?')[1];
-      const params = new URLSearchParams(queryStr);
-      const s = params.get('session') || session_id || 'default';
-      const j = params.get('jid') || jid || '';
-      if (j) {
-        return `${API_BASE}/crm/avatar?session=${encodeURIComponent(s)}&jid=${encodeURIComponent(j)}`;
-      }
-    } catch (e) {}
-  }
-
-  if (url.startsWith('/api/sessions/')) {
-    try {
-      const parts = url.split('/api/sessions/')[1].split('/avatar');
-      const s = parts[0] || session_id || 'default';
-      const queryStr = parts[1] ? parts[1].replace('?', '') : '';
-      const params = new URLSearchParams(queryStr);
-      const j = params.get('jid') || jid || '';
-      if (j) {
-        return `${API_BASE}/crm/avatar?session=${encodeURIComponent(s)}&jid=${encodeURIComponent(j)}`;
-      }
-    } catch (e) {}
-  }
-
   if (session_id && jid) {
-    return `${API_BASE}/crm/avatar?session=${encodeURIComponent(session_id)}&jid=${encodeURIComponent(jid)}`;
+    return `/api/sessions/${encodeURIComponent(session_id)}/avatar?jid=${encodeURIComponent(jid)}`;
   }
-
-  return url;
+  return null;
 }
 
 function formatTimestamp(isoString?: string): string {

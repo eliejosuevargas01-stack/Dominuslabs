@@ -155,6 +155,43 @@ from fastapi.staticfiles import StaticFiles
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+from fastapi.responses import RedirectResponse, HTTPException, Response
+from typing import Optional
+
+@app.get("/api/sessions/{session_id}/avatar")
+@app.get("/avatar")
+async def root_avatar_proxy(
+    session_id: Optional[str] = None,
+    session: Optional[str] = None,
+    jid: Optional[str] = None
+):
+    """
+    Proxy de avatar direto consumido pelo frontend sem necessidade de pré-processamento.
+    Mapeia rotas relativas exatas devolvidas pelo n8n:
+    - /api/sessions/{session_id}/avatar?jid=...
+    - /avatar?session={session_id}&jid=...
+    """
+    target_session = session_id or session or "default"
+    if not jid:
+        raise HTTPException(status_code=400, detail="Parâmetro 'jid' é obrigatório.")
+
+    try:
+        from app.api.endpoints.whatsapp import make_whatsapp_api_request
+        clean_path = f"/api/sessions/{target_session}/avatar?jid={jid}&json=true"
+        res = await make_whatsapp_api_request("GET", clean_path)
+        if isinstance(res, dict) and res.get("url"):
+            return RedirectResponse(
+                res["url"],
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "public, max-age=86400"
+                }
+            )
+    except Exception as e:
+        print(f"[ROOT-AVATAR-PROXY] Aviso ao buscar avatar para jid={jid}: {e}", flush=True)
+
+    raise HTTPException(status_code=404, detail="Avatar não encontrado.")
+
 @app.get("/project/{public_token}")
 async def serve_project_with_meta(public_token: str, db: Session = Depends(get_db)):
     from app.models.project import Project
