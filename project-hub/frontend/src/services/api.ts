@@ -579,3 +579,49 @@ export async function provisionCredentials(): Promise<{
   return res.json();
 }
 
+// ---------------------------------------------------------------------------
+// Omnichannel API Actions (get_contacts, get_conversations, get_chat_history)
+// ---------------------------------------------------------------------------
+
+export async function fetchContacts() {
+  const res = await fetchWithAuth(`${API_BASE}/crm/contacts`);
+  if (!res.ok) throw new Error("Falha ao carregar lista de contatos.");
+  return res.json();
+}
+
+export async function fetchConversations() {
+  const res = await fetchWithAuth(`${API_BASE}/crm/conversations`);
+  if (!res.ok) throw new Error("Falha ao carregar lista de conversas.");
+  return res.json();
+}
+
+export async function fetchChatHistory(contactJid: string, sessionId?: string) {
+  const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
+  const res = await fetchWithAuth(`${API_BASE}/crm/chat-history/${encodeURIComponent(contactJid)}${query}`);
+  if (!res.ok) throw new Error("Falha ao carregar histórico da conversa.");
+  return res.json();
+}
+
+export async function sendOmnichannelMessage(payload: {
+  contact_jid: string;
+  session_id?: string;
+  message: string;
+  phone?: string;
+}) {
+  const res = await fetchWithAuth(`${API_BASE}/crm/messages/send`, {
+    method: "POST",
+    body: JSON.stringify({
+      lead_id: payload.contact_jid,
+      phone: payload.phone || payload.contact_jid,
+      message: payload.message,
+      session_id: payload.session_id,
+    }),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao enviar mensagem.");
+  }
+  return res.json();
+}
+
+

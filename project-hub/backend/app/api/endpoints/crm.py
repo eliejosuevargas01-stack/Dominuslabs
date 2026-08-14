@@ -58,6 +58,83 @@ async def delete_lead(lead_id: str, current_user: str = Depends(check_crm_permis
     result = await n8n_service.delete_lead(lead_id)
     return result
 
+# ---------------------------------------------------------------------------
+# Omnichannel Actions (get_contacts, get_conversations, get_chat_history)
+# ---------------------------------------------------------------------------
+
+@router.get("/contacts")
+async def get_contacts_action(
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """
+    Action 1: get_contacts
+    Retorna a lista completa de contatos cadastrados.
+    """
+    try:
+        leads = await n8n_service.get_leads()
+        contacts = []
+        for l in leads:
+            contacts.append({
+                "contact_jid": l.get("contact_jid") or l.get("jid") or l.get("id"),
+                "push_name": l.get("push_name") or l.get("nome") or "Contato Sem Nome",
+                "display_phone": l.get("display_phone") or l.get("whatsapp") or None,
+                "profile_pic_url": l.get("profile_pic_url") or "",
+                "created_at": l.get("created_at") or datetime.utcnow().isoformat() + "Z",
+                "updated_at": l.get("updated_at") or datetime.utcnow().isoformat() + "Z"
+            })
+        return contacts
+    except Exception as e:
+        print(f"[CRM] get_contacts_action error: {e}", flush=True)
+        return []
+
+@router.get("/conversations")
+async def get_conversations_action(
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """
+    Action 2: get_conversations
+    Retorna a prévia de todas as conversas agrupadas ou separadas por sessão.
+    """
+    try:
+        convs = await n8n_service.get_conversations()
+        if convs and len(convs) > 0:
+            return convs
+    except Exception as e:
+        print(f"[CRM] n8n get_conversations error: {e}", flush=True)
+
+    # Fallback return standard leads format mapped to conversations preview
+    leads = await n8n_service.get_leads()
+    result = []
+    for l in leads:
+        result.append({
+            "contact_jid": l.get("contact_jid") or l.get("jid") or l.get("id"),
+            "push_name": l.get("push_name") or l.get("nome") or "Contato",
+            "display_phone": l.get("display_phone") or l.get("whatsapp") or None,
+            "profile_pic_url": l.get("profile_pic_url") or "",
+            "session_id": l.get("session_id") or "default",
+            "unread_count": l.get("unread_count", 0),
+            "last_message_preview": l.get("last_message_preview") or l.get("ultima_mensagem") or "",
+            "last_message_timestamp": l.get("last_message_timestamp") or l.get("last_interaction") or l.get("updated_at") or datetime.utcnow().isoformat() + "Z"
+        })
+    return result
+
+@router.get("/chat-history/{contact_jid}")
+async def get_chat_history_action(
+    contact_jid: str,
+    session_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """
+    Action 3: get_chat_history
+    Busca o histórico de mensagens de uma conversa com n8n ou Whats API.
+    """
+    lookup_id = f"{contact_jid}___{session_id}" if session_id and session_id != "default" else contact_jid
+    return await n8n_service.get_chat_history_response(lookup_id)
+
+
 
 
 @router.get("/progressive/{contact_jid}")
