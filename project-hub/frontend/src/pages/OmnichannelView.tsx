@@ -449,9 +449,9 @@ export default function OmnichannelView() {
     return Array.from(setOfSessions);
   }, [conversations, availableSessions]);
 
-  // Filter conversations by selected session and search term
+  // Filter and sort conversations (Newest last_message_timestamp at the top of the list)
   const filteredConversations = useMemo(() => {
-    return conversations.filter(item => {
+    const list = conversations.filter(item => {
       const matchSession = selectedSession === 'all' || item.session_id === selectedSession;
       const searchLower = searchTerm.toLowerCase();
       const resolvedName = resolveContactName(item);
@@ -462,7 +462,22 @@ export default function OmnichannelView() {
       );
       return matchSession && matchSearch;
     });
+
+    return list.sort((a, b) => {
+      const timeA = new Date(a.last_message_timestamp || a.updated_at || a.created_at || 0).getTime();
+      const timeB = new Date(b.last_message_timestamp || b.updated_at || b.created_at || 0).getTime();
+      return timeB - timeA;
+    });
   }, [conversations, selectedSession, searchTerm]);
+
+  // Messages in active chat window: FIFO (First In, First Out / Chronological: oldest top, newest bottom)
+  const sortedMessages = useMemo(() => {
+    return [...chatMessages].sort((a, b) => {
+      const timeA = new Date(a.message_timestamp || a.timestamp || a.created_at || 0).getTime();
+      const timeB = new Date(b.message_timestamp || b.timestamp || b.created_at || 0).getTime();
+      return timeA - timeB;
+    });
+  }, [chatMessages]);
 
   // Filter contacts by search
   const filteredContacts = useMemo(() => {
@@ -804,12 +819,12 @@ export default function OmnichannelView() {
                       Carregando histórico do n8n...
                     </div>
                   </div>
-                ) : chatMessages.length === 0 ? (
+                ) : sortedMessages.length === 0 ? (
                   <div className="flex items-center justify-center h-full text-slate-400 text-xs font-medium">
                     Nenhuma mensagem registrada nesta conversa.
                   </div>
                 ) : (
-                  chatMessages.map((msg, index) => {
+                  sortedMessages.map((msg, index) => {
                     const isMe = msg.is_from_me === true || msg.sender === 'user';
                     const timeStr = formatTimestamp(msg.message_timestamp || msg.created_at) || '';
 

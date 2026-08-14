@@ -1183,6 +1183,12 @@ class N8NService:
                     if c_jid:
                         ProgressiveContactCache.set_conversation(c_jid, m)
 
+                # Sort conversations descending (newest last_message_timestamp first)
+                mapped.sort(
+                    key=lambda x: str(x.get("last_message_timestamp") or x.get("updated_at") or x.get("last_interaction") or ""),
+                    reverse=True
+                )
+
                 return mapped
             except Exception as e:
                 logger.error(f"Error calling GET conversations webhook: {e}")
