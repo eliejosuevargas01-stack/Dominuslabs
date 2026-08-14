@@ -425,9 +425,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             direction = "outgoing" if is_from_me else "incoming"
 
             raw_text = extract_text_content(m)
-            image_url = m.get("image_url") or m.get("media_url") or m.get("url") or m.get("file_url") or m.get("image") or ""
-            if image_url and image_url.startswith("/"):
-                image_url = f"https://whats.dominuslabs.online{image_url}"
+            raw_media = m.get("media_url") or m.get("image_url") or m.get("url") or m.get("file_url") or m.get("image") or None
 
             ts = m.get("message_timestamp") or m.get("created_at") or m.get("timestamp") or m.get("createdAt") or msg.get("created_at")
 
@@ -445,8 +443,8 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
                 "caption": m.get("caption", ""),
                 "message_type": m.get("message_type", "conversation"),
                 "chat_kind": msg.get("chat_kind", "private"),
-                "image_url": image_url,
-                "media_url": image_url,
+                "image_url": raw_media,
+                "media_url": raw_media,
                 "push_name": push_name,
                 "display_phone": display_phone,
                 "profile_pic_url": profile_pic_url,
@@ -464,13 +462,11 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         direction = "outgoing" if is_from_me else "incoming"
         
         raw_text = extract_text_content(msg)
-        image_url = msg.get("image_url") or msg.get("media_url") or msg.get("url") or msg.get("file_url") or msg.get("image") or ""
+        raw_media = msg.get("media_url") or msg.get("image_url") or msg.get("url") or msg.get("file_url") or msg.get("image") or None
         profile_pic_url = msg.get("profile_pic_url") or ""
 
         if profile_pic_url and profile_pic_url.startswith("/"):
             profile_pic_url = f"https://whats.dominuslabs.online{profile_pic_url}"
-        if image_url and image_url.startswith("/"):
-            image_url = f"https://whats.dominuslabs.online{image_url}"
 
         ts = msg.get("message_timestamp") or msg.get("created_at") or msg.get("timestamp") or msg.get("createdAt")
 
@@ -488,8 +484,8 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             "caption": msg.get("caption", ""),
             "message_type": msg.get("message_type", "conversation"),
             "chat_kind": msg.get("chat_kind", "private"),
-            "image_url": image_url,
-            "media_url": image_url,
+            "image_url": raw_media,
+            "media_url": raw_media,
             "push_name": msg.get("push_name"),
             "display_phone": msg.get("display_phone"),
             "profile_pic_url": profile_pic_url,
