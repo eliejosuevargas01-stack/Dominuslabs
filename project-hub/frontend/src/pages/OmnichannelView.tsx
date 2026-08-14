@@ -9,7 +9,8 @@ import {
   fetchContacts, 
   fetchChatHistory, 
   sendOmnichannelMessage,
-  fetchWhatsappSessions
+  fetchWhatsappSessions,
+  API_BASE
 } from '../services/api';
 
 // ============================================================================
@@ -265,6 +266,70 @@ export default function OmnichannelView() {
   useEffect(() => {
     scrollToBottom();
   }, [chatMessages]);
+
+  const selectedChatRef = useRef<any>(null);
+  useEffect(() => {
+    selectedChatRef.current = selectedChat;
+  }, [selectedChat]);
+
+  // Real-time EventSource (SSE) listener for instant n8n webhook notifications
+  useEffect(() => {
+    const token = localStorage.getItem('token') || '';
+    const sseUrl = `${API_BASE}/webhooks/events/crm-chats${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    let eventSource: EventSource | null = null;
+
+    try {
+      eventSource = new EventSource(sseUrl);
+
+      eventSource.onmessage = (event) => {
+        if (!event.data || event.data.startsWith(':')) return;
+        try {
+          let notifiedJid = '';
+          if (event.data.startsWith('{')) {
+            const parsed = JSON.parse(event.data);
+            notifiedJid = parsed.lead_id || parsed.contact_jid || parsed.jid || '';
+          }
+
+          // 1. Immediately reload conversation list to sort latest on top & update badges
+          loadConversations();
+
+          // 2. If active chat is the one receiving the message, reload history in real time
+          if (selectedChatRef.current && selectedChatRef.current.contact_jid) {
+            const currentJid = selectedChatRef.current.contact_jid;
+            if (!notifiedJid || currentJid === notifiedJid || notifiedJid.includes(currentJid) || currentJid.includes(notifiedJid)) {
+              fetchChatHistory(selectedChatRef.current.contact_jid, selectedChatRef.current.session_id)
+                .then((res: any) => {
+                  let msgsList: any[] = [];
+                  if (Array.isArray(res) && res.length > 0) {
+                    if (res[0].messages && Array.isArray(res[0].messages)) {
+                      msgsList = res[0].messages;
+                    } else if (res[0].mensagens && Array.isArray(res[0].mensagens)) {
+                      msgsList = res[0].mensagens;
+                    } else {
+                      msgsList = res;
+                    }
+                  }
+                  setChatMessages(msgsList);
+                })
+                .catch(() => {});
+            }
+          }
+        } catch (err) {
+          loadConversations();
+        }
+      };
+
+      eventSource.onerror = () => {
+        // Suppress browser console noise on automatic reconnect
+      };
+    } catch (e) {}
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, []);
 
   // Load Sessions list
   useEffect(() => {
