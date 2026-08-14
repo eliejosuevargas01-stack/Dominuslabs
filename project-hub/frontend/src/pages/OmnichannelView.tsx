@@ -277,17 +277,25 @@ function getSenderColor(name: string): string {
 
 function getMediaUrl(msg: any): string | null {
   if (!msg) return null;
+  const sessId = msg.session_id;
+  const msgId = msg.message_id || msg.id;
   const rawUrl = msg.media_url || msg.image_url || msg.url || msg.file_url;
+
   if (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) {
     const trimmed = rawUrl.trim();
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
       return trimmed;
     }
+    if (trimmed.startsWith('/api/sessions/')) {
+      return trimmed;
+    }
+    if (sessId && msgId) {
+      return `/api/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}`;
+    }
     return trimmed;
   }
+
   // Construct dynamic proxy route if session_id and message_id exist
-  const sessId = msg.session_id;
-  const msgId = msg.message_id || msg.id;
   if (sessId && msgId) {
     const msgType = (msg.message_type || msg.type || '').toLowerCase();
     const contentText = (msg.content || msg.message || '').trim().toLowerCase();
