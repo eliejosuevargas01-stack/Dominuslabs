@@ -267,6 +267,37 @@ export default function OmnichannelView() {
     scrollToBottom();
   }, [chatMessages]);
 
+function playIncomingSound() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc1.type = 'sine';
+    osc2.type = 'sine';
+
+    osc1.frequency.setValueAtTime(587.33, now); // D5
+    osc2.frequency.setValueAtTime(880.00, now + 0.08); // A5
+
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc1.start(now);
+    osc1.stop(now + 0.1);
+    osc2.start(now + 0.08);
+    osc2.stop(now + 0.35);
+  } catch (e) {}
+}
+
   const selectedChatRef = useRef<any>(null);
   useEffect(() => {
     selectedChatRef.current = selectedChat;
@@ -285,15 +316,25 @@ export default function OmnichannelView() {
         if (!event.data || event.data.startsWith(':')) return;
         try {
           let notifiedJid = '';
+          let isFromMe = false;
+
           if (event.data.startsWith('{')) {
             const parsed = JSON.parse(event.data);
             notifiedJid = parsed.lead_id || parsed.contact_jid || parsed.jid || '';
+            if (parsed.is_from_me === true || parsed.from_me === true || parsed.sender === 'user' || parsed.sender === 'me') {
+              isFromMe = true;
+            }
           }
 
           // 1. Immediately reload conversation list to sort latest on top & update badges
           loadConversations();
 
-          // 2. If active chat is the one receiving the message, reload history in real time
+          // 2. Play chime ONLY if message is NOT from me (incoming from contact)
+          if (!isFromMe) {
+            playIncomingSound();
+          }
+
+          // 3. If active chat is the one receiving the message, reload history in real time
           if (selectedChatRef.current && selectedChatRef.current.contact_jid) {
             const currentJid = selectedChatRef.current.contact_jid;
             if (!notifiedJid || currentJid === notifiedJid || notifiedJid.includes(currentJid) || currentJid.includes(notifiedJid)) {
