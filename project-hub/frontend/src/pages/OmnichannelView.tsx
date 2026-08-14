@@ -13,7 +13,7 @@ import {
 } from '../services/api';
 
 // ============================================================================
-// KNOWN CONTACT DICTIONARY & SAMPLE DATA
+// KNOWN CONTACT DICTIONARY (FOR NAME RESOLUTION)
 // ============================================================================
 
 const KNOWN_CONTACT_NAMES: Record<string, string> = {
@@ -41,283 +41,7 @@ const KNOWN_CONTACT_NAMES: Record<string, string> = {
   "54177489223737@lid": "Dannyeliz",
 };
 
-const SAMPLE_CONVERSATIONS = [
-  {
-    "contact_jid": "28514338226309@lid",
-    "push_name": "Teresa",
-    "display_phone": "+55 (92) 9211-8703",
-    "profile_pic_url": "/api/sessions/numero-pessoal-carol/avatar?jid=28514338226309%40lid",
-    "session_id": "numero-pessoal-carol",
-    "unread_count": 2,
-    "last_message_preview": "Kkkkkk",
-    "last_message_timestamp": "2026-08-13T03:45:39.000Z"
-  },
-  {
-    "contact_jid": "7001149051023@lid",
-    "push_name": "Meu numero:",
-    "display_phone": "+55 (92) 8534-1377",
-    "profile_pic_url": "/api/sessions/eliezer-sc/avatar?jid=7001149051023%40lid",
-    "session_id": "eliezer-sc",
-    "unread_count": 3,
-    "last_message_preview": "Test",
-    "last_message_timestamp": "2026-08-14T01:23:00.000Z"
-  },
-  {
-    "contact_jid": "54177489223737@lid",
-    "push_name": "Dannyeliz",
-    "display_phone": "+55 (92) 9912-3344",
-    "profile_pic_url": "",
-    "session_id": "eliezer-sc",
-    "unread_count": 4,
-    "last_message_preview": "Te estas matando a paja?",
-    "last_message_timestamp": "2026-08-14T03:22:00.000Z"
-  },
-  {
-    "contact_jid": "120363400107945602@g.us",
-    "push_name": "Balcão de Informações",
-    "display_phone": "Grupo WhatsApp",
-    "profile_pic_url": "/avatar?session=numero-pessoal-eliezer-david&jid=120363400107945602%40g.us",
-    "session_id": "numero-pessoal-eliezer-david",
-    "unread_count": 2,
-    "last_message_preview": "[contato] Rodrigo Ioki Sushi BEER",
-    "last_message_timestamp": "2026-08-14T02:51:37.000Z"
-  },
-  {
-    "contact_jid": "120363418811276924@g.us",
-    "push_name": "Gaspar Empregos !",
-    "display_phone": "Grupo WhatsApp",
-    "profile_pic_url": "/avatar?session=careliz-atelie&jid=120363418811276924%40g.us",
-    "session_id": "numero-pessoal-eliezer-david",
-    "unread_count": 5,
-    "last_message_preview": "*Oportunidade para Gaspar*",
-    "last_message_timestamp": "2026-08-14T03:12:11.000Z"
-  },
-  {
-    "contact_jid": "86324799369317@lid",
-    "push_name": "Levi Gatão",
-    "display_phone": null,
-    "profile_pic_url": "/avatar?session=eliezer-sc&jid=86324799369317%40lid",
-    "session_id": "eliezer-sc",
-    "unread_count": 6,
-    "last_message_preview": "Como tá a moto ?",
-    "last_message_timestamp": "2026-08-14T02:57:09.000Z"
-  },
-  {
-    "contact_jid": "212223360258237@lid",
-    "push_name": "Mãe",
-    "display_phone": null,
-    "profile_pic_url": "/avatar?session=eliezer-sc&jid=212223360258237%40lid",
-    "session_id": "eliezer-sc",
-    "unread_count": 5,
-    "last_message_preview": "Disque errado",
-    "last_message_timestamp": "2026-08-14T05:48:34.000Z"
-  },
-  {
-    "contact_jid": "125203162075156@lid",
-    "push_name": "Meu Numero Vivo",
-    "display_phone": null,
-    "profile_pic_url": "/avatar?session=numero-pessoal-carol&jid=125203162075156%40lid",
-    "session_id": "numero-pessoal-carol",
-    "unread_count": 2,
-    "last_message_preview": "Disque errado",
-    "last_message_timestamp": "2026-08-14T05:48:34.000Z"
-  },
-  {
-    "contact_jid": "180062846501005@lid",
-    "push_name": "Gleice Novo",
-    "display_phone": null,
-    "profile_pic_url": "/avatar?session=numero-pessoal-eliezer-david&jid=180062846501005%40lid",
-    "session_id": "numero-pessoal-eliezer-david",
-    "unread_count": 2,
-    "last_message_preview": "https://www.instagram.com/reel/Db_NoOcxD89/?igsh=eTB0Nnd5enR1OHgy",
-    "last_message_timestamp": "2026-08-14T05:53:08.000Z"
-  },
-  {
-    "contact_jid": "34634955775-1595618789@g.us",
-    "push_name": "LordsMobile Dark Valhalla",
-    "display_phone": "Grupo WhatsApp",
-    "profile_pic_url": "/avatar?session=eliezer-sc&jid=34634955775-1595618789%40g.us",
-    "session_id": "eliezer-sc",
-    "unread_count": 5,
-    "last_message_preview": "Nos invaden",
-    "last_message_timestamp": "2026-08-14T05:54:25.000Z"
-  },
-  {
-    "contact_jid": "256173492142313@lid",
-    "push_name": "Desconhecido",
-    "display_phone": null,
-    "profile_pic_url": "/avatar?session=eliezer-sc&jid=256173492142313%40lid",
-    "session_id": "eliezer-sc",
-    "unread_count": 1,
-    "last_message_preview": "📷 Foto",
-    "last_message_timestamp": "2026-08-14T05:55:05.000Z"
-  },
-  {
-    "contact_jid": "120363417400342558@g.us",
-    "push_name": "Trip Angle 9",
-    "display_phone": "Grupo WhatsApp",
-    "profile_pic_url": "/avatar?session=eliezer-sc&jid=120363417400342558%40g.us",
-    "session_id": "eliezer-sc",
-    "unread_count": 125,
-    "last_message_preview": "N entendi",
-    "last_message_timestamp": "2026-08-14T06:06:24.000Z"
-  },
-  {
-    "contact_jid": "276273888764042@lid",
-    "push_name": "Alessandra Diego Ecommerce",
-    "display_phone": "+55 (47) 9672-2060",
-    "profile_pic_url": "/avatar?session=numero-pessoal-carol&jid=276273888764042%40lid",
-    "session_id": "numero-pessoal-carol",
-    "unread_count": 1,
-    "last_message_preview": "Com certeza!",
-    "last_message_timestamp": "2026-08-14T03:02:12.000Z"
-  },
-  {
-    "contact_jid": "178189703839815@lid",
-    "push_name": "Eliezer",
-    "display_phone": "+55 (92) 8465-5004",
-    "profile_pic_url": "/avatar?session=eliezer-sc&jid=178189703839815%40lid",
-    "session_id": "eliezer-sc",
-    "unread_count": 2,
-    "last_message_preview": "Tá",
-    "last_message_timestamp": "2026-08-14T02:42:16.000Z"
-  },
-  {
-    "contact_jid": "120363407425853986@g.us",
-    "push_name": "HOMENS FORJADOS 💪🏽📖🗡️",
-    "display_phone": "Grupo WhatsApp",
-    "profile_pic_url": "/avatar?session=numero-pessoal-eliezer-david&jid=120363407425853986%40g.us",
-    "session_id": "numero-pessoal-eliezer-david",
-    "unread_count": 4,
-    "last_message_preview": "[video]",
-    "last_message_timestamp": "2026-08-14T02:43:01.000Z"
-  },
-  {
-    "contact_jid": "120363107394203838@g.us",
-    "push_name": "Papo de Mulheres - IMPAC",
-    "display_phone": "Grupo WhatsApp",
-    "profile_pic_url": "/avatar?session=careliz-atelie&jid=120363107394203838%40g.us",
-    "session_id": "careliz-atelie",
-    "unread_count": 2,
-    "last_message_preview": "ELE está NO CONTROLE",
-    "last_message_timestamp": "2026-08-14T02:43:29.000Z"
-  },
-  {
-    "contact_jid": "120363397899897046@g.us",
-    "push_name": "GASPAR - VENDAS , APT PARA ALUGAR",
-    "display_phone": "Grupo WhatsApp",
-    "profile_pic_url": "/avatar?session=numero-pessoal-eliezer-david&jid=120363397899897046%40g.us",
-    "session_id": "eliezer-sc",
-    "unread_count": 7,
-    "last_message_preview": "[sticker]",
-    "last_message_timestamp": "2026-08-14T03:05:53.000Z"
-  },
-  {
-    "contact_jid": "120363135547556173@g.us",
-    "push_name": "GASPAR E REGIÃO 🇧🇷",
-    "display_phone": "Grupo WhatsApp",
-    "profile_pic_url": "/avatar?session=careliz-atelie&jid=120363135547556173%40g.us",
-    "session_id": "careliz-atelie",
-    "unread_count": 18,
-    "last_message_preview": "[contato] LANCHE DO GORDO",
-    "last_message_timestamp": "2026-08-14T05:03:28.000Z"
-  },
-  {
-    "contact_jid": "123978559537397@lid",
-    "push_name": "Jucineide Castro",
-    "display_phone": "+55 (92) 9464-6800",
-    "profile_pic_url": "/avatar?session=numero-pessoal-carol&jid=123978559537397%40lid",
-    "session_id": "numero-pessoal-carol",
-    "unread_count": 10,
-    "last_message_preview": "Amém!!",
-    "last_message_timestamp": "2026-08-14T03:18:47.000Z"
-  },
-  {
-    "contact_jid": "120363359180966787@g.us",
-    "push_name": "Açougue 80",
-    "display_phone": "Grupo WhatsApp",
-    "profile_pic_url": "/avatar?session=eliezer-sc&jid=120363359180966787%40g.us",
-    "session_id": "eliezer-sc",
-    "unread_count": 5,
-    "last_message_preview": "[video]",
-    "last_message_timestamp": "2026-08-14T05:18:54.000Z"
-  },
-  {
-    "contact_jid": "164003712131226@lid",
-    "push_name": "Yanetzi",
-    "display_phone": "+55 (65) 9205-9318",
-    "profile_pic_url": "/avatar?session=numero-pessoal-carol&jid=164003712131226%40lid",
-    "session_id": "numero-pessoal-carol",
-    "unread_count": 4,
-    "last_message_preview": "Boa noite!",
-    "last_message_timestamp": "2026-08-14T03:52:10.000Z"
-  }
-];
-
-const MOCK_MESSAGES_DANNYELIZ = [
-  {
-    "message_id": "3ACCA9604795F048F0B6",
-    "contact_jid": "54177489223737@lid",
-    "session_id": "eliezer-sc",
-    "is_from_me": false,
-    "chat_kind": "private",
-    "message_type": "conversation",
-    "content": "Habla",
-    "status": "received",
-    "message_timestamp": "2026-08-14T03:21:12.000Z",
-    "created_at": "2026-08-14T03:21:12.989Z"
-  },
-  {
-    "message_id": "3AE51A767A7BF07C79A7",
-    "contact_jid": "54177489223737@lid",
-    "session_id": "eliezer-sc",
-    "is_from_me": false,
-    "chat_kind": "private",
-    "message_type": "conversation",
-    "content": "Estas despierto",
-    "status": "received",
-    "message_timestamp": "2026-08-14T03:21:16.000Z",
-    "created_at": "2026-08-14T03:21:16.938Z"
-  },
-  {
-    "message_id": "3A649F83BA4B856B32A3",
-    "contact_jid": "54177489223737@lid",
-    "session_id": "eliezer-sc",
-    "is_from_me": false,
-    "chat_kind": "private",
-    "message_type": "conversation",
-    "content": "?",
-    "status": "received",
-    "message_timestamp": "2026-08-14T03:21:32.000Z",
-    "created_at": "2026-08-14T03:21:33.562Z"
-  },
-  {
-    "message_id": "3A79008CE6973408D88C",
-    "contact_jid": "54177489223737@lid",
-    "session_id": "eliezer-sc",
-    "is_from_me": false,
-    "chat_kind": "private",
-    "message_type": "conversation",
-    "content": "Te estas matando a paja?",
-    "status": "received",
-    "message_timestamp": "2026-08-14T03:22:05.000Z",
-    "created_at": "2026-08-14T03:22:05.916Z"
-  },
-  {
-    "message_id": "3A88109FF7746508A11B",
-    "contact_jid": "54177489223737@lid",
-    "session_id": "eliezer-sc",
-    "is_from_me": true,
-    "chat_kind": "private",
-    "message_type": "conversation",
-    "content": "Hahaha não, estou programando um sistema incrível com n8n!",
-    "status": "read",
-    "message_timestamp": "2026-08-14T03:25:00.000Z",
-    "created_at": "2026-08-14T03:25:00.000Z"
-  }
-];
-
-// Exact colors matching Image 1
+// Exact colors matching design theme
 const AVATAR_EXACT_COLORS: Record<string, { bg: string, text: string }> = {
   "MN": { bg: "bg-purple-600", text: "text-white" },
   "LG": { bg: "bg-stone-200", text: "text-slate-800" },
@@ -403,13 +127,11 @@ function resolveContactName(item: any): string {
 function getInitials(name: string): string {
   if (!name) return 'CT';
 
-  // Handle JID strings if passed accidentally
   if (name.includes('@g.us')) return 'GP';
   if (name.includes('@lid') || name.includes('@s.whatsapp.net')) {
     return 'CT';
   }
 
-  // Handle specific short titles
   if (name.toLowerCase() === 'meu numero:') return 'MN';
   if (name.toLowerCase().startsWith('lordsmobile')) return 'LO';
   if (name.toLowerCase().startsWith('gaspar - vendas')) return 'GV';
@@ -530,12 +252,12 @@ export default function OmnichannelView() {
   const [activeTab, setActiveTab] = useState<'conversations' | 'contacts'>('conversations');
   const [selectedSession, setSelectedSession] = useState<string>('all');
   
-  // Data states
-  const [conversations, setConversations] = useState<any[]>(SAMPLE_CONVERSATIONS);
+  // Data states - 100% Dynamic from Backend/n8n
+  const [conversations, setConversations] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [availableSessions, setAvailableSessions] = useState<any[]>([]);
-  const [selectedChat, setSelectedChat] = useState<any>(SAMPLE_CONVERSATIONS[2]); // Default Dannyeliz
-  const [chatMessages, setChatMessages] = useState<any[]>(MOCK_MESSAGES_DANNYELIZ);
+  const [selectedChat, setSelectedChat] = useState<any | null>(null);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
   
   // UI states
   const [loadingList, setLoadingList] = useState(false);
@@ -572,7 +294,7 @@ export default function OmnichannelView() {
     try {
       setLoadingList(true);
       const data = await fetchContacts();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         const mappedContacts = data.map((c: any) => ({
           ...c,
           push_name: resolveContactName(c)
@@ -580,7 +302,7 @@ export default function OmnichannelView() {
         setContacts(mappedContacts);
       }
     } catch (err) {
-      console.warn("Using sample contacts fallback", err);
+      console.warn("Error fetching contacts from backend/n8n", err);
     } finally {
       setLoadingList(false);
     }
@@ -592,40 +314,32 @@ export default function OmnichannelView() {
       setLoadingList(true);
       const data = await fetchConversations();
       if (Array.isArray(data) && data.length > 0) {
-        const sampleByJid = new Map(SAMPLE_CONVERSATIONS.map(s => [s.contact_jid, s]));
-        
         const enrichedData = data.map((item: any) => {
           const jid = item.contact_jid || item.jid || item.id || '';
-          const sample = sampleByJid.get(jid);
-
-          const resolvedName = resolveContactName(item) || (sample ? sample.push_name : null) || 'Contato';
-          const resolvedPhone = item.display_phone || (sample ? sample.display_phone : null);
-          const resolvedPic = item.profile_pic_url || (sample ? sample.profile_pic_url : null);
-          const preview = item.last_message_preview || (sample ? sample.last_message_preview : '');
-          const ts = item.last_message_timestamp || (sample ? sample.last_message_timestamp : new Date().toISOString());
-
+          const resolvedName = resolveContactName(item) || 'Contato';
           return {
             ...item,
             contact_jid: jid,
             push_name: resolvedName,
-            display_phone: resolvedPhone,
-            profile_pic_url: resolvedPic,
-            last_message_preview: preview,
-            last_message_timestamp: ts
+            display_phone: item.display_phone || null,
+            profile_pic_url: item.profile_pic_url || '',
+            last_message_preview: item.last_message_preview || '',
+            last_message_timestamp: item.last_message_timestamp || new Date().toISOString()
           };
         });
 
-        // Merge with sample conversations that are missing in live response
-        const liveJids = new Set(enrichedData.map(d => d.contact_jid));
-        const missingSamples = SAMPLE_CONVERSATIONS.filter(s => !liveJids.has(s.contact_jid));
+        setConversations(enrichedData);
 
-        setConversations([...enrichedData, ...missingSamples]);
+        // Auto-select the first conversation if none selected
+        if (!selectedChat && enrichedData.length > 0) {
+          setSelectedChat(enrichedData[0]);
+        }
       } else {
-        setConversations(SAMPLE_CONVERSATIONS);
+        setConversations([]);
       }
     } catch (err) {
-      console.warn("Using sample conversations fallback", err);
-      setConversations(SAMPLE_CONVERSATIONS);
+      console.warn("Error fetching conversations from backend/n8n", err);
+      setConversations([]);
     } finally {
       setLoadingList(false);
     }
@@ -636,8 +350,34 @@ export default function OmnichannelView() {
     loadContacts();
   }, []);
 
+  // Fetch Action 3: get_chat_history whenever selectedChat changes
+  useEffect(() => {
+    if (selectedChat && selectedChat.contact_jid) {
+      setLoadingHistory(true);
+      fetchChatHistory(selectedChat.contact_jid, selectedChat.session_id)
+        .then((res: any) => {
+          let msgsList: any[] = [];
+          if (Array.isArray(res) && res.length > 0) {
+            if (res[0].messages && Array.isArray(res[0].messages)) {
+              msgsList = res[0].messages;
+            } else if (res[0].mensagens && Array.isArray(res[0].mensagens)) {
+              msgsList = res[0].mensagens;
+            } else {
+              msgsList = res;
+            }
+          }
+          setChatMessages(msgsList);
+        })
+        .catch((err) => {
+          console.warn("Error fetching chat history from backend/n8n", err);
+          setChatMessages([]);
+        })
+        .finally(() => setLoadingHistory(false));
+    }
+  }, [selectedChat?.contact_jid, selectedChat?.session_id]);
+
   // Fetch Action 3: get_chat_history when chat selected
-  const handleSelectChat = async (chat: any) => {
+  const handleSelectChat = (chat: any) => {
     const resolvedChatName = resolveContactName(chat);
     const enrichedChat = { ...chat, push_name: resolvedChatName };
     setSelectedChat(enrichedChat);
@@ -650,53 +390,6 @@ export default function OmnichannelView() {
       }
       return c;
     }));
-
-
-
-    try {
-      setLoadingHistory(true);
-      const res = await fetchChatHistory(chat.contact_jid, chat.session_id);
-      
-      let msgsList: any[] = [];
-      if (Array.isArray(res) && res.length > 0) {
-        if (res[0].messages && Array.isArray(res[0].messages)) {
-          msgsList = res[0].messages;
-        } else if (res[0].mensagens && Array.isArray(res[0].mensagens)) {
-          msgsList = res[0].mensagens;
-        } else {
-          msgsList = res;
-        }
-      }
-
-      if (msgsList.length > 0) {
-        setChatMessages(msgsList);
-      } else {
-        setChatMessages([
-          {
-            message_id: `msg_init_${Date.now()}`,
-            contact_jid: chat.contact_jid,
-            session_id: chat.session_id,
-            is_from_me: false,
-            content: chat.last_message_preview || "Olá! Como posso ajudar?",
-            message_timestamp: chat.last_message_timestamp || new Date().toISOString()
-          }
-        ]);
-      }
-    } catch (err) {
-      console.warn("Error fetching chat history", err);
-      setChatMessages([
-        {
-          message_id: `msg_fallback_${Date.now()}`,
-          contact_jid: chat.contact_jid,
-          session_id: chat.session_id,
-          is_from_me: false,
-          content: chat.last_message_preview || "Olá! Como posso ajudar?",
-          message_timestamp: chat.last_message_timestamp || new Date().toISOString()
-        }
-      ]);
-    } finally {
-      setLoadingHistory(false);
-    }
   };
 
   // Action 4: Send Message
@@ -747,7 +440,7 @@ export default function OmnichannelView() {
         return m;
       }));
     } catch (err) {
-      console.warn("Send message simulated response", err);
+      console.warn("Send message error", err);
       setChatMessages(prev => prev.map(m => {
         if (m.message_id === tempMessage.message_id) {
           return { ...m, status: 'sent' };
@@ -910,7 +603,12 @@ export default function OmnichannelView() {
           {/* List Content Area */}
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100 bg-white">
             {activeTab === 'conversations' ? (
-              filteredConversations.length === 0 ? (
+              loadingList && conversations.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-xs font-medium space-y-2">
+                  <RefreshCw className="w-6 h-6 mx-auto animate-spin text-purple-600" />
+                  <p>Carregando conversas do n8n...</p>
+                </div>
+              ) : filteredConversations.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 text-xs font-medium space-y-2">
                   <MessageCircle className="w-8 h-8 mx-auto text-slate-300 stroke-[1.5]" />
                   <p>Nenhuma conversa encontrada</p>
@@ -1098,7 +796,7 @@ export default function OmnichannelView() {
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-extrabold px-3 py-1 rounded-full bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    Sessão: {selectedChat.session_id || 'eliezer-sc'}
+                    Sessão: {selectedChat.session_id || 'default'}
                   </span>
                 </div>
               </div>
@@ -1119,10 +817,14 @@ export default function OmnichannelView() {
                       Carregando histórico do n8n...
                     </div>
                   </div>
+                ) : chatMessages.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-slate-400 text-xs font-medium">
+                    Nenhuma mensagem registrada nesta conversa.
+                  </div>
                 ) : (
                   chatMessages.map((msg, index) => {
                     const isMe = msg.is_from_me === true || msg.sender === 'user';
-                    const timeStr = formatTimestamp(msg.message_timestamp || msg.created_at) || '03:21';
+                    const timeStr = formatTimestamp(msg.message_timestamp || msg.created_at) || '';
 
                     return (
                       <div
