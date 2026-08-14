@@ -232,13 +232,22 @@ async def root_media_proxy(
 
     try:
         from app.api.endpoints.whatsapp import make_whatsapp_api_request
-        clean_path = f"/api/sessions/{target_session}/media?messageId={msg_id}"
         res = None
-        try:
-            res = await make_whatsapp_api_request("GET", clean_path)
-        except Exception:
-            fallback_path = f"/media?session={target_session}&messageId={msg_id}"
-            res = await make_whatsapp_api_request("GET", fallback_path)
+        paths_to_try = []
+        if target_session and target_session != "default":
+            paths_to_try.append(f"/api/sessions/{target_session}/media?messageId={msg_id}")
+            paths_to_try.append(f"/media?session={target_session}&messageId={msg_id}")
+        
+        paths_to_try.append(f"/media?messageId={msg_id}")
+        paths_to_try.append(f"/api/sessions/default/media?messageId={msg_id}")
+
+        for path in paths_to_try:
+            try:
+                res = await make_whatsapp_api_request("GET", path)
+                if isinstance(res, dict) and (res.get("url") or res.get("media_url") or res.get("media") or res.get("file_url")):
+                    break
+            except Exception:
+                continue
 
         url_target = None
         if isinstance(res, dict):
