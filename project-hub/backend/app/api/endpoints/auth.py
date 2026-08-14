@@ -1,10 +1,11 @@
 import secrets
 import httpx
 import logging
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.core.database import get_db
 from app.models.user import User
 from app.models.whatsapp_account import WhatsappAccount
@@ -145,7 +146,9 @@ from datetime import datetime, timedelta
 # ---------------------------------------------------------------------------
 
 @router.post("/login")
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     payload: LoginRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
