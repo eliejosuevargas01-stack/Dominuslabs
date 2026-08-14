@@ -1,12 +1,16 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.limiter import limiter
 from sqlalchemy.orm import Session
 import os
 
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.database import Base, engine, get_db
+from app.core.middleware import AuditLoggingMiddleware
 
 # Import all models to ensure they are registered on Base.metadata
 from app.models.project import Project
@@ -138,6 +142,12 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Enterprise Audit Logging Middleware
+app.add_middleware(AuditLoggingMiddleware)
+
 # Set all CORS enabled origins
 if settings.BACKEND_CORS_ORIGINS:
     allow_origins = [str(origin) for origin in settings.BACKEND_CORS_ORIGINS]
@@ -204,7 +214,8 @@ async def root_avatar_proxy(
     raise HTTPException(status_code=404, detail="Avatar não encontrado.")
 
 @app.get("/project/{public_token}")
-async def serve_project_with_meta(public_token: str, db: Session = Depends(get_db)):
+@limiter.limit("20/minute")
+async def serve_project_with_meta(request: Request, public_token: str, db: Session = Depends(get_db)):
     from app.models.project import Project
     project = db.query(Project).filter(Project.public_token == public_token).first()
     if not project:
