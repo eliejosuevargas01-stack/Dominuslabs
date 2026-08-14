@@ -175,17 +175,14 @@ function getAvatarColor(initials: string, name: string) {
 }
 
 function getAvatarSrc(url?: string, session_id?: string, jid?: string): string | null {
-  if (!url && !jid) return null;
-
-  // 1. Direct Meta Global CDN URLs (pps.whatsapp.net or mmg.whatsapp.net) load 200 OK!
   if (url && typeof url === 'string') {
     const trimmed = url.trim();
-    if (trimmed.includes('pps.whatsapp.net') || trimmed.includes('mmg.whatsapp.net')) {
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:image')) {
       return trimmed;
     }
   }
 
-  // 2. Extract session and jid from url if present
+  // Fallback to proxy if url is a relative path or if jid/session are supplied
   let targetSession = session_id || 'default';
   let targetJid = jid || '';
 
@@ -200,22 +197,12 @@ function getAvatarSrc(url?: string, session_id?: string, jid?: string): string |
         
         if (qSession) targetSession = qSession;
         if (qJid) targetJid = qJid;
-
-        if (!targetSession && parsed.pathname.includes('/sessions/')) {
-          const parts = parsed.pathname.split('/sessions/')[1].split('/')[0];
-          if (parts) targetSession = parts;
-        }
       } catch (e) {}
     }
   }
 
-  // 3. Route through Dominus CRM Backend Proxy (/api/v1/crm/avatar?session=...&jid=...)
   if (targetJid) {
     return `/api/v1/crm/avatar?session=${encodeURIComponent(targetSession)}&jid=${encodeURIComponent(targetJid)}`;
-  }
-
-  if (url && typeof url === 'string' && url.trim()) {
-    return url.trim();
   }
 
   return null;
