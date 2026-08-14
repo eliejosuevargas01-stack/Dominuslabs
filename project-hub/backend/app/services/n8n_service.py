@@ -905,6 +905,58 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
         c_jid = item.get("contact_jid") or item.get("jid") or ""
         s_id = item.get("session_id") or item.get("whatsapp_instance") or ""
 
+        if "contacts" in item and isinstance(item["contacts"], list):
+            top_session_id = item.get("session_id", "")
+            for c in item["contacts"]:
+                if not isinstance(c, dict):
+                    continue
+                c_copy = copy.deepcopy(c)
+                c_jid_inner = c_copy.get("contact_jid") or c_copy.get("jid") or c_copy.get("id") or ""
+                c_session_id = c_copy.get("session_id") or top_session_id
+                c_copy["session_id"] = c_session_id
+                c_copy["whatsapp_instance"] = c_session_id
+
+                if c_jid_inner and c_session_id and c_session_id != "default":
+                    group_key = f"{c_jid_inner}___{c_session_id}"
+                else:
+                    group_key = c_jid_inner or "unknown_lead"
+
+                c_copy["id"] = group_key
+                c_copy["lead_id"] = group_key
+
+                pic = c_copy.get("profile_pic_url")
+                if pic and pic.startswith("/"):
+                    c_copy["profile_pic_url"] = f"https://whats.dominuslabs.online{pic}"
+
+                unpacked.append(c_copy)
+            continue
+
+        if "conversations" in item and isinstance(item["conversations"], list):
+            top_session_id = item.get("session_id", "")
+            for conv in item["conversations"]:
+                if not isinstance(conv, dict):
+                    continue
+                c_copy = copy.deepcopy(conv)
+                c_jid_inner = c_copy.get("contact_jid") or c_copy.get("jid") or c_copy.get("id") or ""
+                c_session_id = c_copy.get("session_id") or top_session_id
+                c_copy["session_id"] = c_session_id
+                c_copy["whatsapp_instance"] = c_session_id
+
+                if c_jid_inner and c_session_id and c_session_id != "default":
+                    group_key = f"{c_jid_inner}___{c_session_id}"
+                else:
+                    group_key = c_jid_inner or "unknown_lead"
+
+                c_copy["id"] = group_key
+                c_copy["lead_id"] = group_key
+
+                pic = c_copy.get("profile_pic_url")
+                if pic and pic.startswith("/"):
+                    c_copy["profile_pic_url"] = f"https://whats.dominuslabs.online{pic}"
+
+                unpacked.append(c_copy)
+            continue
+
         if "mensagens" in item and isinstance(item["mensagens"], list) and len(item["mensagens"]) > 0 and not c_jid:
             top_session_id = item.get("session_id", "")
             contacts_map = {}
