@@ -18,8 +18,15 @@ async def read_leads(
     current_user: str = Depends(get_current_user),
 ):
     """
-    Fetch all leads directly from WhatsApp API via mTLS without n8n webhook spam.
+    Fetch all leads from the n8n CRM webhook or fallback to direct WhatsApp API.
     """
+    try:
+        leads = await n8n_service.get_leads()
+        if leads and len(leads) > 0:
+            return leads
+    except Exception as e:
+        print(f"[CRM] n8n get_leads falhou: {e}", flush=True)
+
     from app.services.n8n_service import map_n8n_lead
     raw_contacts = await get_contacts_action(db=db, current_user=current_user)
     return [map_n8n_lead(c) for c in raw_contacts if isinstance(c, dict)]
@@ -57,130 +64,23 @@ CONTACTS_CACHE: dict = {}
 
 @router.get("/contacts")
 async def get_contacts_action(
-    db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user),
 ):
     """
     Action 1: 'get_contacts'
-    Retorna uma lista plana e desduplicada de contatos compartilhados entre todas as sessões do tenant do usuário.
+    Retorna todos os contatos fornecidos diretamente pelo webhook n8n (action=get_contacts).
     """
-    from app.api.endpoints.whatsapp import make_whatsapp_api_request, get_user_token
-    try:
-        token = await get_user_token(current_user, db)
-        sessions = await make_whatsapp_api_request("GET", "/api/sessions", headers={"x-session-token": token})
-        if not isinstance(sessions, list):
-            sessions = sessions.get("sessions", []) if isinstance(sessions, dict) else []
-
-        all_contacts_map = {}
-
-        for s in sessions:
-            session_id = s.get("id") or s.get("sessionId")
-            if not session_id or session_id == "sessao_desconhecida":
-                continue
-
-            try:
-                contacts_res = await make_whatsapp_api_request("GET", f"/api/sessions/{session_id}/contacts", headers={"x-session-token": token})
-                session_contacts = contacts_res.get("contacts", []) if isinstance(contacts_res, dict) else []
-            except Exception:
-                session_contacts = []
-
-            for c in session_contacts:
-                c_jid = c.get("contact_jid") or c.get("jid")
-                if not c_jid:
-                    continue
-
-                profile_pic = f"/api/v1/whatsapp/sessions/{session_id}/avatar?jid={quote(c_jid)}"
-                
-                c_entry = {
-                    "contact_jid": c_jid,
-                    "push_name": c.get("push_name") or c.get("name") or "Desconhecido",
-                    "display_phone": c.get("display_phone") or ("Grupo WhatsApp" if ("g.us" in c_jid or "120363" in c_jid) else None),
-                    "profile_pic_url": profile_pic,
-                    "created_at": c.get("created_at") or (datetime.utcnow().isoformat() + "Z"),
-                    "updated_at": c.get("updated_at") or (datetime.utcnow().isoformat() + "Z")
-                }
-
-                CONTACTS_CACHE[c_jid] = c_entry
-                CONTACTS_CACHE[f"{session_id}:{c_jid}"] = c_entry
-
-                if c_jid not in all_contacts_map or (c_entry["push_name"] != "Desconhecido" and all_contacts_map[c_jid]["push_name"] == "Desconhecido"):
-                    all_contacts_map[c_jid] = c_entry
-
-        return list(all_contacts_map.values())
-    except Exception as e:
-        print(f"[CRM-ACTION] Erro em get_contacts: {e}", flush=True)
-        return []
+    return await n8n_service.get_leads()
 
 @router.get("/conversations")
 async def get_conversations_action(
-    db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user),
 ):
     """
     Action 2: 'get_conversations'
-    Retorna as últimas conversas (preview da inbox) agrupadas por session_id e complementadas com os contatos do cache.
+    Retorna todas as conversas fornecidas diretamente pelo webhook n8n (action=get_conversations).
     """
-    from app.api.endpoints.whatsapp import make_whatsapp_api_request, get_user_token
-    try:
-        token = await get_user_token(current_user, db)
-        sessions = await make_whatsapp_api_request("GET", "/api/sessions", headers={"x-session-token": token})
-        if not isinstance(sessions, list):
-            sessions = sessions.get("sessions", []) if isinstance(sessions, dict) else []
-
-        result = []
-        for s in sessions:
-            session_id = s.get("id") or s.get("sessionId")
-            if not session_id or session_id == "sessao_desconhecida":
-                continue
-
-            try:
-                convos_res = await make_whatsapp_api_request("GET", f"/api/sessions/{session_id}/conversations", headers={"x-session-token": token})
-                raw_convos = convos_res.get("conversations", []) if isinstance(convos_res, dict) else []
-            except Exception:
-                raw_convos = []
-
-            formatted_convos = []
-            for c in raw_convos:
-                c_jid = c.get("jid") or c.get("contact_jid")
-                if not c_jid:
-                    continue
-
-                cache_key = f"{session_id}:{c_jid}"
-                contact_info = CONTACTS_CACHE.get(cache_key, {})
-
-                last_ts_sec = c.get("lastMessageTimestamp") or c.get("lastMessageAt") or int(datetime.utcnow().timestamp())
-                if last_ts_sec > 1e11:
-                    last_ts_sec = int(last_ts_sec / 1000)
-                last_ts_iso = datetime.utcfromtimestamp(float(last_ts_sec)).isoformat() + "Z"
-
-                preview_text = c.get("preview") or c.get("last_message_preview") or c.get("ultima_mensagem") or ""
-                profile_pic = f"/api/v1/whatsapp/sessions/{session_id}/avatar?jid={quote(c_jid)}"
-
-                formatted_convos.append({
-                    "contact_jid": c_jid,
-                    "session_id": session_id,
-                    "unread_count": c.get("unreadCount", 0),
-                    "last_message_preview": preview_text,
-                    "ultima_mensagem": preview_text,
-                    "preview": preview_text,
-                    "last_message_timestamp": last_ts_iso,
-                    "last_interaction": last_ts_iso,
-                    "created_at": last_ts_iso,
-                    "updated_at": last_ts_iso,
-                    "push_name": contact_info.get("push_name") or c.get("title"),
-                    "display_phone": contact_info.get("display_phone") or c.get("displayJid"),
-                    "profile_pic_url": profile_pic
-                })
-
-            result.append({
-                "session_id": session_id,
-                "conversations": formatted_convos
-            })
-
-        return result
-    except Exception as e:
-        print(f"[CRM-ACTION] Erro em get_conversations: {e}", flush=True)
-        return []
+    return await n8n_service.get_conversations()
 
 @router.get("/chat-history")
 @router.get("/conversations/{lead_id:path}/messages")
@@ -190,87 +90,18 @@ async def get_chat_history_action(
     lead_id: Optional[str] = None,
     contact_jid: Optional[str] = None,
     session_id: Optional[str] = None,
-    db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user),
 ):
     """
     Action 3: 'get_chat_history'
-    Carrega todas as mensagens de uma conversa específica.
-    Suporta lead_id no formato 'contact_jid___session_id' ou 'contact_jid'.
+    Retorna o histórico de mensagens fornecido diretamente pelo webhook n8n (action=get_chat_history).
     """
     from urllib.parse import unquote
-    from app.api.endpoints.whatsapp import make_whatsapp_api_request, get_user_token
-
     raw_target = unquote(lead_id or contact_jid or "")
     if not raw_target:
         raise HTTPException(status_code=400, detail="O parâmetro 'lead_id' ou 'contact_jid' é obrigatório.")
 
-    target_jid = raw_target
-    target_session = session_id
-
-    if "___" in raw_target:
-        parts = raw_target.split("___")
-        target_jid = parts[0]
-        target_session = target_session or parts[1]
-
-    try:
-        token = await get_user_token(current_user, db)
-
-        if not target_session or target_session == "default":
-            sessions = await make_whatsapp_api_request("GET", "/api/sessions", headers={"x-session-token": token})
-            if not isinstance(sessions, list):
-                sessions = sessions.get("sessions", []) if isinstance(sessions, dict) else []
-            active_sessions = [s.get("id") for s in sessions if s.get("id") or s.get("sessionId")]
-            target_session = active_sessions[0] if active_sessions else "default"
-
-        msgs_res = await make_whatsapp_api_request("GET", f"/api/sessions/{target_session}/conversations/{target_jid}/messages", headers={"x-session-token": token})
-        raw_msgs = msgs_res.get("messages", []) if isinstance(msgs_res, dict) else []
-
-        formatted_messages = []
-        for m in raw_msgs:
-            ts_sec = m.get("timestamp") or m.get("lastMessageTimestamp") or int(datetime.utcnow().timestamp())
-            if ts_sec > 1e11:
-                ts_sec = int(ts_sec / 1000)
-            ts_iso = datetime.utcfromtimestamp(float(ts_sec)).isoformat() + "Z"
-
-            is_me = bool(m.get("fromMe"))
-            msg_text = m.get("text") or m.get("body") or ""
-
-            formatted_messages.append({
-                "id": m.get("id") or f"msg_{ts_sec}",
-                "message_id": m.get("id") or f"msg_{ts_sec}",
-                "contact_jid": target_jid,
-                "session_id": target_session,
-                "is_from_me": is_me,
-                "sender": "user" if is_me else "lead",
-                "chat_kind": m.get("kind") or ("group" if "g.us" in target_jid else "private"),
-                "message_type": m.get("type") or "conversation",
-                "content": msg_text,
-                "message": msg_text,
-                "status": m.get("status") or "received",
-                "message_timestamp": ts_iso,
-                "timestamp": ts_iso,
-                "created_at": ts_iso
-            })
-
-        return [
-            {
-                "contact_jid": target_jid,
-                "session_id": target_session,
-                "messages": formatted_messages,
-                "mensagens": formatted_messages
-            }
-        ]
-    except Exception as e:
-        print(f"[CRM-ACTION] Erro em get_chat_history: {e}", flush=True)
-        return [
-            {
-                "contact_jid": target_jid,
-                "session_id": target_session or "default",
-                "messages": [],
-                "mensagens": []
-            }
-        ]
+    return await n8n_service.get_chat_history_response(raw_target)
 
 @router.get("/progressive/{contact_jid}")
 async def get_progressive_assembled_profile(contact_jid: str, current_user: str = Depends(get_current_user)):

@@ -1262,6 +1262,54 @@ class N8NService:
         return await N8NService.get_messages(lead_id)
 
     @staticmethod
+    async def get_chat_history_response(lead_id: str) -> List[dict]:
+        """
+        Retorna o histórico formatado diretamente da resposta do n8n para action=get_chat_history.
+        """
+        messages = await N8NService.get_messages(lead_id)
+        target_jid = lead_id
+        target_session = "default"
+        if "___" in lead_id:
+            parts = lead_id.split("___", 1)
+            target_jid = parts[0]
+            target_session = parts[1]
+
+        formatted = []
+        for m in messages:
+            if not isinstance(m, dict):
+                continue
+            is_me = m.get("is_from_me") is True or m.get("sender") == "user" or m.get("fromMe") is True
+            msg_text = m.get("content") or m.get("message") or m.get("text") or ""
+            ts_val = m.get("timestamp") or m.get("message_timestamp") or m.get("created_at") or int(datetime.utcnow().timestamp())
+            ts_iso = ts_val if isinstance(ts_val, str) and "T" in ts_val else (datetime.utcfromtimestamp(float(ts_val)).isoformat() + "Z")
+
+            formatted.append({
+                "id": m.get("id") or m.get("message_id") or f"msg_{ts_val}",
+                "message_id": m.get("message_id") or m.get("id") or f"msg_{ts_val}",
+                "contact_jid": target_jid,
+                "session_id": target_session,
+                "is_from_me": is_me,
+                "sender": "user" if is_me else "lead",
+                "chat_kind": m.get("chat_kind") or m.get("kind") or "private",
+                "message_type": m.get("message_type") or m.get("type") or "conversation",
+                "content": msg_text,
+                "message": msg_text,
+                "status": m.get("status") or "received",
+                "message_timestamp": ts_iso,
+                "timestamp": ts_iso,
+                "created_at": ts_iso
+            })
+
+        return [
+            {
+                "contact_jid": target_jid,
+                "session_id": target_session,
+                "messages": formatted,
+                "mensagens": formatted
+            }
+        ]
+
+    @staticmethod
     async def update_lead(lead_id: str, payload: dict, current_user: str = None) -> dict:
         N8NService.invalidate_leads_cache()
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
@@ -1514,7 +1562,9 @@ class N8NService:
                                 d_sess = str(d.get("session_id") or d.get("whatsapp_instance") or "")
                                 if target_session and d_sess and normalize_session_name(d_sess) != normalize_session_name(target_session):
                                     continue
-                                if "mensagens" in d and isinstance(d["mensagens"], list):
+                                if "messages" in d and isinstance(d["messages"], list):
+                                    raw_msgs.extend(d["messages"])
+                                elif "mensagens" in d and isinstance(d["mensagens"], list):
                                     raw_msgs.extend(d["mensagens"])
                                 else:
                                     raw_msgs.append(d)
