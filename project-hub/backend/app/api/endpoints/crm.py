@@ -13,12 +13,16 @@ from app.services.whatsapp_service import send_whatsapp_message, get_oauth_token
 router = APIRouter()
 
 @router.get("/leads", response_model=List[Lead])
-async def read_leads(current_user: str = Depends(get_current_user)):
+async def read_leads(
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
     """
-    Fetch all leads from the CRM system (routes to N8N webhook or fallback).
+    Fetch all leads directly from WhatsApp API via mTLS without n8n webhook spam.
     """
-    leads = await n8n_service.get_leads()
-    return leads
+    from app.services.n8n_service import map_n8n_lead
+    raw_contacts = await get_contacts_action(db=db, current_user=current_user)
+    return [map_n8n_lead(c) for c in raw_contacts if isinstance(c, dict)]
 
 @router.get("/leads/{lead_id}", response_model=Lead)
 async def read_lead(lead_id: str, current_user: str = Depends(get_current_user)):
