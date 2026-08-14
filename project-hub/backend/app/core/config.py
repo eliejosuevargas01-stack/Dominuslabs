@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     CRM_CREATE_ACTIVITY_WEBHOOK_URL: str = os.getenv("CRM_CREATE_ACTIVITY_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
     
     WHATSAPP_API_URL: str = os.getenv("WHATSAPP_API_URL", "http://localhost:3000")
-    WHATSAPP_PUBLIC_URL: str = os.getenv("WHATSAPP_PUBLIC_URL", "https://whats.dominuslabs.online")
+    WHATSAPP_PUBLIC_URL: str = os.getenv("WHATSAPP_PUBLIC_URL", "https://dominuslabs.online")
     IDENTITY_WORKER_URL: str = os.getenv("IDENTITY_WORKER_URL", "https://identity.dominus.online")
 
     # mTLS Security Settings

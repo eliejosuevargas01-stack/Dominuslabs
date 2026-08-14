@@ -269,7 +269,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         session_id = "default"
 
     if profile_pic and profile_pic.startswith("/"):
-        profile_pic = f"https://whats.dominuslabs.online{profile_pic}"
+        profile_pic = f"https://dominuslabs.online{profile_pic}"
 
     mapped_lead = {
         **lead,
@@ -414,7 +414,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         
         profile_pic_url = msg.get("profile_pic_url") or ""
         if profile_pic_url and profile_pic_url.startswith("/"):
-            profile_pic_url = f"https://whats.dominuslabs.online{profile_pic_url}"
+            profile_pic_url = f"https://dominuslabs.online{profile_pic_url}"
 
         for m in msg["mensagens"]:
             if not isinstance(m, dict):
@@ -468,7 +468,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         profile_pic_url = msg.get("profile_pic_url") or ""
 
         if profile_pic_url and profile_pic_url.startswith("/"):
-            profile_pic_url = f"https://whats.dominuslabs.online{profile_pic_url}"
+            profile_pic_url = f"https://dominuslabs.online{profile_pic_url}"
 
         ts = msg.get("message_timestamp") or msg.get("created_at") or msg.get("timestamp") or msg.get("createdAt")
 
@@ -860,7 +860,7 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
 
                 pic = c_copy.get("profile_pic_url")
                 if pic and pic.startswith("/"):
-                    c_copy["profile_pic_url"] = f"https://whats.dominuslabs.online{pic}"
+                    c_copy["profile_pic_url"] = f"https://dominuslabs.online{pic}"
 
                 unpacked.append(c_copy)
             continue
@@ -886,7 +886,7 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
 
                 pic = c_copy.get("profile_pic_url")
                 if pic and pic.startswith("/"):
-                    c_copy["profile_pic_url"] = f"https://whats.dominuslabs.online{pic}"
+                    c_copy["profile_pic_url"] = f"https://dominuslabs.online{pic}"
 
                 unpacked.append(c_copy)
             continue
@@ -908,7 +908,7 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
                 if group_key not in contacts_map:
                     profile_pic = m.get("profile_pic_url") or item.get("profile_pic_url") or ""
                     if profile_pic and profile_pic.startswith("/"):
-                        profile_pic = f"https://whats.dominuslabs.online{profile_pic}"
+                        profile_pic = f"https://dominuslabs.online{profile_pic}"
 
                     contacts_map[group_key] = {
                         "id": group_key,
@@ -930,7 +930,7 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
                 if m.get("profile_pic_url") and m.get("profile_pic_url") != "changed":
                     pic = m.get("profile_pic_url")
                     if pic and pic.startswith("/"):
-                        pic = f"https://whats.dominuslabs.online{pic}"
+                        pic = f"https://dominuslabs.online{pic}"
                     contacts_map[group_key]["profile_pic_url"] = pic
 
                 contacts_map[group_key]["mensagens"].append(m)
@@ -954,7 +954,7 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
                     m_pic = m.get("profile_pic_url") or m.get("avatar")
                     if m_pic and m_pic != "changed" and str(m_pic).lower() not in ("null", "none", "") and not item_copy.get("profile_pic_url"):
                         if str(m_pic).startswith("/"):
-                            m_pic = f"https://whats.dominuslabs.online{m_pic}"
+                            m_pic = f"https://dominuslabs.online{m_pic}"
                         item_copy["profile_pic_url"] = str(m_pic)
 
             if c_jid and s_id and s_id != "default":
@@ -1682,9 +1682,9 @@ class N8NService:
             outgoing_payload["whatsapp_token"] = payload["whatsapp_token"]
         if payload.get("session_id"):
             outgoing_payload["session_id"] = payload["session_id"]
-            public_url = getattr(settings, "WHATSAPP_PUBLIC_URL", "https://whats.dominuslabs.online").rstrip("/")
-            if "hkossco0sgg" in public_url or "localhost" in public_url or "10.0.1." in public_url:
-                public_url = "https://whats.dominuslabs.online"
+            public_url = getattr(settings, "WHATSAPP_PUBLIC_URL", "https://dominuslabs.online").rstrip("/")
+            if not public_url or public_url in ("http://localhost:3000", "https://localhost:3000"):
+                public_url = "https://dominuslabs.online"
             outgoing_payload["whatsapp_api_url"] = public_url
             outgoing_payload["whatsapp_send_url"] = f"{public_url}/api/sessions/{payload['session_id']}/messages/send"
 
