@@ -119,10 +119,20 @@ async def update_chat_webhook_post(
     
     from app.services.n8n_service import n8n_service
     n8n_service.invalidate_leads_cache()
-    # Fetch messages to update cache/db
-    await n8n_service.get_messages(resolved_lead_id)
     
-    # Notify listeners to reload chat
+    # 1. Trigger request to get_conversations (Action 2) to refresh preview list
+    try:
+        await n8n_service.get_conversations()
+    except Exception as e:
+        print(f"[UPDATE-CHAT] Aviso ao buscar conversas: {e}", flush=True)
+
+    # 2. Trigger request to get_chat_history (Action 3) for the specific lead_id/jid
+    try:
+        await n8n_service.get_messages(resolved_lead_id)
+    except Exception as e:
+        print(f"[UPDATE-CHAT] Aviso ao buscar mensagens: {e}", flush=True)
+    
+    # 3. Notify real-time listeners to reload chat on frontend UI
     await notify_lead_listeners(resolved_lead_id, "reload")
     await notify_crm_chat_listeners(resolved_lead_id)
     
@@ -147,10 +157,20 @@ async def update_chat_webhook_get(
         
     from app.services.n8n_service import n8n_service
     n8n_service.invalidate_leads_cache()
-    # Fetch messages to update cache/db
-    await n8n_service.get_messages(resolved_lead_id)
     
-    # Notify listeners to reload chat
+    # 1. Trigger request to get_conversations (Action 2) to refresh preview list
+    try:
+        await n8n_service.get_conversations()
+    except Exception as e:
+        print(f"[UPDATE-CHAT] Aviso ao buscar conversas: {e}", flush=True)
+
+    # 2. Trigger request to get_chat_history (Action 3) for the specific lead_id/jid
+    try:
+        await n8n_service.get_messages(resolved_lead_id)
+    except Exception as e:
+        print(f"[UPDATE-CHAT] Aviso ao buscar mensagens: {e}", flush=True)
+    
+    # 3. Notify real-time listeners to reload chat on frontend UI
     await notify_lead_listeners(resolved_lead_id, "reload")
     await notify_crm_chat_listeners(resolved_lead_id)
     
