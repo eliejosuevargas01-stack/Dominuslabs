@@ -8,15 +8,17 @@ describe('getDynamicApiUrl', () => {
     // Delete the window.location and mock it
     // @ts-ignore
     delete window.location;
+    // @ts-ignore
     window.location = {
       ...originalLocation,
       hostname,
       protocol,
-    };
+    } as any;
   };
 
   afterEach(() => {
-    window.location = originalLocation;
+    // @ts-ignore
+    window.location = originalLocation as any;
   });
 
   it('should return local API URL with port 8001 when hostname is localhost', () => {
