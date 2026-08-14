@@ -453,12 +453,49 @@ function getAvatarColor(initials: string, name: string) {
 }
 
 function getAvatarSrc(url?: string, session_id?: string, jid?: string): string | null {
+  if (!url && !jid) return null;
+
+  // 1. Direct Meta Global CDN URLs (pps.whatsapp.net or mmg.whatsapp.net) load 200 OK!
+  if (url && typeof url === 'string') {
+    const trimmed = url.trim();
+    if (trimmed.includes('pps.whatsapp.net') || trimmed.includes('mmg.whatsapp.net')) {
+      return trimmed;
+    }
+  }
+
+  // 2. Extract session and jid from url if present
+  let targetSession = session_id || 'default';
+  let targetJid = jid || '';
+
+  if (url && typeof url === 'string') {
+    const trimmed = url.trim();
+    if (trimmed.includes('/avatar?') || trimmed.includes('/sessions/')) {
+      try {
+        const fullUrl = trimmed.startsWith('http') ? trimmed : `https://dummy.local${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
+        const parsed = new URL(fullUrl);
+        const qSession = parsed.searchParams.get('session') || parsed.searchParams.get('session_id');
+        const qJid = parsed.searchParams.get('jid');
+        
+        if (qSession) targetSession = qSession;
+        if (qJid) targetJid = qJid;
+
+        if (!targetSession && parsed.pathname.includes('/sessions/')) {
+          const parts = parsed.pathname.split('/sessions/')[1].split('/')[0];
+          if (parts) targetSession = parts;
+        }
+      } catch (e) {}
+    }
+  }
+
+  // 3. Route through Dominus CRM Backend Proxy (/api/v1/crm/avatar?session=...&jid=...)
+  if (targetJid) {
+    return `/api/v1/crm/avatar?session=${encodeURIComponent(targetSession)}&jid=${encodeURIComponent(targetJid)}`;
+  }
+
   if (url && typeof url === 'string' && url.trim()) {
     return url.trim();
   }
-  if (session_id && jid) {
-    return `/api/sessions/${encodeURIComponent(session_id)}/avatar?jid=${encodeURIComponent(jid)}`;
-  }
+
   return null;
 }
 
