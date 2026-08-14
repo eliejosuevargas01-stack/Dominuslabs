@@ -225,7 +225,7 @@ async def root_media_proxy(
     Proxy de mídias (imagem, áudio, vídeo, documentos) consumido pelo frontend.
     Mapeia /api/sessions/{session_id}/media?messageId=...
     """
-    target_session = session_id or session or "default"
+    target_session = session_id or session
     msg_id = messageId or message_id
     if not msg_id:
         raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
@@ -235,14 +235,24 @@ async def root_media_proxy(
         paths_to_try = []
         if target_session and target_session != "default":
             paths_to_try.append(f"/api/sessions/{target_session}/media?messageId={msg_id}")
-            paths_to_try.append(f"/media?session={target_session}&messageId={msg_id}")
-        paths_to_try.append(f"/media?messageId={msg_id}")
-        paths_to_try.append(f"/api/sessions/default/media?messageId={msg_id}")
 
         async with get_mtls_async_client(timeout=30.0, service_name="whatsapp") as client:
             base_url = settings.WHATSAPP_API_URL.rstrip("/")
             if base_url.startswith("http://") and ":3000" in base_url:
                 base_url = base_url.replace("http://", "https://", 1)
+
+            # Discover active sessions if target_session is missing or invalid
+            try:
+                sessions_res = await client.get(f"{base_url}/api/sessions")
+                if sessions_res.status_code == 200:
+                    sess_data = sessions_res.json()
+                    if isinstance(sess_data, list):
+                        for s in sess_data:
+                            s_id = s.get("name") or s.get("id") or s.get("session_id") or (s.get("session") if isinstance(s.get("session"), str) else None)
+                            if s_id and f"/api/sessions/{s_id}/media?messageId={msg_id}" not in paths_to_try:
+                                paths_to_try.append(f"/api/sessions/{s_id}/media?messageId={msg_id}")
+            except Exception:
+                pass
 
             for clean_path in paths_to_try:
                 try:

@@ -275,9 +275,9 @@ function getSenderColor(name: string): string {
   return colors[index];
 }
 
-function getMediaUrl(msg: any): string | null {
+function getMediaUrl(msg: any, defaultSessionId?: string): string | null {
   if (!msg) return null;
-  const sessId = msg.session_id;
+  const sessId = msg.session_id || defaultSessionId;
   const msgId = msg.message_id || msg.id;
   const rawUrl = msg.media_url || msg.image_url || msg.url || msg.file_url;
 
@@ -308,8 +308,8 @@ function getMediaUrl(msg: any): string | null {
   return null;
 }
 
-function renderMessageMedia(msg: any) {
-  const mediaSrc = getMediaUrl(msg);
+function renderMessageMedia(msg: any, defaultSessionId?: string) {
+  const mediaSrc = getMediaUrl(msg, defaultSessionId);
   const msgType = (msg.message_type || msg.type || '').toLowerCase();
   const contentText = (msg.content || msg.message || '').trim().toLowerCase();
 
@@ -1151,7 +1151,7 @@ function playIncomingSound() {
                     const senderName = !isMe && isGroup ? (msg.participant_pushname || msg.participant_name || msg.participant_push_name || msg.push_name || msg.participant || selectedChat?.participant_pushname || selectedChat?.participant) : null;
 
                     const isPlaceholderText = ['[imagem]', '[video]', '[audio]', '[documento]', '[mídia]'].includes(rawContent.toLowerCase());
-                    const mediaElement = renderMessageMedia(msg);
+                    const mediaElement = renderMessageMedia(msg, selectedChat?.session_id);
 
                     return (
                       <div
