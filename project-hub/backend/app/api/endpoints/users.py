@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
-from app.core.auth import check_admin_role
+from app.core.auth import check_admin_role, get_current_user
+from datetime import datetime
+import uuid
 from app.schemas.user import UserResponse, UserCreate, UserUpdate
 from app.repositories.user_repo import user_repo
 
@@ -81,3 +83,37 @@ def delete_user(
         
     user_repo.remove(db, id=user_id)
     return {"status": "success", "message": "Usuário excluído com sucesso."}
+
+@router.post("/gdpr/anonymize", status_code=status.HTTP_200_OK)
+def anonymize_my_data(
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user)
+):
+    """
+    LGPD / GDPR Compliance: Right to be Forgotten.
+    Anonymizes user PII instead of hard deleting to preserve referential integrity if needed.
+    """
+    user = user_repo.get_by_email(db, email=current_user_email)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado."
+        )
+
+    # Anonymize PII data
+    anonymous_id = str(uuid.uuid4())
+    user.email = f"anonymized_{anonymous_id}@deleted.local"
+    user.hashed_password = "DELETED_VIA_GDPR"
+    user.whatsapp_token = None
+    user.access_token = None
+    user.refresh_token = None
+    user.role = "anonymized"
+    user.can_create_projects = False
+    user.can_edit_projects = False
+    user.can_manage_crm = False
+    user.can_use_scrapper = False
+    user.preferred_session_id = None
+
+    db.commit()
+
+    return {"status": "success", "message": "Seus dados foram anonimizados conforme a LGPD."}
