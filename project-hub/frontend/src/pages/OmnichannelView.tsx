@@ -235,6 +235,111 @@ function formatTimestamp(isoString?: string): string {
   }
 }
 
+function getMediaUrl(mediaUrl?: string): string | null {
+  if (!mediaUrl || typeof mediaUrl !== 'string' || !mediaUrl.trim()) return null;
+  const trimmed = mediaUrl.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+  return trimmed;
+}
+
+function renderMessageMedia(msg: any) {
+  const mediaSrc = getMediaUrl(msg.media_url || msg.image_url || msg.url || msg.file_url);
+  const msgType = (msg.message_type || msg.type || '').toLowerCase();
+  const contentText = (msg.content || msg.message || '').trim().toLowerCase();
+
+  const isImage = msgType.includes('image') || contentText === '[imagem]' || (mediaSrc && /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(mediaSrc));
+  const isVideo = msgType.includes('video') || contentText === '[video]' || (mediaSrc && /\.(mp4|webm|mkv|mov|avi)(\?.*)?$/i.test(mediaSrc));
+  const isAudio = msgType.includes('audio') || msgType.includes('ptt') || msgType.includes('voice') || contentText === '[audio]' || (mediaSrc && /\.(mp3|ogg|wav|m4a|aac|opus)(\?.*)?$/i.test(mediaSrc));
+  const isDocument = msgType.includes('document') || msgType.includes('file') || contentText === '[documento]' || (mediaSrc && /\.(pdf|doc|docx|xls|xlsx|zip|rar)(\?.*)?$/i.test(mediaSrc));
+
+  if (isImage && mediaSrc) {
+    return (
+      <div className="media-container mb-2 overflow-hidden rounded-xl border border-slate-200/60 shadow-sm max-w-sm bg-slate-900/5">
+        <a href={mediaSrc} target="_blank" rel="noopener noreferrer" className="block group relative">
+          <img
+            src={mediaSrc}
+            alt="Mídia"
+            className="w-full max-h-80 object-cover rounded-xl transition-transform duration-200 group-hover:scale-[1.02]"
+            loading="lazy"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+            }}
+          />
+        </a>
+      </div>
+    );
+  }
+
+  if (isVideo && mediaSrc) {
+    return (
+      <div className="media-container mb-2 overflow-hidden rounded-xl border border-slate-200/60 shadow-sm max-w-sm bg-black">
+        <video
+          controls
+          preload="metadata"
+          className="w-full max-h-80 rounded-xl"
+          src={mediaSrc}
+        >
+          Seu navegador não suporta a reprodução de vídeo.
+        </video>
+      </div>
+    );
+  }
+
+  if (isAudio && mediaSrc) {
+    return (
+      <div className="media-container mb-2 p-2 rounded-xl bg-slate-100/90 border border-slate-200/60 shadow-sm max-w-xs flex flex-col gap-1">
+        <div className="flex items-center gap-2 text-xs font-bold text-slate-700 px-1">
+          <Volume2 className="w-4 h-4 text-purple-600 animate-pulse" />
+          <span>Mensagem de Áudio</span>
+        </div>
+        <audio controls preload="metadata" className="w-full h-9 rounded-lg" src={mediaSrc}>
+          Seu navegador não suporta o reprodutor de áudio.
+        </audio>
+      </div>
+    );
+  }
+
+  if (isDocument && mediaSrc) {
+    return (
+      <div className="media-container mb-2">
+        <a
+          href={mediaSrc}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 p-3 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 transition-colors shadow-sm max-w-xs"
+        >
+          <div className="p-2 rounded-lg bg-purple-600 text-white shrink-0">
+            <Paperclip className="w-4 h-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold truncate">Documento / Anexo</p>
+            <p className="text-[10px] text-purple-700">Clique para abrir ou baixar</p>
+          </div>
+        </a>
+      </div>
+    );
+  }
+
+  if (mediaSrc) {
+    return (
+      <div className="media-container mb-2 overflow-hidden rounded-xl border border-slate-200/60 shadow-sm max-w-sm">
+        <img
+          src={mediaSrc}
+          alt="Arquivo de Mídia"
+          className="w-full max-h-80 object-cover rounded-xl"
+          onError={(e) => {
+            (e.target as HTMLElement).style.display = 'none';
+          }}
+        />
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export default function OmnichannelView() {
   // Navigation / Tabs state
   const [activeTab, setActiveTab] = useState<'conversations' | 'contacts'>('conversations');
@@ -935,6 +1040,9 @@ function playIncomingSound() {
                   sortedMessages.map((msg, index) => {
                     const isMe = msg.is_from_me === true || msg.sender === 'user';
                     const timeStr = formatTimestamp(msg.message_timestamp || msg.created_at) || '';
+                    const rawContent = (msg.content || msg.message || '').trim();
+                    const isPlaceholderText = ['[imagem]', '[video]', '[audio]', '[documento]', '[mídia]'].includes(rawContent.toLowerCase());
+                    const mediaElement = renderMessageMedia(msg);
 
                     return (
                       <div
@@ -948,10 +1056,15 @@ function playIncomingSound() {
                               : 'bg-white text-slate-900 rounded-tl-none border border-slate-200/60'
                           }`}
                         >
-                          {/* Message Content */}
-                          <div className="whitespace-pre-wrap break-words pr-12">
-                            {msg.content || msg.message}
-                          </div>
+                          {/* Render Media (Images, Videos, Audio, Files) */}
+                          {mediaElement}
+
+                          {/* Message Content / Caption */}
+                          {(!isPlaceholderText || !mediaElement) && rawContent && (
+                            <div className="whitespace-pre-wrap break-words pr-12">
+                              {rawContent}
+                            </div>
+                          )}
 
                           {/* Message Footer (Timestamp & Checkmarks) */}
                           <div className="flex items-center justify-end gap-1 mt-1 -mb-1 float-right text-[10px] text-slate-400 select-none">

@@ -213,6 +213,51 @@ async def root_avatar_proxy(
 
     raise HTTPException(status_code=404, detail="Avatar não encontrado.")
 
+@app.get("/api/sessions/{session_id}/media")
+@app.get("/media")
+async def root_media_proxy(
+    session_id: Optional[str] = None,
+    session: Optional[str] = None,
+    messageId: Optional[str] = None,
+    message_id: Optional[str] = None
+):
+    """
+    Proxy de mídias (imagem, áudio, vídeo, documentos) consumido pelo frontend.
+    Mapeia /api/sessions/{session_id}/media?messageId=...
+    """
+    target_session = session_id or session or "default"
+    msg_id = messageId or message_id
+    if not msg_id:
+        raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
+
+    try:
+        from app.api.endpoints.whatsapp import make_whatsapp_api_request
+        clean_path = f"/api/sessions/{target_session}/media?messageId={msg_id}"
+        res = None
+        try:
+            res = await make_whatsapp_api_request("GET", clean_path)
+        except Exception:
+            fallback_path = f"/media?session={target_session}&messageId={msg_id}"
+            res = await make_whatsapp_api_request("GET", fallback_path)
+
+        url_target = None
+        if isinstance(res, dict):
+            url_target = res.get("url") or res.get("media_url") or res.get("media") or res.get("file_url")
+
+        if url_target:
+            return RedirectResponse(
+                url_target,
+                status_code=302,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "public, max-age=86400"
+                }
+            )
+    except Exception as e:
+        print(f"[ROOT-MEDIA-PROXY] Aviso ao buscar media para msg_id={msg_id}: {e}", flush=True)
+
+    raise HTTPException(status_code=404, detail="Arquivo de mídia não encontrado.")
+
 @app.get("/project/{public_token}")
 @limiter.limit("20/minute")
 async def serve_project_with_meta(request: Request, public_token: str, db: Session = Depends(get_db)):
