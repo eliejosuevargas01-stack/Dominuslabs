@@ -192,6 +192,7 @@ async def root_avatar_proxy(
         if url_target:
             return RedirectResponse(
                 url_target,
+                status_code=302,
                 headers={
                     "Access-Control-Allow-Origin": "*",
                     "Cache-Control": "public, max-age=86400"
