@@ -124,20 +124,18 @@ from fastapi.responses import RedirectResponse
 async def get_session_avatar(
     session_id: str,
     jid: str,
-    db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     Proxy de imagem de perfil de contato/grupo via mTLS.
     Evita erros de NS_BINDING_ABORTED e SSL em requisições cross-origin do navegador.
+    Acessível por tags <img> do navegador sem exigir token Bearer nos cabeçalhos.
     """
     try:
-        token = await get_user_token(current_user, db)
         clean_path = f"/api/sessions/{session_id}/avatar?jid={jid}&json=true"
         res = await make_whatsapp_api_request(
             "GET",
-            clean_path,
-            headers={"x-session-token": token}
+            clean_path
         )
         if isinstance(res, dict) and res.get("url"):
             return RedirectResponse(
