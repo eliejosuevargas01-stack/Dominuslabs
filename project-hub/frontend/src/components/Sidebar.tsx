@@ -31,8 +31,8 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
 
   return (
     <>
-      {/* Mobile Hamburguer Button */}
-      <div className="md:hidden fixed top-3 left-4 z-50">
+      {/* Mobile/Tablet Hamburger Button */}
+      <div className="lg:hidden fixed top-3 left-4 z-50">
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="p-2 rounded-xl bg-white/90 backdrop-blur-md border border-violet-100 shadow-sm text-slate-700 hover:text-purple-700 transition-all cursor-pointer flex items-center justify-center"
@@ -43,16 +43,16 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
 
       {/* Persistent Sidebar */}
       <aside
-        className={`fixed md:sticky top-0 left-0 h-screen z-40 bg-white/70 backdrop-blur-md border-r border-violet-100/50 shadow-md flex flex-col justify-between transition-all duration-300 md:transform-none overflow-x-hidden ${
-          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        } ${isCollapsed ? 'w-64 md:w-20' : 'w-64 md:w-64'}`}
+        className={`fixed lg:sticky top-0 left-0 h-screen z-40 bg-white/70 backdrop-blur-md border-r border-violet-100/50 shadow-md flex flex-col justify-between transition-all duration-300 lg:transform-none overflow-x-hidden ${
+          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        } ${isCollapsed ? 'w-64 lg:w-20' : 'w-64 lg:w-64'}`}
       >
         {/* Logo and Menu Links */}
-        <div className={`p-6 transition-all duration-300 ${isCollapsed ? 'md:px-2' : ''}`}>
-          <div className={`flex ${isCollapsed ? 'flex-col md:items-center gap-4' : 'items-center justify-between'} mb-8 mt-4 md:mt-0`}>
+        <div className={`p-6 transition-all duration-300 ${isCollapsed ? 'lg:px-2' : ''}`}>
+          <div className={`flex ${isCollapsed ? 'flex-col lg:items-center gap-4' : 'items-center justify-between'} mb-8 mt-4 lg:mt-0`}>
             <Link to="/project-hub" className="flex items-center gap-2 group">
               <img src="/logo.png" alt="Dominus Labs" className="w-8 h-8 rounded-lg object-contain shadow-sm group-hover:scale-105 transition-transform flex-shrink-0" />
-              <span className={`font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-violet-800 via-indigo-700 to-emerald-600 bg-clip-text text-transparent transition-all duration-200 ${isCollapsed ? 'md:hidden' : 'block'}`}>
+              <span className={`font-display font-extrabold text-2xl tracking-tight bg-gradient-to-r from-violet-800 via-indigo-700 to-emerald-600 bg-clip-text text-transparent transition-all duration-200 ${isCollapsed ? 'lg:hidden' : 'block'}`}>
                 Dominuslabs
               </span>
             </Link>
@@ -60,14 +60,14 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
             {/* Toggle Button for Desktop */}
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="hidden md:flex p-1.5 rounded-lg border border-violet-100/50 hover:bg-violet-50 text-slate-400 hover:text-purple-700 transition-all cursor-pointer items-center justify-center bg-white shadow-sm"
+              className="hidden lg:flex p-1.5 rounded-lg border border-violet-100/50 hover:bg-violet-50 text-slate-400 hover:text-purple-700 transition-all cursor-pointer items-center justify-center bg-white shadow-sm"
               title={isCollapsed ? "Expandir menu" : "Recolher menu"}
             >
               {isCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
             </button>
           </div>
 
-          <nav className={`space-y-1.5 ${isCollapsed ? 'md:space-y-3' : ''}`}>
+          <nav className={`space-y-1.5 ${isCollapsed ? 'lg:space-y-3' : ''}`}>
             {menuItems.map((item) => {
               const active = isActive(item.path);
               const Icon = item.icon;
@@ -79,7 +79,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
                   title={item.name}
                   className={`flex items-center rounded-xl transition-all duration-200 group px-4 py-3 gap-3 ${
                     isCollapsed
-                      ? 'md:justify-center md:w-10 md:h-10 md:p-0 md:gap-0 md:mx-auto'
+                      ? 'lg:justify-center lg:w-10 lg:h-10 lg:p-0 lg:gap-0 lg:mx-auto'
                       : ''
                   } ${
                     active
@@ -88,7 +88,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
                   }`}
                 >
                   <Icon className={`w-4 h-4 transition-transform group-hover:scale-110 flex-shrink-0 ${active ? 'text-white' : 'text-slate-400 group-hover:text-purple-600'}`} />
-                  <span className={`font-medium text-sm whitespace-nowrap transition-all duration-200 ${isCollapsed ? 'md:hidden' : 'block'}`}>
+                  <span className={`font-medium text-sm whitespace-nowrap transition-all duration-200 ${isCollapsed ? 'lg:hidden' : 'block'}`}>
                     {item.name}
                   </span>
                 </Link>
