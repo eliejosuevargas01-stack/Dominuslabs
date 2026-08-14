@@ -58,50 +58,7 @@ async def delete_lead(lead_id: str, current_user: str = Depends(check_crm_permis
     result = await n8n_service.delete_lead(lead_id)
     return result
 
-from urllib.parse import quote
 
-CONTACTS_CACHE: dict = {}
-
-@router.get("/contacts")
-async def get_contacts_action(
-    current_user: str = Depends(get_current_user),
-):
-    """
-    Action 1: 'get_contacts'
-    Retorna todos os contatos fornecidos diretamente pelo webhook n8n (action=get_contacts).
-    """
-    return await n8n_service.get_leads()
-
-@router.get("/conversations")
-async def get_conversations_action(
-    current_user: str = Depends(get_current_user),
-):
-    """
-    Action 2: 'get_conversations'
-    Retorna todas as conversas fornecidas diretamente pelo webhook n8n (action=get_conversations).
-    """
-    return await n8n_service.get_conversations()
-
-@router.get("/chat-history")
-@router.get("/conversations/{lead_id:path}/messages")
-@router.get("/conversations/{lead_id:path}")
-@router.get("/messages/{lead_id:path}")
-async def get_chat_history_action(
-    lead_id: Optional[str] = None,
-    contact_jid: Optional[str] = None,
-    session_id: Optional[str] = None,
-    current_user: str = Depends(get_current_user),
-):
-    """
-    Action 3: 'get_chat_history'
-    Retorna o histórico de mensagens fornecido diretamente pelo webhook n8n (action=get_chat_history).
-    """
-    from urllib.parse import unquote
-    raw_target = unquote(lead_id or contact_jid or "")
-    if not raw_target:
-        raise HTTPException(status_code=400, detail="O parâmetro 'lead_id' ou 'contact_jid' é obrigatório.")
-
-    return await n8n_service.get_chat_history_response(raw_target)
 
 @router.get("/progressive/{contact_jid}")
 async def get_progressive_assembled_profile(contact_jid: str, current_user: str = Depends(get_current_user)):
