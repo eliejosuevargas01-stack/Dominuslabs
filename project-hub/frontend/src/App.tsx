@@ -8,11 +8,9 @@ import Showcase from './pages/Showcase';
 import Sidebar from './components/Sidebar';
 import ScrapperView from './pages/ScrapperView';
 import CrmView from './pages/CrmView';
-import InboxView from './pages/InboxView';
 import LeadDetailView from './pages/LeadDetailView';
 import ConnectionsView from './pages/ConnectionsView';
 import { LogOut } from 'lucide-react';
-import ChatPopup from './components/ChatPopup';
 import './App.css';
 import './index.css';
 
@@ -109,7 +107,6 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
-      <ChatPopup />
     </div>
   );
 }
@@ -168,16 +165,6 @@ function App() {
               <ProtectedRoute>
                 <DashboardLayout>
                   <CrmView />
-                </DashboardLayout>
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/inbox" 
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <InboxView />
                 </DashboardLayout>
               </ProtectedRoute>
             } 

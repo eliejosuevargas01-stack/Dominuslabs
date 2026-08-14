@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
   Users, UserCheck, MessageSquare, Check, 
   Search, Loader2, Sparkles, MessageCircle, AlertCircle,
@@ -8,7 +7,6 @@ import {
 import { API_BASE, fetchWithAuth } from '../services/api';
 
 export default function CrmView() {
-  const navigate = useNavigate();
   const [leads, setLeads] = useState<any[]>([]);
   const [metrics, setMetrics] = useState<any>(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
@@ -315,7 +313,6 @@ export default function CrmView() {
                     <th className="py-3 px-3">Contato / Nome</th>
                     <th className="py-3 px-3">Status</th>
                     <th className="py-3 px-3">Última Atuação</th>
-                    <th className="py-3 px-3 text-right">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-violet-100/30 text-xs font-medium text-slate-600">
@@ -326,8 +323,7 @@ export default function CrmView() {
                     return (
                       <tr 
                         key={lead.id} 
-                        onClick={() => navigate('/inbox')}
-                        className="hover:bg-violet-50/30 cursor-pointer transition-colors"
+                        className="hover:bg-violet-50/30 transition-colors"
                       >
                         <td className="py-3.5 px-3 text-slate-400 max-w-[140px] truncate" title={lead.lead_id || lead.id}>
                           #{lead.lead_id || lead.id}
@@ -343,17 +339,6 @@ export default function CrmView() {
                         </td>
                         <td className="py-3.5 px-3 text-slate-400 whitespace-nowrap">
                           {formatDate(lead.updated_at || lead.last_interaction || lead.created_at)}
-                        </td>
-                        <td className="py-3.5 px-3 text-right">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate('/inbox');
-                            }}
-                            className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs rounded-xl border border-purple-200 transition-all cursor-pointer shadow-sm"
-                          >
-                            Abrir Chat
-                          </button>
                         </td>
                       </tr>
                     );
