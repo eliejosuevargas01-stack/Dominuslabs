@@ -179,8 +179,11 @@ async def get_conversations_action(
         return []
 
 @router.get("/chat-history")
-@router.get("/conversations/{contact_jid:path}/messages")
+@router.get("/conversations/{lead_id:path}/messages")
+@router.get("/conversations/{lead_id:path}")
+@router.get("/messages/{lead_id:path}")
 async def get_chat_history_action(
+    lead_id: Optional[str] = None,
     contact_jid: Optional[str] = None,
     session_id: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -188,24 +191,35 @@ async def get_chat_history_action(
 ):
     """
     Action 3: 'get_chat_history'
-    Carrega todas as mensagens de uma conversa específica agrupadas por contact_jid e session_id.
+    Carrega todas as mensagens de uma conversa específica.
+    Suporta lead_id no formato 'contact_jid___session_id' ou 'contact_jid'.
     """
+    from urllib.parse import unquote
     from app.api.endpoints.whatsapp import make_whatsapp_api_request, get_user_token
-    target_jid = contact_jid
-    if not target_jid:
-        raise HTTPException(status_code=400, detail="O parâmetro 'contact_jid' é obrigatório.")
+
+    raw_target = unquote(lead_id or contact_jid or "")
+    if not raw_target:
+        raise HTTPException(status_code=400, detail="O parâmetro 'lead_id' ou 'contact_jid' é obrigatório.")
+
+    target_jid = raw_target
+    target_session = session_id
+
+    if "___" in raw_target:
+        parts = raw_target.split("___")
+        target_jid = parts[0]
+        target_session = target_session or parts[1]
 
     try:
         token = await get_user_token(current_user, db)
 
-        if not session_id:
+        if not target_session or target_session == "default":
             sessions = await make_whatsapp_api_request("GET", "/api/sessions", headers={"x-session-token": token})
             if not isinstance(sessions, list):
                 sessions = sessions.get("sessions", []) if isinstance(sessions, dict) else []
             active_sessions = [s.get("id") for s in sessions if s.get("id") or s.get("sessionId")]
-            session_id = active_sessions[0] if active_sessions else "default"
+            target_session = active_sessions[0] if active_sessions else "default"
 
-        msgs_res = await make_whatsapp_api_request("GET", f"/api/sessions/{session_id}/conversations/{target_jid}/messages", headers={"x-session-token": token})
+        msgs_res = await make_whatsapp_api_request("GET", f"/api/sessions/{target_session}/conversations/{target_jid}/messages", headers={"x-session-token": token})
         raw_msgs = msgs_res.get("messages", []) if isinstance(msgs_res, dict) else []
 
         formatted_messages = []
@@ -215,24 +229,32 @@ async def get_chat_history_action(
                 ts_sec = int(ts_sec / 1000)
             ts_iso = datetime.utcfromtimestamp(float(ts_sec)).isoformat() + "Z"
 
+            is_me = bool(m.get("fromMe"))
+            msg_text = m.get("text") or m.get("body") or ""
+
             formatted_messages.append({
+                "id": m.get("id") or f"msg_{ts_sec}",
                 "message_id": m.get("id") or f"msg_{ts_sec}",
                 "contact_jid": target_jid,
-                "session_id": session_id,
-                "is_from_me": bool(m.get("fromMe")),
+                "session_id": target_session,
+                "is_from_me": is_me,
+                "sender": "user" if is_me else "lead",
                 "chat_kind": m.get("kind") or ("group" if "g.us" in target_jid else "private"),
                 "message_type": m.get("type") or "conversation",
-                "content": m.get("text") or m.get("body") or "",
+                "content": msg_text,
+                "message": msg_text,
                 "status": m.get("status") or "received",
                 "message_timestamp": ts_iso,
+                "timestamp": ts_iso,
                 "created_at": ts_iso
             })
 
         return [
             {
                 "contact_jid": target_jid,
-                "session_id": session_id,
-                "messages": formatted_messages
+                "session_id": target_session,
+                "messages": formatted_messages,
+                "mensagens": formatted_messages
             }
         ]
     except Exception as e:
@@ -240,8 +262,9 @@ async def get_chat_history_action(
         return [
             {
                 "contact_jid": target_jid,
-                "session_id": session_id or "default",
-                "messages": []
+                "session_id": target_session or "default",
+                "messages": [],
+                "mensagens": []
             }
         ]
 
