@@ -178,10 +178,20 @@ async def root_avatar_proxy(
     try:
         from app.api.endpoints.whatsapp import make_whatsapp_api_request
         clean_path = f"/api/sessions/{target_session}/avatar?jid={jid}&json=true"
-        res = await make_whatsapp_api_request("GET", clean_path)
-        if isinstance(res, dict) and res.get("url"):
+        res = None
+        try:
+            res = await make_whatsapp_api_request("GET", clean_path)
+        except Exception:
+            fallback_path = f"/avatar?session={target_session}&jid={jid}&json=true"
+            res = await make_whatsapp_api_request("GET", fallback_path)
+
+        url_target = None
+        if isinstance(res, dict):
+            url_target = res.get("url") or res.get("avatar_url") or res.get("profile_pic_url") or res.get("profile_url") or res.get("avatar")
+
+        if url_target:
             return RedirectResponse(
-                res["url"],
+                url_target,
                 headers={
                     "Access-Control-Allow-Origin": "*",
                     "Cache-Control": "public, max-age=86400"
