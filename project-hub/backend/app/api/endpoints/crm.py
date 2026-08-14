@@ -58,7 +58,7 @@ async def get_contacts_action(
 ):
     """
     Action 1: 'get_contacts'
-    Retorna todos os contatos agrupados por session_id para o tenant do usuário e salva no cache local.
+    Retorna uma lista plana e desduplicada de contatos compartilhados entre todas as sessões do tenant do usuário.
     """
     from app.api.endpoints.whatsapp import make_whatsapp_api_request, get_user_token
     try:
@@ -67,7 +67,8 @@ async def get_contacts_action(
         if not isinstance(sessions, list):
             sessions = sessions.get("sessions", []) if isinstance(sessions, dict) else []
 
-        result = []
+        all_contacts_map = {}
+
         for s in sessions:
             session_id = s.get("id") or s.get("sessionId")
             if not session_id or session_id == "sessao_desconhecida":
@@ -81,17 +82,27 @@ async def get_contacts_action(
 
             for c in session_contacts:
                 c_jid = c.get("contact_jid") or c.get("jid")
-                if c_jid:
-                    c["profile_pic_url"] = f"/api/v1/whatsapp/sessions/{session_id}/avatar?jid={quote(c_jid)}"
-                    cache_key = f"{session_id}:{c_jid}"
-                    CONTACTS_CACHE[cache_key] = c
+                if not c_jid:
+                    continue
 
-            result.append({
-                "session_id": session_id,
-                "contacts": session_contacts
-            })
+                profile_pic = f"/api/v1/whatsapp/sessions/{session_id}/avatar?jid={quote(c_jid)}"
+                
+                c_entry = {
+                    "contact_jid": c_jid,
+                    "push_name": c.get("push_name") or c.get("name") or "Desconhecido",
+                    "display_phone": c.get("display_phone") or ("Grupo WhatsApp" if ("g.us" in c_jid or "120363" in c_jid) else None),
+                    "profile_pic_url": profile_pic,
+                    "created_at": c.get("created_at") or (datetime.utcnow().isoformat() + "Z"),
+                    "updated_at": c.get("updated_at") or (datetime.utcnow().isoformat() + "Z")
+                }
 
-        return result
+                CONTACTS_CACHE[c_jid] = c_entry
+                CONTACTS_CACHE[f"{session_id}:{c_jid}"] = c_entry
+
+                if c_jid not in all_contacts_map or (c_entry["push_name"] != "Desconhecido" and all_contacts_map[c_jid]["push_name"] == "Desconhecido"):
+                    all_contacts_map[c_jid] = c_entry
+
+        return list(all_contacts_map.values())
     except Exception as e:
         print(f"[CRM-ACTION] Erro em get_contacts: {e}", flush=True)
         return []
