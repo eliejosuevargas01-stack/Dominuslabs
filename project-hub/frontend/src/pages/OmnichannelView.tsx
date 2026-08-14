@@ -1041,6 +1041,23 @@ function playIncomingSound() {
                     const isMe = msg.is_from_me === true || msg.sender === 'user';
                     const timeStr = formatTimestamp(msg.message_timestamp || msg.created_at) || '';
                     const rawContent = (msg.content || msg.message || '').trim();
+                    const msgType = (msg.message_type || msg.type || '').toLowerCase();
+                    const isReaction = msgType === 'reactionmessage' || msgType === 'reaction';
+
+                    if (isReaction) {
+                      const emoji = rawContent || '👍';
+                      return (
+                        <div
+                          key={msg.message_id || index}
+                          className={`flex flex-col ${isMe ? 'items-end pr-3' : 'items-start pl-3'} -mt-3.5 mb-2.5 z-20 select-none`}
+                        >
+                          <div className="bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full shadow-md border border-slate-200/90 text-xs font-bold flex items-center gap-1.5 hover:scale-110 transition-transform cursor-pointer group">
+                            <span className="text-sm leading-none group-hover:scale-125 transition-transform">{emoji}</span>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     const isPlaceholderText = ['[imagem]', '[video]', '[audio]', '[documento]', '[mídia]'].includes(rawContent.toLowerCase());
                     const mediaElement = renderMessageMedia(msg);
 
