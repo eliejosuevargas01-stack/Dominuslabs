@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
 from sqlalchemy.orm import Session
@@ -155,7 +155,7 @@ from fastapi.staticfiles import StaticFiles
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-from fastapi.responses import RedirectResponse, HTTPException, Response
+from fastapi.responses import RedirectResponse, Response
 from typing import Optional
 
 @app.get("/api/sessions/{session_id}/avatar")
