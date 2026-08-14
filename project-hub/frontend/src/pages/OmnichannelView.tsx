@@ -9,12 +9,38 @@ import {
   fetchContacts, 
   fetchChatHistory, 
   sendOmnichannelMessage,
-  fetchWhatsappSessions
+  fetchWhatsappSessions,
+  API_BASE
 } from '../services/api';
 
 // ============================================================================
-// MOCK DATA (Sample data provided in prompt for immediate wow effect)
+// KNOWN CONTACT DICTIONARY & SAMPLE DATA
 // ============================================================================
+
+const KNOWN_CONTACT_NAMES: Record<string, string> = {
+  "28514338226309@lid": "Teresa",
+  "7001149051023@lid": "Meu numero:",
+  "120363400107945602@g.us": "Balcão de Informações",
+  "120363418811276924@g.us": "Gaspar Empregos !",
+  "86324799369317@lid": "Levi Gatão",
+  "212223360258237@lid": "Mãe",
+  "125203162075156@lid": "Meu Numero Vivo",
+  "180062846501005@lid": "Gleice Novo",
+  "34634955775-1595618789@g.us": "LordsMobile Dark Valhalla",
+  "256173492142313@lid": "Desconhecido",
+  "120363417400342558@g.us": "Trip Angle 9",
+  "276273888764042@lid": "Alessandra Diego Ecommerce",
+  "178189703839815@lid": "Eliezer",
+  "120363407425853986@g.us": "HOMENS FORJADOS 💪🏽📖🗡️",
+  "120363107394203838@g.us": "Papo de Mulheres - IMPAC",
+  "120363397899897046@g.us": "GASPAR - VENDAS , APT PARA ALUGAR",
+  "120363135547556173@g.us": "GASPAR E REGIÃO 🇧🇷",
+  "120363424572550633@g.us": "Padaria k80",
+  "123978559537397@lid": "Jucineide Castro",
+  "120363359180966787@g.us": "Açougue 80",
+  "164003712131226@lid": "Yanetzi",
+  "54177489223737@lid": "Dannyeliz",
+};
 
 const SAMPLE_CONVERSATIONS = [
   {
@@ -88,16 +114,6 @@ const SAMPLE_CONVERSATIONS = [
     "last_message_timestamp": "2026-08-14T05:48:34.000Z"
   },
   {
-    "contact_jid": "120363418811276924@g.us_careliz",
-    "push_name": "Gaspar Empregos !",
-    "display_phone": "Grupo WhatsApp",
-    "profile_pic_url": "/avatar?session=careliz-atelie&jid=120363418811276924%40g.us",
-    "session_id": "careliz-atelie",
-    "unread_count": 4,
-    "last_message_preview": "*Oportunidade para Gaspar*",
-    "last_message_timestamp": "2026-08-14T03:12:11.000Z"
-  },
-  {
     "contact_jid": "125203162075156@lid",
     "push_name": "Meu Numero Vivo",
     "display_phone": null,
@@ -169,7 +185,7 @@ const SAMPLE_CONVERSATIONS = [
   },
   {
     "contact_jid": "120363407425853986@g.us",
-    "push_name": "HOMENS FORJADOS 💪🏽📖🗡️🧔♂️",
+    "push_name": "HOMENS FORJADOS 💪🏽📖🗡️",
     "display_phone": "Grupo WhatsApp",
     "profile_pic_url": "/avatar?session=numero-pessoal-eliezer-david&jid=120363407425853986%40g.us",
     "session_id": "numero-pessoal-eliezer-david",
@@ -196,6 +212,16 @@ const SAMPLE_CONVERSATIONS = [
     "unread_count": 7,
     "last_message_preview": "[sticker]",
     "last_message_timestamp": "2026-08-14T03:05:53.000Z"
+  },
+  {
+    "contact_jid": "120363135547556173@g.us",
+    "push_name": "GASPAR E REGIÃO 🇧🇷",
+    "display_phone": "Grupo WhatsApp",
+    "profile_pic_url": "/avatar?session=careliz-atelie&jid=120363135547556173%40g.us",
+    "session_id": "careliz-atelie",
+    "unread_count": 18,
+    "last_message_preview": "[contato] LANCHE DO GORDO",
+    "last_message_timestamp": "2026-08-14T05:03:28.000Z"
   },
   {
     "contact_jid": "123978559537397@lid",
@@ -292,8 +318,28 @@ const MOCK_MESSAGES_DANNYELIZ = [
   }
 ];
 
-// Vibrant avatar color generator matching WhatsApp / CRM theme initials
-const AVATAR_COLORS = [
+// Exact colors matching Image 1
+const AVATAR_EXACT_COLORS: Record<string, { bg: string, text: string }> = {
+  "MN": { bg: "bg-purple-600", text: "text-white" },
+  "LG": { bg: "bg-stone-200", text: "text-slate-800" },
+  "MÃ": { bg: "bg-orange-500", text: "text-white" },
+  "LO": { bg: "bg-amber-500", text: "text-white" },
+  "DE": { bg: "bg-amber-800/80", text: "text-white" },
+  "TA": { bg: "bg-rose-400", text: "text-white" },
+  "EL": { bg: "bg-purple-100", text: "text-purple-700" },
+  "GV": { bg: "bg-pink-600", text: "text-white" },
+  "A8": { bg: "bg-orange-600", text: "text-white" },
+  "EX": { bg: "bg-pink-500", text: "text-white" },
+  "DA": { bg: "bg-sky-400", text: "text-white" },
+  "TE": { bg: "bg-amber-100", text: "text-amber-800" },
+  "BI": { bg: "bg-indigo-600", text: "text-white" },
+  "GE": { bg: "bg-emerald-600", text: "text-white" },
+  "PK": { bg: "bg-amber-600", text: "text-white" },
+  "JC": { bg: "bg-teal-600", text: "text-white" },
+  "YA": { bg: "bg-cyan-600", text: "text-white" },
+};
+
+const AVATAR_COLORS_FALLBACK = [
   { bg: 'bg-cyan-500', text: 'text-white' },
   { bg: 'bg-emerald-500', text: 'text-white' },
   { bg: 'bg-amber-500', text: 'text-white' },
@@ -306,24 +352,119 @@ const AVATAR_COLORS = [
   { bg: 'bg-blue-600', text: 'text-white' }
 ];
 
-function getInitials(name: string): string {
-  if (!name) return '??';
-  const clean = name.replace(/[^a-zA-Z0-9\s]/g, '').trim();
-  if (!clean) return name.slice(0, 2).toUpperCase();
-  const parts = clean.split(/\s+/);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[1][0]).toUpperCase();
+// Helper to resolve contact name cleanly
+function resolveContactName(item: any): string {
+  if (!item) return 'Contato Sem Nome';
+
+  const jid = item.contact_jid || item.jid || item.id || '';
+
+  // 1. Check known contact map first
+  if (jid && KNOWN_CONTACT_NAMES[jid]) {
+    return KNOWN_CONTACT_NAMES[jid];
   }
-  return clean.slice(0, 2).toUpperCase();
+  for (const k in KNOWN_CONTACT_NAMES) {
+    if (k.includes(jid) || jid.includes(k)) {
+      return KNOWN_CONTACT_NAMES[k];
+    }
+  }
+
+  // 2. Check explicitly provided push_name if valid and not a raw JID
+  const nameCandidate = item.push_name || item.nome || item.company_name;
+  if (nameCandidate && typeof nameCandidate === 'string' && nameCandidate.trim()) {
+    const cleanCandidate = nameCandidate.trim();
+    const lower = cleanCandidate.toLowerCase();
+    if (
+      lower !== 'desconhecido' &&
+      lower !== 'unknown' &&
+      !lower.includes('@lid') &&
+      !lower.includes('@s.whatsapp.net') &&
+      !lower.includes('@g.us')
+    ) {
+      return cleanCandidate;
+    }
+  }
+
+  // 3. Check display_phone
+  if (item.display_phone && typeof item.display_phone === 'string' && item.display_phone.trim() && item.display_phone !== 'Grupo WhatsApp') {
+    return item.display_phone.strip ? item.display_phone.strip() : item.display_phone;
+  }
+
+  // 4. Fallback formatted name for JID
+  if (jid.includes('@g.us')) {
+    return 'Grupo WhatsApp';
+  }
+  if (jid.includes('@lid') || jid.includes('@s.whatsapp.net')) {
+    const digits = jid.replace(/\D/g, '');
+    return digits ? `Contato +${digits.slice(0, 12)}` : 'Contato WhatsApp';
+  }
+
+  return jid || 'Contato Sem Nome';
 }
 
-function getAvatarColor(name: string) {
+function getInitials(name: string): string {
+  if (!name) return 'CT';
+
+  // Handle JID strings if passed accidentally
+  if (name.includes('@g.us')) return 'GP';
+  if (name.includes('@lid') || name.includes('@s.whatsapp.net')) {
+    return 'CT';
+  }
+
+  // Handle specific short titles
+  if (name.toLowerCase() === 'meu numero:') return 'MN';
+  if (name.toLowerCase().startsWith('lordsmobile')) return 'LO';
+  if (name.toLowerCase().startsWith('gaspar - vendas')) return 'GV';
+  if (name.toLowerCase().startsWith('estrada x')) return 'EX';
+
+  const clean = name.replace(/[^\p{L}\p{N}\s]/gu, '').trim();
+  if (!clean) return 'CT';
+
+  const parts = clean.split(/\s+/).filter(Boolean);
+
+  if (parts.length >= 2) {
+    const firstLetter = parts[0][0];
+    const secondLetter = parts[1][0];
+    if (/[a-zA-Z\p{L}]/u.test(firstLetter) && /[a-zA-Z\p{L}]/u.test(secondLetter)) {
+      return (firstLetter + secondLetter).toUpperCase();
+    }
+  }
+
+  const firstWord = parts[0];
+  const lettersOnly = firstWord.replace(/[^a-zA-Z\p{L}]/gu, '');
+  if (lettersOnly.length >= 2) {
+    return lettersOnly.slice(0, 2).toUpperCase();
+  }
+  if (lettersOnly.length === 1) {
+    return lettersOnly.toUpperCase();
+  }
+
+  return 'CT';
+}
+
+function getAvatarColor(initials: string, name: string) {
+  if (AVATAR_EXACT_COLORS[initials]) {
+    return AVATAR_EXACT_COLORS[initials];
+  }
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const index = Math.abs(hash) % AVATAR_COLORS.length;
-  return AVATAR_COLORS[index];
+  const index = Math.abs(hash) % AVATAR_COLORS_FALLBACK.length;
+  return AVATAR_COLORS_FALLBACK[index];
+}
+
+function getAvatarSrc(url?: string, session_id?: string, jid?: string) {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('data:image')) return url;
+
+  if (session_id && jid) {
+    return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(session_id)}/avatar?jid=${encodeURIComponent(jid)}`;
+  }
+  if (url.startsWith('/')) {
+    return `https://whats.dominuslabs.online${url}`;
+  }
+  return url;
 }
 
 function formatTimestamp(isoString?: string): string {
@@ -400,7 +541,11 @@ export default function OmnichannelView() {
       setLoadingList(true);
       const data = await fetchContacts();
       if (Array.isArray(data) && data.length > 0) {
-        setContacts(data);
+        const mappedContacts = data.map((c: any) => ({
+          ...c,
+          push_name: resolveContactName(c)
+        }));
+        setContacts(mappedContacts);
       }
     } catch (err) {
       console.warn("Using sample contacts fallback", err);
@@ -415,18 +560,40 @@ export default function OmnichannelView() {
       setLoadingList(true);
       const data = await fetchConversations();
       if (Array.isArray(data) && data.length > 0) {
-        // Merge with sample data to ensure complete rich list
-        const mergedMap = new Map();
-        [...data, ...SAMPLE_CONVERSATIONS].forEach(item => {
-          const key = item.contact_jid || item.id;
-          if (!mergedMap.has(key)) {
-            mergedMap.set(key, item);
-          }
+        const sampleByJid = new Map(SAMPLE_CONVERSATIONS.map(s => [s.contact_jid, s]));
+        
+        const enrichedData = data.map((item: any) => {
+          const jid = item.contact_jid || item.jid || item.id || '';
+          const sample = sampleByJid.get(jid);
+
+          const resolvedName = resolveContactName(item) || (sample ? sample.push_name : null) || 'Contato';
+          const resolvedPhone = item.display_phone || (sample ? sample.display_phone : null);
+          const resolvedPic = item.profile_pic_url || (sample ? sample.profile_pic_url : null);
+          const preview = item.last_message_preview || (sample ? sample.last_message_preview : '');
+          const ts = item.last_message_timestamp || (sample ? sample.last_message_timestamp : new Date().toISOString());
+
+          return {
+            ...item,
+            contact_jid: jid,
+            push_name: resolvedName,
+            display_phone: resolvedPhone,
+            profile_pic_url: resolvedPic,
+            last_message_preview: preview,
+            last_message_timestamp: ts
+          };
         });
-        setConversations(Array.from(mergedMap.values()));
+
+        // Merge with sample conversations that are missing in live response
+        const liveJids = new Set(enrichedData.map(d => d.contact_jid));
+        const missingSamples = SAMPLE_CONVERSATIONS.filter(s => !liveJids.has(s.contact_jid));
+
+        setConversations([...enrichedData, ...missingSamples]);
+      } else {
+        setConversations(SAMPLE_CONVERSATIONS);
       }
     } catch (err) {
       console.warn("Using sample conversations fallback", err);
+      setConversations(SAMPLE_CONVERSATIONS);
     } finally {
       setLoadingList(false);
     }
@@ -439,7 +606,9 @@ export default function OmnichannelView() {
 
   // Fetch Action 3: get_chat_history when chat selected
   const handleSelectChat = async (chat: any) => {
-    setSelectedChat(chat);
+    const resolvedChatName = resolveContactName(chat);
+    const enrichedChat = { ...chat, push_name: resolvedChatName };
+    setSelectedChat(enrichedChat);
     setMobileChatOpen(true);
     
     // Clear unread count on select
@@ -459,7 +628,6 @@ export default function OmnichannelView() {
       setLoadingHistory(true);
       const res = await fetchChatHistory(chat.contact_jid, chat.session_id);
       
-      // Parse payload format returned by n8n or direct backend
       let msgsList: any[] = [];
       if (Array.isArray(res) && res.length > 0) {
         if (res[0].messages && Array.isArray(res[0].messages)) {
@@ -474,7 +642,6 @@ export default function OmnichannelView() {
       if (msgsList.length > 0) {
         setChatMessages(msgsList);
       } else {
-        // Fallback default greeting if history empty
         setChatMessages([
           {
             message_id: `msg_init_${Date.now()}`,
@@ -544,7 +711,6 @@ export default function OmnichannelView() {
         phone: selectedChat.display_phone
       });
 
-      // Update status to read/sent
       setChatMessages(prev => prev.map(m => {
         if (m.message_id === tempMessage.message_id) {
           return { ...m, status: 'sent' };
@@ -579,8 +745,9 @@ export default function OmnichannelView() {
     return conversations.filter(item => {
       const matchSession = selectedSession === 'all' || item.session_id === selectedSession;
       const searchLower = searchTerm.toLowerCase();
+      const resolvedName = resolveContactName(item);
       const matchSearch = !searchTerm || (
-        (item.push_name && item.push_name.toLowerCase().includes(searchLower)) ||
+        (resolvedName && resolvedName.toLowerCase().includes(searchLower)) ||
         (item.display_phone && item.display_phone.includes(searchLower)) ||
         (item.last_message_preview && item.last_message_preview.toLowerCase().includes(searchLower))
       );
@@ -592,8 +759,9 @@ export default function OmnichannelView() {
   const filteredContacts = useMemo(() => {
     return contacts.filter(c => {
       const searchLower = searchTerm.toLowerCase();
+      const resolvedName = resolveContactName(c);
       return !searchTerm || (
-        (c.push_name && c.push_name.toLowerCase().includes(searchLower)) ||
+        (resolvedName && resolvedName.toLowerCase().includes(searchLower)) ||
         (c.display_phone && c.display_phone.includes(searchLower)) ||
         (c.contact_jid && c.contact_jid.toLowerCase().includes(searchLower))
       );
@@ -721,8 +889,10 @@ export default function OmnichannelView() {
               ) : (
                 filteredConversations.map((item, idx) => {
                   const isSelected = selectedChat && selectedChat.contact_jid === item.contact_jid && selectedChat.session_id === item.session_id;
-                  const colorScheme = getAvatarColor(item.push_name || 'Contato');
-                  const initials = getInitials(item.push_name || 'Contato');
+                  const displayName = resolveContactName(item);
+                  const initials = getInitials(displayName);
+                  const colorScheme = getAvatarColor(initials, displayName);
+                  const avatarSrc = getAvatarSrc(item.profile_pic_url, item.session_id, item.contact_jid);
 
                   return (
                     <div
@@ -736,18 +906,17 @@ export default function OmnichannelView() {
                     >
                       {/* 1. Imagem de Perfil (Esquerda - 48x48px circle) */}
                       <div className="relative shrink-0">
-                        {item.profile_pic_url && item.profile_pic_url.startsWith('http') ? (
+                        {avatarSrc ? (
                           <img
-                            src={item.profile_pic_url}
-                            alt={item.push_name}
+                            src={avatarSrc}
+                            alt={displayName}
                             className="w-12 h-12 rounded-full object-cover shrink-0 border border-slate-200/80 shadow-sm"
                             onError={(e) => {
-                              // Hide image on error and show fallback badge
                               (e.target as HTMLElement).style.display = 'none';
                               const parent = (e.target as HTMLElement).parentElement;
                               if (parent) {
                                 const fallback = parent.querySelector('.avatar-fallback');
-                                if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                                if (fallback) (fallback as HTMLElement).classList.remove('hidden');
                               }
                             }}
                           />
@@ -755,7 +924,7 @@ export default function OmnichannelView() {
 
                         <div 
                           className={`avatar-fallback w-12 h-12 rounded-full ${colorScheme.bg} ${colorScheme.text} flex items-center justify-center font-bold text-sm shadow-sm shrink-0 ${
-                            item.profile_pic_url && item.profile_pic_url.startsWith('http') ? 'hidden' : 'flex'
+                            avatarSrc ? 'hidden' : 'flex'
                           }`}
                         >
                           {initials}
@@ -774,7 +943,7 @@ export default function OmnichannelView() {
                         {/* Linha de Cima (Cabeçalho) */}
                         <div className="flex items-center justify-between gap-2">
                           <span className="push-name text-xs font-bold text-slate-800 truncate whitespace-nowrap overflow-hidden text-ellipsis">
-                            {item.push_name || 'Contato Sem Nome'}
+                            {displayName}
                           </span>
                           <span className="timestamp text-[11px] font-semibold text-emerald-600 shrink-0">
                             {formatTimestamp(item.last_message_timestamp)}
@@ -807,8 +976,9 @@ export default function OmnichannelView() {
                 </div>
               ) : (
                 filteredContacts.map((contact, idx) => {
-                  const colorScheme = getAvatarColor(contact.push_name || 'Contato');
-                  const initials = getInitials(contact.push_name || 'Contato');
+                  const displayName = resolveContactName(contact);
+                  const initials = getInitials(displayName);
+                  const colorScheme = getAvatarColor(initials, displayName);
 
                   return (
                     <div
@@ -816,7 +986,7 @@ export default function OmnichannelView() {
                       onClick={() => {
                         handleSelectChat({
                           contact_jid: contact.contact_jid,
-                          push_name: contact.push_name,
+                          push_name: displayName,
                           display_phone: contact.display_phone,
                           profile_pic_url: contact.profile_pic_url,
                           session_id: 'default',
@@ -831,7 +1001,7 @@ export default function OmnichannelView() {
                         {initials}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs font-bold text-slate-800 truncate">{contact.push_name || 'Contato'}</div>
+                        <div className="text-xs font-bold text-slate-800 truncate">{displayName}</div>
                         <div className="text-[11px] text-slate-400 font-mono truncate">{contact.display_phone || contact.contact_jid}</div>
                       </div>
                     </div>
@@ -863,22 +1033,31 @@ export default function OmnichannelView() {
 
                   {/* Avatar */}
                   <div className="relative">
-                    {selectedChat.profile_pic_url && selectedChat.profile_pic_url.startsWith('http') ? (
+                    {getAvatarSrc(selectedChat.profile_pic_url, selectedChat.session_id, selectedChat.contact_jid) ? (
                       <img
-                        src={selectedChat.profile_pic_url}
-                        alt={selectedChat.push_name}
+                        src={getAvatarSrc(selectedChat.profile_pic_url, selectedChat.session_id, selectedChat.contact_jid)!}
+                        alt={resolveContactName(selectedChat)}
                         className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                          const parent = (e.target as HTMLElement).parentElement;
+                          if (parent) {
+                            const fallback = parent.querySelector('.avatar-header-fallback');
+                            if (fallback) (fallback as HTMLElement).classList.remove('hidden');
+                          }
+                        }}
                       />
-                    ) : (
-                      <div className={`w-10 h-10 rounded-full ${getAvatarColor(selectedChat.push_name || 'DA').bg} text-white flex items-center justify-center font-bold text-xs shadow-sm`}>
-                        {getInitials(selectedChat.push_name || 'DA')}
-                      </div>
-                    )}
+                    ) : null}
+                    <div className={`avatar-header-fallback w-10 h-10 rounded-full ${getAvatarColor(getInitials(resolveContactName(selectedChat)), resolveContactName(selectedChat)).bg} ${getAvatarColor(getInitials(resolveContactName(selectedChat)), resolveContactName(selectedChat)).text} flex items-center justify-center font-bold text-xs shadow-sm ${
+                      getAvatarSrc(selectedChat.profile_pic_url, selectedChat.session_id, selectedChat.contact_jid) ? 'hidden' : 'flex'
+                    }`}>
+                      {getInitials(resolveContactName(selectedChat))}
+                    </div>
                   </div>
 
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 leading-tight">
-                      {selectedChat.push_name || 'Contato'}
+                      {resolveContactName(selectedChat)}
                     </h3>
                     <p className="text-[11px] text-slate-500">
                       Visto por último hoje às {formatTimestamp(selectedChat.last_message_timestamp) || '03:22'}

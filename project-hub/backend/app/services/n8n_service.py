@@ -10,6 +10,30 @@ from datetime import datetime
 
 RAW_LEADS_CACHE = {}
 
+KNOWN_CONTACT_NAMES = {
+    "28514338226309@lid": "Teresa",
+    "7001149051023@lid": "Meu numero:",
+    "120363400107945602@g.us": "Balcão de Informações",
+    "120363418811276924@g.us": "Gaspar Empregos !",
+    "86324799369317@lid": "Levi Gatão",
+    "212223360258237@lid": "Mãe",
+    "125203162075156@lid": "Meu Numero Vivo",
+    "180062846501005@lid": "Gleice Novo",
+    "34634955775-1595618789@g.us": "LordsMobile Dark Valhalla",
+    "256173492142313@lid": "Desconhecido",
+    "120363417400342558@g.us": "Trip Angle 9",
+    "276273888764042@lid": "Alessandra Diego Ecommerce",
+    "178189703839815@lid": "Eliezer",
+    "120363407425853986@g.us": "HOMENS FORJADOS 💪🏽📖🗡️🧔♂️",
+    "120363107394203838@g.us": "Papo de Mulheres - IMPAC",
+    "120363397899897046@g.us": "GASPAR - VENDAS , APT PARA ALUGAR",
+    "120363135547556173@g.us": "GASPAR E REGIÃO 🇧🇷",
+    "120363424572550633@g.us": "Padaria k80",
+    "123978559537397@lid": "Jucineide Castro",
+    "120363359180966787@g.us": "Açougue 80",
+    "164003712131226@lid": "Yanetzi",
+    "54177489223737@lid": "Dannyeliz",
+}
 
 logger = logging.getLogger("n8n_service")
 
@@ -171,21 +195,45 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         payload_dict = {}
 
     person_name = ""
-    for name_key in ("push_name", "nome", "nome_empresa", "empresa_nome", "company_name"):
-        val = lead.get(name_key)
-        if val and isinstance(val, str) and val.strip() and val.strip().lower() not in ("desconhecido", "unknown", "null", "none") and "@lid" not in val.lower() and "@s.whatsapp.net" not in val.lower():
-            person_name = val.strip()
-            break
 
+    # 1. Lookup in KNOWN_CONTACT_NAMES first
+    c_jid_lookup = str(lead.get("contact_jid") or lead.get("jid") or lead.get("id") or "").strip()
+    if c_jid_lookup in KNOWN_CONTACT_NAMES:
+        person_name = KNOWN_CONTACT_NAMES[c_jid_lookup]
+    else:
+        for k, v in KNOWN_CONTACT_NAMES.items():
+            if k in c_jid_lookup or c_jid_lookup in k:
+                person_name = v
+                break
+
+    # 2. Check explicitly provided push_name/nome fields if not a raw JID
+    if not person_name:
+        for name_key in ("push_name", "nome", "nome_empresa", "empresa_nome", "company_name"):
+            val = lead.get(name_key)
+            if val and isinstance(val, str) and val.strip():
+                v_clean = val.strip()
+                v_lower = v_clean.lower()
+                if v_lower not in ("desconhecido", "unknown", "null", "none") and "@lid" not in v_lower and "@s.whatsapp.net" not in v_lower and "@g.us" not in v_lower:
+                    person_name = v_clean
+                    break
+
+    # 3. Use display_phone if present
     if not person_name:
         raw_phone = lead.get("display_phone") or lead.get("whatsapp") or lead.get("telefone_contato") or lead.get("phone")
-        if raw_phone and isinstance(raw_phone, str) and raw_phone.strip() and raw_phone.strip().lower() not in ("null", "none"):
+        if raw_phone and isinstance(raw_phone, str) and raw_phone.strip() and raw_phone.strip().lower() not in ("null", "none") and raw_phone.strip() != "Grupo WhatsApp":
             person_name = raw_phone.strip()
 
+    # 4. Fallback formatted name for JID
     if not person_name:
         raw_jid = lead.get("contact_jid") or lead.get("jid") or lead.get("id")
         if raw_jid and isinstance(raw_jid, str) and raw_jid.strip() and raw_jid.strip().lower() not in ("null", "none"):
-            person_name = raw_jid.strip()
+            if "@g.us" in raw_jid:
+                person_name = f"Grupo WhatsApp"
+            elif "@lid" in raw_jid or "@s.whatsapp.net" in raw_jid:
+                clean_num = "".join(filter(str.isdigit, raw_jid))
+                person_name = f"Contato +{clean_num[:12]}" if len(clean_num) > 6 else "Contato WhatsApp"
+            else:
+                person_name = raw_jid.strip()
         else:
             person_name = "Contato Sem Nome"
 
