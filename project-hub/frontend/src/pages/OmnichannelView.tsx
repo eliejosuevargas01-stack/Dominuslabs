@@ -212,12 +212,28 @@ function getAvatarSrc(url?: string, session_id?: string, jid?: string): string |
 function formatTimestamp(isoString?: string): string {
   if (!isoString) return '';
   try {
+    let hours = '';
+    let minutes = '';
+
+    // Extract exact HH:mm directly from string if ISO format to avoid JS subtracting 3h timezone offset
+    if (typeof isoString === 'string' && isoString.includes('T')) {
+      const timePart = isoString.split('T')[1];
+      if (timePart && timePart.includes(':')) {
+        const timePieces = timePart.split(':');
+        hours = timePieces[0].padStart(2, '0');
+        minutes = timePieces[1].padStart(2, '0');
+      }
+    }
+
     const date = new Date(isoString);
+    if (!hours || !minutes) {
+      if (isNaN(date.getTime())) return '';
+      hours = String(date.getHours()).padStart(2, '0');
+      minutes = String(date.getMinutes()).padStart(2, '0');
+    }
+
     const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-    
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const isToday = !isNaN(date.getTime()) ? date.toDateString() === now.toDateString() : true;
     
     if (isToday) {
       return `${hours}:${minutes}`;
@@ -225,11 +241,14 @@ function formatTimestamp(isoString?: string): string {
     
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
-    if (date.toDateString() === yesterday.toDateString()) {
+    if (!isNaN(date.getTime()) && date.toDateString() === yesterday.toDateString()) {
       return 'Ontem';
     }
     
-    return `${date.getDate()}/${date.getMonth() + 1}`;
+    if (!isNaN(date.getTime())) {
+      return `${date.getDate()}/${date.getMonth() + 1}`;
+    }
+    return `${hours}:${minutes}`;
   } catch {
     return '';
   }
