@@ -41,6 +41,7 @@ class Settings(BaseSettings):
         return f"sqlite:///{os.path.join(self.UPLOAD_DIR, 'dominuslabs.db')}"
 
     # N8N Integration Webhooks
+    WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "default_webhook_secret")
     SCRAPPER_META_WEBHOOK_URL: str = os.getenv("SCRAPPER_META_WEBHOOK_URL", "https://scrapper.dominuslabs.online/scrape/meta_ads")
     SCRAPPER_MAPS_WEBHOOK_URL: str = os.getenv("SCRAPPER_MAPS_WEBHOOK_URL", "https://scrapper.dominuslabs.online/scrape/google_maps")
     CRM_GET_LEADS_WEBHOOK_URL: str = os.getenv("CRM_GET_LEADS_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
@@ -55,6 +56,7 @@ class Settings(BaseSettings):
     
     WHATSAPP_API_URL: str = os.getenv("WHATSAPP_API_URL", "http://localhost:3000")
     WHATSAPP_PUBLIC_URL: str = os.getenv("WHATSAPP_PUBLIC_URL", "https://dominuslabs.online")
+    WHATSAPP_MASTER_SECRET: str = os.getenv("WHATSAPP_MASTER_SECRET", "default_master_secret")
     IDENTITY_WORKER_URL: str = os.getenv("IDENTITY_WORKER_URL", "https://identity.dominus.online")
 
     # mTLS Security Settings
