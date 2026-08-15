@@ -948,6 +948,7 @@ function playIncomingSound() {
         try {
           let notifiedJid = '';
           let isFromMe = false;
+          let newMsgs: any[] = [];
 
           if (event.data.startsWith('{')) {
             const parsed = JSON.parse(event.data);
@@ -955,44 +956,94 @@ function playIncomingSound() {
             if (parsed.is_from_me === true || parsed.from_me === true || parsed.sender === 'user' || parsed.sender === 'me') {
               isFromMe = true;
             }
+
+            if (Array.isArray(parsed.messages)) {
+              newMsgs = parsed.messages;
+            } else if (parsed.message && typeof parsed.message === 'object') {
+              newMsgs = [parsed.message];
+            }
           }
 
-          // 1. Immediately reload conversation list to sort latest on top & update badges
-          loadConversations();
-
-          // 2. Play chime ONLY if message is NOT from me (incoming from contact)
+          // 1. Play chime ONLY if message is NOT from me (incoming from contact)
           if (!isFromMe) {
             playIncomingSound();
           }
 
-          // 3. Smart UX Verification: Is the notified chat CURRENTLY OPEN by the user?
+          // 2. Smart UX Verification: Is the notified chat CURRENTLY OPEN by the user?
           const activeChat = selectedChatRef.current;
+          let isCurrentlyOpenChat = false;
+
           if (activeChat && activeChat.contact_jid && notifiedJid) {
             const cleanNotified = notifiedJid.split('@')[0].trim().toLowerCase();
             const cleanActive = activeChat.contact_jid.split('@')[0].trim().toLowerCase();
             const cleanPhone = (activeChat.phone || '').split('@')[0].trim().toLowerCase();
-            
-            const isCurrentlyOpenChat = cleanNotified === cleanActive || (cleanPhone && cleanNotified === cleanPhone);
 
-            if (isCurrentlyOpenChat) {
-              // Chat is CURRENTLY OPEN -> Fetch chat history in real time to show the new message
-              fetchChatHistory(activeChat.contact_jid, activeChat.session_id)
-                .then((res: any) => {
-                  let msgsList: any[] = [];
-                  if (Array.isArray(res) && res.length > 0) {
-                    if (res[0].messages && Array.isArray(res[0].messages)) {
-                      msgsList = res[0].messages;
-                    } else if (res[0].mensagens && Array.isArray(res[0].mensagens)) {
-                      msgsList = res[0].mensagens;
-                    } else {
-                      msgsList = res;
-                    }
-                  }
-                  setChatMessages(msgsList);
-                })
-                .catch(() => {});
-            }
+            isCurrentlyOpenChat = cleanNotified === cleanActive || (cleanPhone && cleanNotified === cleanPhone);
           }
+
+          // 3. CONDITIONAL 1: If chat IS OPEN -> Push message directly into chatMessages! ZERO GET REQUESTS!
+          if (isCurrentlyOpenChat && newMsgs.length > 0) {
+            setChatMessages((prevMsgs) => {
+              const existingIds = new Set(prevMsgs.map((m: any) => String(m.message_id || m.id)));
+              const msgsToAdd: any[] = [];
+
+              for (const m of newMsgs) {
+                if (!m) continue;
+                const id = String(m.message_id || m.id || '');
+                if (id && !existingIds.has(id)) {
+                  existingIds.add(id);
+                  msgsToAdd.push(m);
+                } else if (!id) {
+                  msgsToAdd.push(m);
+                }
+              }
+
+              if (msgsToAdd.length === 0) return prevMsgs;
+              return [...prevMsgs, ...msgsToAdd];
+            });
+
+            setTimeout(() => scrollToBottom(), 50);
+          }
+
+          // 4. CONDITIONAL 2: Update Sidebar (conversations) locally
+          if (newMsgs.length > 0) {
+            const latestMsg = newMsgs[newMsgs.length - 1];
+            const previewText = latestMsg.content || latestMsg.message || latestMsg.text || 'Nova mensagem';
+            const msgTs = latestMsg.message_timestamp || latestMsg.created_at || new Date().toISOString();
+
+            setConversations((prevConvs) => {
+              let matched = false;
+              const updated = prevConvs.map((conv) => {
+                const cJid = (conv.contact_jid || '').split('@')[0].trim().toLowerCase();
+                const nJid = notifiedJid.split('@')[0].trim().toLowerCase();
+                if (cJid === nJid) {
+                  matched = true;
+                  return {
+                    ...conv,
+                    last_message_preview: previewText,
+                    last_message_timestamp: msgTs,
+                    unread_count: isCurrentlyOpenChat ? conv.unread_count : ((conv.unread_count || 0) + newMsgs.length),
+                    participant_pushname: latestMsg.participant_pushname || conv.participant_pushname
+                  };
+                }
+                return conv;
+              });
+
+              if (!matched) {
+                loadConversations();
+                return prevConvs;
+              }
+
+              return updated.sort((a, b) => {
+                const timeA = new Date(a.last_message_timestamp || 0).getTime();
+                const timeB = new Date(b.last_message_timestamp || 0).getTime();
+                return timeB - timeA;
+              });
+            });
+          } else {
+            loadConversations();
+          }
+
         } catch (err) {
           loadConversations();
         }
