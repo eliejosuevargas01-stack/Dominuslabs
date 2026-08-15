@@ -277,56 +277,39 @@ async def send_crm_whatsapp_message(
         )
     except HTTPException as he:
         raise he
-from fastapi import UploadFile, File, Form
-import uuid, os
-from app.core.config import settings
+class MediaInputPayload(BaseModel):
+    kind: str  # "image" | "video" | "audio" | "document"
+    mimeType: Optional[str] = None
+    fileName: Optional[str] = None
+    data: str  # Base64 Data URL (data:mime;base64,...)
+
+class MessageSendMediaPayload(BaseModel):
+    contact_jid: str
+    session_id: Optional[str] = None
+    text: Optional[str] = None
+    caption: Optional[str] = None
+    media: MediaInputPayload
 
 @router.post("/messages/send-media")
 async def send_crm_whatsapp_media(
-    file: UploadFile = File(...),
-    contact_jid: str = Form(...),
-    session_id: Optional[str] = Form(None),
-    caption: Optional[str] = Form(None),
-    media_type: Optional[str] = Form(None),
+    payload: MessageSendMediaPayload,
     db: Session = Depends(get_db),
     current_user: str = Depends(check_crm_permission),
 ):
     """
-    Recebe um arquivo de mídia (imagem, áudio, vídeo ou documento), salva no volume persistente
-    e transmite para a WhatsApp API e notificadores do CRM em tempo real.
+    Recebe payload de mídia com Base64 (data:mime;base64,...) e transmite para a WhatsApp API
+    no formato padronizado POST /api/sessions/{sessionId}/messages/send com objeto 'media'.
     """
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=401, detail="Usuário não encontrado.")
 
-    active_session = session_id or user.preferred_session_id
+    active_session = payload.session_id or user.preferred_session_id
     if not active_session:
         raise HTTPException(status_code=400, detail="Nenhuma sessão WhatsApp selecionada.")
 
-    c_type = (file.content_type or "").lower()
-    subfolder = "documents"
-    if "image" in c_type: subfolder = "images"
-    elif "audio" in c_type or "ogg" in c_type: subfolder = "audio"
-    elif "video" in c_type: subfolder = "videos"
-
-    folder_path = os.path.join(settings.UPLOAD_DIR, subfolder)
-    os.makedirs(folder_path, exist_ok=True)
-
-    ext = os.path.splitext(file.filename or "")[1]
-    if not ext:
-        if "image" in c_type: ext = ".jpg"
-        elif "audio" in c_type: ext = ".ogg"
-        elif "video" in c_type: ext = ".mp4"
-        else: ext = ".bin"
-
-    unique_name = f"{uuid.uuid4().hex}{ext}"
-    dest_path = os.path.join(folder_path, unique_name)
-
-    contents = await file.read()
-    with open(dest_path, "wb") as f:
-        f.write(contents)
-
-    public_url = f"https://dominuslabs.online/uploads/{subfolder}/{unique_name}"
+    target_jid = payload.contact_jid
+    media_text = payload.text or payload.caption or ""
 
     from app.services.whatsapp_service import get_tenant_id_for_user
     tenant_id = await get_tenant_id_for_user(user, db)
@@ -336,13 +319,18 @@ async def send_crm_whatsapp_media(
     from app.api.endpoints.whatsapp import make_whatsapp_api_request
     clean_path = f"/api/sessions/{active_session}/messages/send"
 
-    payload = {
-        "number": contact_jid,
-        "message": caption or file.filename or "",
-        "media_url": public_url,
-        "url": public_url,
-        "media_type": media_type or subfolder.rstrip("s")
+    wa_payload = {
+        "jid": target_jid,
+        "number": target_jid,
+        "text": media_text,
+        "media": {
+            "kind": payload.media.kind,
+            "mimeType": payload.media.mimeType or ("image/jpeg" if payload.media.kind == "image" else "audio/ogg; codecs=opus" if payload.media.kind == "audio" else "video/mp4" if payload.media.kind == "video" else "application/pdf"),
+            "fileName": payload.media.fileName or f"file_{int(datetime.utcnow().timestamp())}",
+            "data": payload.media.data
+        }
     }
+
     headers = {
         "x-session-token": jwt_token,
         "x-tenant-id": tenant_id,
@@ -351,18 +339,16 @@ async def send_crm_whatsapp_media(
 
     res = None
     try:
-        res = await make_whatsapp_api_request("POST", clean_path, headers=headers, json_data=payload)
+        res = await make_whatsapp_api_request("POST", clean_path, headers=headers, json_data=wa_payload)
     except Exception as e:
-        print(f"[SEND-MEDIA] Transmissão para Whats API falhou: {e}", flush=True)
+        print(f"[SEND-MEDIA-BASE64] Transmissão para Whats API falhou: {e}", flush=True)
 
     from app.api.endpoints.webhooks import notify_lead_listeners, notify_crm_chat_listeners
-    await notify_lead_listeners(contact_jid, "reload")
-    await notify_crm_chat_listeners(contact_jid, is_from_me=True, sender="user")
+    await notify_lead_listeners(target_jid, "reload")
+    await notify_crm_chat_listeners(target_jid, is_from_me=True, sender="user")
 
     return {
         "status": "success",
-        "media_url": public_url,
-        "filename": file.filename,
         "session_id": active_session,
         "whatsapp_response": res
     }

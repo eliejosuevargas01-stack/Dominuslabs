@@ -624,15 +624,21 @@ export async function sendOmnichannelMessage(payload: {
   return res.json();
 }
 
-export async function sendOmnichannelMedia(formData: FormData) {
-  const res = await fetchWithAuth(
-    `${API_BASE}/crm/messages/send-media`,
-    {
-      method: "POST",
-      body: formData,
-    },
-    null
-  );
+export async function sendOmnichannelMedia(payload: {
+  contact_jid: string;
+  session_id?: string;
+  text?: string;
+  media: {
+    kind: 'image' | 'video' | 'audio' | 'document' | string;
+    mimeType?: string;
+    fileName?: string;
+    data: string;
+  };
+}) {
+  const res = await fetchWithAuth(`${API_BASE}/crm/messages/send-media`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
     throw new Error(errData.detail || "Falha ao enviar arquivo de mídia.");
