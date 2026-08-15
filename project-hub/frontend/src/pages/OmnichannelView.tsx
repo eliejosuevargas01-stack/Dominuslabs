@@ -962,11 +962,18 @@ function playIncomingSound() {
             playIncomingSound();
           }
 
-          // 3. If active chat is the one receiving the message, reload history in real time
-          if (selectedChatRef.current && selectedChatRef.current.contact_jid) {
-            const currentJid = selectedChatRef.current.contact_jid;
-            if (!notifiedJid || currentJid === notifiedJid || notifiedJid.includes(currentJid) || currentJid.includes(notifiedJid)) {
-              fetchChatHistory(selectedChatRef.current.contact_jid, selectedChatRef.current.session_id)
+          // 3. Smart UX Verification: Is the notified chat CURRENTLY OPEN by the user?
+          const activeChat = selectedChatRef.current;
+          if (activeChat && activeChat.contact_jid && notifiedJid) {
+            const cleanNotified = notifiedJid.split('@')[0].trim().toLowerCase();
+            const cleanActive = activeChat.contact_jid.split('@')[0].trim().toLowerCase();
+            const cleanPhone = (activeChat.phone || '').split('@')[0].trim().toLowerCase();
+            
+            const isCurrentlyOpenChat = cleanNotified === cleanActive || (cleanPhone && cleanNotified === cleanPhone);
+
+            if (isCurrentlyOpenChat) {
+              // Chat is CURRENTLY OPEN -> Fetch chat history in real time to show the new message
+              fetchChatHistory(activeChat.contact_jid, activeChat.session_id)
                 .then((res: any) => {
                   let msgsList: any[] = [];
                   if (Array.isArray(res) && res.length > 0) {
