@@ -3,7 +3,7 @@ import {
   MessageSquare, Send, Paperclip, Smile, Search, 
   RefreshCw, CheckCheck, Radio, ChevronLeft,
   X, Users, MessageCircle, Volume2, Maximize2, ExternalLink,
-  Download, FileText, Image as ImageIcon, Video, Mic
+  Download, FileText, Image as ImageIcon, Video, Mic, Trash2
 } from 'lucide-react';
 import { 
   fetchConversations, 
@@ -455,19 +455,135 @@ export default function OmnichannelView() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedMediaType, setSelectedMediaType] = useState<'image' | 'video' | 'audio' | 'document'>('image');
 
+  // Real-time Voice Audio Recorder states
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [recordingTime, setRecordingTime] = useState<number>(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<any>(null);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+    } catch (err: any) {
+      alert('Não foi possível acessar o microfone. Permita o uso do microfone no seu navegador.');
+    }
+  };
+
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      const stream = mediaRecorderRef.current.stream;
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    }
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+    }
+    setIsRecording(false);
+    setRecordingTime(0);
+    audioChunksRef.current = [];
+  };
+
+  const stopAndSendRecording = async () => {
+    if (!mediaRecorderRef.current || !selectedChat) return;
+
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+    }
+
+    const recorder = mediaRecorderRef.current;
+    recorder.onstop = async () => {
+      const stream = recorder.stream;
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+
+      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/ogg; codecs=opus' });
+      if (audioBlob.size === 0) {
+        setIsRecording(false);
+        setRecordingTime(0);
+        return;
+      }
+
+      const audioFile = new File([audioBlob], `voice_${Date.now()}.ogg`, { type: 'audio/ogg' });
+
+      setUploadingMedia(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', audioFile);
+        formData.append('contact_jid', selectedChat.contact_jid);
+        if (selectedChat.session_id) {
+          formData.append('session_id', selectedChat.session_id);
+        }
+        formData.append('media_type', 'audio');
+
+        await sendOmnichannelMedia(formData);
+
+        const res: any = await fetchChatHistory(selectedChat.contact_jid, selectedChat.session_id);
+        let msgsList: any[] = [];
+        if (Array.isArray(res) && res.length > 0) {
+          if (res[0].messages && Array.isArray(res[0].messages)) {
+            msgsList = res[0].messages;
+          } else if (res[0].mensagens && Array.isArray(res[0].mensagens)) {
+            msgsList = res[0].mensagens;
+          } else {
+            msgsList = res;
+          }
+        }
+        setChatMessages(msgsList);
+      } catch (err: any) {
+        alert(err.message || 'Falha ao enviar mensagem de voz.');
+      } finally {
+        setUploadingMedia(false);
+        setIsRecording(false);
+        setRecordingTime(0);
+      }
+    };
+
+    recorder.stop();
+  };
+
+  const formatRecordingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Keyboard shortcut listener for Esc key to close lightbox/menus
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (isRecording) {
+          cancelRecording();
+        }
         setLightboxUrl(null);
         setShowAttachMenu(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isRecording]);
 
   const handleFileSelect = (type: 'image' | 'video' | 'audio' | 'document') => {
     setSelectedMediaType(type);
@@ -1349,62 +1465,99 @@ function playIncomingSound() {
               )}
 
               {/* Bottom Message Input Bar */}
-              <form 
-                onSubmit={handleSendMessage}
-                className="p-3 bg-white border-t border-slate-200 flex items-center gap-2 shadow-lg z-10"
-              >
-                {/* Emoji Toggle */}
-                <button
-                  type="button"
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="p-2 rounded-xl text-slate-500 hover:text-amber-500 hover:bg-slate-100 transition-colors cursor-pointer"
-                  title="Emojis"
-                >
-                  <Smile className="w-5 h-5" />
-                </button>
+              {isRecording ? (
+                <div className="p-3 bg-white border-t border-slate-200 flex items-center justify-between gap-3 shadow-lg z-10 animate-fadeIn">
+                  <div className="flex items-center gap-3">
+                    <span className="relative flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                    </span>
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                      Gravando áudio... <span className="font-mono text-red-600 ml-1.5 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">{formatRecordingTime(recordingTime)}</span>
+                    </span>
+                  </div>
 
-                {/* Attachment Toggle */}
-                <button
-                  type="button"
-                  onClick={() => setShowAttachMenu(!showAttachMenu)}
-                  className={`p-2 rounded-xl transition-colors cursor-pointer ${
-                    showAttachMenu ? 'bg-purple-100 text-purple-700' : 'text-slate-500 hover:text-purple-600 hover:bg-slate-100'
-                  }`}
-                  title="Anexar arquivo"
-                >
-                  <Paperclip className="w-5 h-5" />
-                </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={cancelRecording}
+                      className="p-2.5 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                      title="Cancelar gravação (Esc)"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
 
-                {/* Input Text Field */}
-                <input
-                  type="text"
-                  placeholder={uploadingMedia ? "Enviando arquivo..." : "Digite uma mensagem"}
-                  disabled={uploadingMedia}
-                  value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-purple-500/20 focus:bg-white transition-all border border-slate-200/60"
-                />
-
-                {/* Send / Microphone Button */}
-                <button
-                  type="submit"
-                  disabled={!messageInput.trim() || sending || uploadingMedia}
-                  className={`p-2.5 rounded-xl text-white font-bold transition-all shadow-md flex items-center justify-center cursor-pointer ${
-                    messageInput.trim()
-                      ? 'bg-gradient-to-r from-purple-700 to-indigo-600 hover:scale-105 active:scale-95'
-                      : 'bg-emerald-600 hover:bg-emerald-700'
-                  }`}
-                  title="Enviar mensagem"
+                    <button
+                      type="button"
+                      onClick={stopAndSendRecording}
+                      disabled={uploadingMedia}
+                      className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-all shadow-md flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95"
+                      title="Enviar áudio"
+                    >
+                      {uploadingMedia ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form 
+                  onSubmit={handleSendMessage}
+                  className="p-3 bg-white border-t border-slate-200 flex items-center gap-2 shadow-lg z-10"
                 >
-                  {uploadingMedia ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : messageInput.trim() ? (
-                    <Send className="w-4 h-4" />
+                  {/* Emoji Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    className="p-2 rounded-xl text-slate-500 hover:text-amber-500 hover:bg-slate-100 transition-colors cursor-pointer"
+                    title="Emojis"
+                  >
+                    <Smile className="w-5 h-5" />
+                  </button>
+
+                  {/* Attachment Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setShowAttachMenu(!showAttachMenu)}
+                    className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                      showAttachMenu ? 'bg-purple-100 text-purple-700' : 'text-slate-500 hover:text-purple-600 hover:bg-slate-100'
+                    }`}
+                    title="Anexar arquivo"
+                  >
+                    <Paperclip className="w-5 h-5" />
+                  </button>
+
+                  {/* Input Text Field */}
+                  <input
+                    type="text"
+                    placeholder={uploadingMedia ? "Enviando arquivo..." : "Digite uma mensagem"}
+                    disabled={uploadingMedia}
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-purple-500/20 focus:bg-white transition-all border border-slate-200/60"
+                  />
+
+                  {/* Send Text OR Start Voice Recording Button */}
+                  {messageInput.trim() ? (
+                    <button
+                      type="submit"
+                      disabled={sending || uploadingMedia}
+                      className="p-2.5 rounded-xl text-white font-bold transition-all shadow-md flex items-center justify-center cursor-pointer bg-gradient-to-r from-purple-700 to-indigo-600 hover:scale-105 active:scale-95"
+                      title="Enviar mensagem"
+                    >
+                      {uploadingMedia ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    </button>
                   ) : (
-                    <Volume2 className="w-4 h-4" />
+                    <button
+                      type="button"
+                      onClick={startRecording}
+                      disabled={uploadingMedia}
+                      className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-all shadow-md flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95"
+                      title="Gravar áudio"
+                    >
+                      {uploadingMedia ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+                    </button>
                   )}
-                </button>
-              </form>
+                </form>
+              )}
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
