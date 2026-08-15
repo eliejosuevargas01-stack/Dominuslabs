@@ -181,6 +181,69 @@ async def proxy_crm_avatar(
 
     raise HTTPException(status_code=404, detail="Avatar não encontrado.")
 
+@router.get("/media")
+@router.get("/sessions/{session_id}/media")
+async def proxy_crm_media(
+    messageId: Optional[str] = None,
+    message_id: Optional[str] = None,
+    session: Optional[str] = None,
+    session_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Proxy de mídia (imagens, áudios, vídeos e documentos) da WhatsApp API via mTLS para tags <img>, <video>, <audio> e <a>.
+    """
+    target_session = session or session_id or "default"
+    target_msg_id = messageId or message_id
+    if not target_msg_id:
+        raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
+
+    try:
+        from app.api.endpoints.whatsapp import make_whatsapp_api_request
+        clean_path = f"/api/sessions/{target_session}/media?messageId={target_msg_id}"
+        res = await make_whatsapp_api_request("GET", clean_path, timeout=30.0)
+
+        if isinstance(res, dict):
+            if res.get("_is_binary"):
+                return Response(
+                    content=res["content"],
+                    media_type=res.get("content_type") or "application/octet-stream",
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Cache-Control": "public, max-age=86400"
+                    }
+                )
+            if res.get("url"):
+                return RedirectResponse(
+                    res["url"],
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Cache-Control": "public, max-age=86400"
+                    }
+                )
+            if res.get("data") and isinstance(res["data"], str):
+                base64_str = res["data"]
+                import base64
+                if "," in base64_str:
+                    header, base64_str = base64_str.split(",", 1)
+                    mime_type = header.split(";")[0].replace("data:", "") if "data:" in header else "application/octet-stream"
+                else:
+                    mime_type = res.get("mimeType") or res.get("mimetype") or "application/octet-stream"
+                
+                binary_data = base64.b64decode(base64_str)
+                return Response(
+                    content=binary_data,
+                    media_type=mime_type,
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Cache-Control": "public, max-age=86400"
+                    }
+                )
+    except Exception as e:
+        print(f"[CRM-MEDIA] Erro ao buscar mídia proxy para session={target_session}, msg={target_msg_id}: {e}", flush=True)
+
+    raise HTTPException(status_code=404, detail="Mídia não encontrada ou indisponível.")
+
 
 
 
