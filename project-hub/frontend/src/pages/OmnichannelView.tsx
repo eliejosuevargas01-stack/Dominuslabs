@@ -1612,10 +1612,30 @@ function playIncomingSound() {
                     const isPlaceholderText = ['[imagem]', '[video]', '[audio]', '[documento]', '[mídia]'].includes(rawContent.toLowerCase());
                     const mediaElement = renderMessageMedia(msg, selectedChat?.session_id, (url) => setLightboxUrl(url), isMe);
 
+                    const quotedText = msg.quoted_text || msg.quoted_content || msg.quotedMessage?.text || msg.context_info?.quotedMessage?.conversation || null;
+                    const quotedId = msg.quoted_message_id || msg.quoted_id || null;
+                    let quotedSender = msg.quoted_participant || msg.quoted_sender || null;
+
+                    if (quotedSender) {
+                      if (quotedSender === selectedChat?.contact_jid || quotedSender === selectedChat?.phone) {
+                        quotedSender = resolveContactName(selectedChat);
+                      } else if (msg.participant_pushname && (quotedSender === msg.contact_jid || quotedSender === msg.participant)) {
+                        quotedSender = msg.participant_pushname;
+                      } else if (quotedSender.includes('@')) {
+                        const matchedContact = contacts.find(c => c.contact_jid === quotedSender || c.phone === quotedSender.split('@')[0]);
+                        if (matchedContact) {
+                          quotedSender = matchedContact.name || matchedContact.pushname || matchedContact.phone;
+                        } else {
+                          quotedSender = quotedSender.split('@')[0];
+                        }
+                      }
+                    }
+
                     return (
                       <div
                         key={msg.message_id || index}
-                        className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-2`}
+                        id={`msg-${msg.message_id || index}`}
+                        className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-2 transition-all duration-300 rounded-2xl`}
                       >
                         <div
                           className={`max-w-[85%] md:max-w-[70%] p-3 rounded-2xl shadow-sm relative text-xs leading-relaxed ${
@@ -1628,6 +1648,37 @@ function playIncomingSound() {
                           {senderName && (
                             <div className={`text-[11px] mb-1 truncate select-none ${getSenderColor(senderName)}`}>
                               ~ {senderName}
+                            </div>
+                          )}
+
+                          {/* Quoted Message Reference Box */}
+                          {quotedText && (
+                            <div
+                              onClick={() => {
+                                if (quotedId) {
+                                  const el = document.getElementById(`msg-${quotedId}`);
+                                  if (el) {
+                                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    el.classList.add('ring-2', 'ring-purple-500', 'scale-[1.02]');
+                                    setTimeout(() => {
+                                      el.classList.remove('ring-2', 'ring-purple-500', 'scale-[1.02]');
+                                    }, 2000);
+                                  }
+                                }
+                              }}
+                              className={`mb-2 p-2 rounded-xl text-[11px] border-l-4 overflow-hidden select-none transition-all cursor-pointer ${
+                                isMe
+                                  ? 'bg-emerald-600/10 border-emerald-600 text-emerald-950 hover:bg-emerald-600/20'
+                                  : 'bg-purple-50 border-purple-600 text-purple-950 hover:bg-purple-100'
+                              }`}
+                              title={quotedId ? "Clique para ir até a mensagem original" : undefined}
+                            >
+                              <div className="font-bold text-[10px] text-purple-700 truncate mb-0.5 flex items-center justify-between">
+                                <span>{quotedSender || 'Mensagem respondida'}</span>
+                              </div>
+                              <div className="line-clamp-2 text-slate-700 font-medium italic opacity-90">
+                                "{quotedText}"
+                              </div>
                             </div>
                           )}
 
