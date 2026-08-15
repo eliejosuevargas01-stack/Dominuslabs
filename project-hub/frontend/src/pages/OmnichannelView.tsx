@@ -1339,7 +1339,7 @@ function playIncomingSound() {
         {/* ================================================================= */}
         {/* LEFT SIDEBAR: Conversations / Contacts List                      */}
         {/* ================================================================= */}
-        <div className={`w-full lg:w-80 xl:w-96 border-r border-slate-200/80 bg-slate-50/70 flex flex-col transition-all duration-300 ${
+        <div className={`w-full lg:w-80 xl:w-96 shrink-0 border-r border-slate-200/80 bg-slate-50/70 flex flex-col transition-all duration-300 ${
           mobileChatOpen ? 'hidden lg:flex' : 'flex'
         }`}>
           {/* Search Bar & Tabs */}
@@ -1539,7 +1539,7 @@ function playIncomingSound() {
         {/* ================================================================= */}
         {/* RIGHT MAIN PANEL: Active Chat Area (Action 3 get_chat_history)    */}
         {/* ================================================================= */}
-        <div className={`w-full lg:flex-1 flex flex-col bg-[#efeae2] relative ${
+        <div className={`w-full lg:flex-1 min-w-0 flex flex-col bg-[#efeae2] relative overflow-hidden ${
           !mobileChatOpen ? 'hidden lg:flex' : 'flex'
         }`}>
           {selectedChat ? (
@@ -1602,7 +1602,7 @@ function playIncomingSound() {
 
               {/* Chat Messages Area with WhatsApp Background Theme */}
               <div 
-                className="flex-1 overflow-y-auto p-4 space-y-3 relative"
+                className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 relative w-full min-w-0"
                 style={{
                   backgroundImage: `radial-gradient(#cbd5e1 0.75px, transparent 0.75px)`,
                   backgroundSize: '16px 16px',
@@ -1705,7 +1705,7 @@ function playIncomingSound() {
                         className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-2 transition-all duration-300 rounded-2xl`}
                       >
                         <div
-                          className={`max-w-[85%] md:max-w-[70%] p-3 rounded-2xl shadow-sm relative text-xs leading-relaxed ${
+                          className={`max-w-[85%] md:max-w-[70%] p-3 rounded-2xl shadow-sm relative text-xs leading-relaxed min-w-0 ${
                             isMe
                               ? 'bg-[#d9fdd3] text-slate-900 rounded-tr-none border border-emerald-200/50'
                               : 'bg-white text-slate-900 rounded-tl-none border border-slate-200/60'
@@ -1733,7 +1733,7 @@ function playIncomingSound() {
                                   }
                                 }
                               }}
-                              className={`mb-2 p-2 rounded-xl text-[11px] border-l-4 overflow-hidden select-none transition-all cursor-pointer ${
+                              className={`mb-2 p-2 rounded-xl text-[11px] border-l-4 overflow-hidden select-none transition-all cursor-pointer min-w-0 max-w-full ${
                                 isMe
                                   ? 'bg-emerald-600/10 border-emerald-600 text-emerald-950 hover:bg-emerald-600/20'
                                   : 'bg-purple-50 border-purple-600 text-purple-950 hover:bg-purple-100'
@@ -1743,7 +1743,7 @@ function playIncomingSound() {
                               <div className="font-bold text-[10px] text-purple-700 truncate mb-0.5 flex items-center justify-between">
                                 <span>{quotedSender || 'Mensagem respondida'}</span>
                               </div>
-                              <div className="line-clamp-2 text-slate-700 font-medium italic opacity-90">
+                              <div className="line-clamp-2 text-slate-700 font-medium italic opacity-90 break-words [word-break:break-word]">
                                 "{quotedText}"
                               </div>
                             </div>
@@ -1754,7 +1754,7 @@ function playIncomingSound() {
 
                           {/* Message Content / Caption */}
                           {(!isPlaceholderText || !mediaElement) && rawContent && (
-                            <div className="whitespace-pre-wrap break-words pr-12">
+                            <div className="whitespace-pre-wrap break-words [word-break:break-word] overflow-wrap-anywhere pr-12 min-w-0 max-w-full">
                               {rawContent}
                             </div>
                           )}
