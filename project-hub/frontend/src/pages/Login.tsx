@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginUser } from '../services/api';
 import { Lock, User, Loader2, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -37,9 +38,11 @@ export default function Login() {
         localStorage.setItem("whatsapp_token", data.whatsapp_token);
       }
       navigate('/project-hub');
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Credenciais inválidas. Tente novamente.');
+      toast.success('Login efetuado com sucesso!');
+    } catch (err: unknown) {
+      const errorMessage = (err as Error).message || 'Credenciais inválidas. Tente novamente.';
+      toast.error(errorMessage);
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
