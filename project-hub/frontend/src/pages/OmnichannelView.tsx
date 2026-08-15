@@ -590,10 +590,63 @@ export default function OmnichannelView() {
 
   // Real-time Voice Audio Recorder states
   const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
   const [recordingTime, setRecordingTime] = useState<number>(0);
+  const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
+  const [micVolumeBars, setMicVolumeBars] = useState<number[]>([20, 35, 50, 30, 65, 45, 80, 55, 35, 60, 40, 25]);
+  
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+
+  const startMicAnalyser = (stream: MediaStream) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const audioCtx = new AudioCtx();
+      audioContextRef.current = audioCtx;
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 64;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      const drawWave = () => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArray);
+        const bars: number[] = [];
+        const step = Math.floor(dataArray.length / 12);
+        for (let i = 0; i < 12; i++) {
+          const val = dataArray[i * step] || 0;
+          const height = Math.max(15, Math.min(100, Math.round((val / 255) * 100)));
+          bars.push(height);
+        }
+        setMicVolumeBars(bars);
+        animFrameRef.current = requestAnimationFrame(drawWave);
+      };
+
+      drawWave();
+    } catch (e) {}
+  };
+
+  const stopMicAnalyser = () => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+      } catch (e) {}
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+  };
 
   const startRecording = async () => {
     try {
@@ -608,9 +661,13 @@ export default function OmnichannelView() {
         }
       };
 
-      mediaRecorder.start();
+      mediaRecorder.start(100);
       setIsRecording(true);
+      setIsPaused(false);
+      setPreviewAudioUrl(null);
       setRecordingTime(0);
+
+      startMicAnalyser(stream);
 
       recordingTimerRef.current = setInterval(() => {
         setRecordingTime((prev) => prev + 1);
@@ -620,7 +677,41 @@ export default function OmnichannelView() {
     }
   };
 
+  const pauseRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.pause();
+      setIsPaused(true);
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      stopMicAnalyser();
+
+      if (audioChunksRef.current.length > 0) {
+        const previewBlob = new Blob(audioChunksRef.current, { type: 'audio/ogg; codecs=opus' });
+        if (previewBlob.size > 0) {
+          const url = URL.createObjectURL(previewBlob);
+          setPreviewAudioUrl(url);
+        }
+      }
+    }
+  };
+
+  const resumeRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'paused') {
+      mediaRecorderRef.current.resume();
+      setIsPaused(false);
+      setPreviewAudioUrl(null);
+
+      if (mediaRecorderRef.current.stream) {
+        startMicAnalyser(mediaRecorderRef.current.stream);
+      }
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+    }
+  };
+
   const cancelRecording = () => {
+    stopMicAnalyser();
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       const stream = mediaRecorderRef.current.stream;
@@ -632,7 +723,9 @@ export default function OmnichannelView() {
       clearInterval(recordingTimerRef.current);
     }
     setIsRecording(false);
+    setIsPaused(false);
     setRecordingTime(0);
+    setPreviewAudioUrl(null);
     audioChunksRef.current = [];
   };
 
@@ -651,9 +744,11 @@ export default function OmnichannelView() {
     if (recordingTimerRef.current) {
       clearInterval(recordingTimerRef.current);
     }
+    stopMicAnalyser();
 
     const recorder = mediaRecorderRef.current;
-    recorder.onstop = async () => {
+
+    const processAndSend = async () => {
       const stream = recorder.stream;
       if (stream) {
         stream.getTracks().forEach((track) => track.stop());
@@ -661,8 +756,7 @@ export default function OmnichannelView() {
 
       const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/ogg; codecs=opus' });
       if (audioBlob.size === 0) {
-        setIsRecording(false);
-        setRecordingTime(0);
+        cancelRecording();
         return;
       }
 
@@ -698,11 +792,18 @@ export default function OmnichannelView() {
       } finally {
         setUploadingMedia(false);
         setIsRecording(false);
+        setIsPaused(false);
         setRecordingTime(0);
+        setPreviewAudioUrl(null);
       }
     };
 
-    recorder.stop();
+    if (recorder.state === 'inactive') {
+      await processAndSend();
+    } else {
+      recorder.onstop = processAndSend;
+      recorder.stop();
+    }
   };
 
   const formatRecordingTime = (seconds: number) => {
@@ -1615,33 +1716,74 @@ function playIncomingSound() {
 
               {/* Bottom Message Input Bar */}
               {isRecording ? (
-                <div className="p-3 bg-white border-t border-slate-200 flex items-center justify-between gap-3 shadow-lg z-10 animate-fadeIn">
-                  <div className="flex items-center gap-3">
-                    <span className="relative flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                    </span>
-                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                      Gravando áudio... <span className="font-mono text-red-600 ml-1.5 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">{formatRecordingTime(recordingTime)}</span>
-                    </span>
-                  </div>
+                <div className="p-3 bg-white border-t border-slate-200 flex items-center justify-between gap-3 shadow-lg z-10 animate-fadeIn min-h-[64px]">
+                  {/* Left: Delete Trash Button */}
+                  <button
+                    type="button"
+                    onClick={cancelRecording}
+                    className="p-2.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+                    title="Descartar gravação (Esc)"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={cancelRecording}
-                      className="p-2.5 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                      title="Cancelar gravação (Esc)"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+                  {/* Center Content: Preview Player OR Live Recording Waveform */}
+                  {isPaused && previewAudioUrl ? (
+                    <div className="flex-1 max-w-md my-0">
+                      <CustomAudioPlayer src={previewAudioUrl} isOutgoing={true} />
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex items-center gap-3 bg-slate-50 px-3 py-2 rounded-2xl border border-slate-200/80">
+                      <span className="relative flex h-3 w-3 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                      </span>
+
+                      {/* Real-time Dynamic Waveform Spectrum */}
+                      <div className="flex-1 h-6 flex items-center gap-1 overflow-hidden">
+                        {micVolumeBars.map((h, i) => (
+                          <div
+                            key={i}
+                            style={{ height: `${h}%` }}
+                            className="w-1.5 bg-red-500/80 rounded-full transition-all duration-75"
+                          />
+                        ))}
+                      </div>
+
+                      <span className="font-mono text-xs font-bold text-red-600 bg-red-100/80 px-2.5 py-1 rounded-full border border-red-200/60 shrink-0 shadow-xs">
+                        {formatRecordingTime(recordingTime)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Right Actions: Pause / Resume & Send */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isPaused ? (
+                      <button
+                        type="button"
+                        onClick={resumeRecording}
+                        className="p-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all shadow-md flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95"
+                        title="Continuar gravando"
+                      >
+                        <Mic className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={pauseRecording}
+                        className="p-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold transition-all shadow-sm flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95"
+                        title="Pausar gravação e ouvir"
+                      >
+                        <Pause className="w-4 h-4" />
+                      </button>
+                    )}
 
                     <button
                       type="button"
                       onClick={stopAndSendRecording}
                       disabled={uploadingMedia}
                       className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-all shadow-md flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95"
-                      title="Enviar áudio"
+                      title="Enviar mensagem de voz"
                     >
                       {uploadingMedia ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                     </button>
