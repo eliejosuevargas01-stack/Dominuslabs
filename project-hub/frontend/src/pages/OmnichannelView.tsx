@@ -1211,9 +1211,55 @@ function playIncomingSound() {
     });
   }, [conversations, selectedSession, searchTerm]);
 
+  // Map of target_message_id -> aggregated reactions { emoji, count }
+  const reactionsMap = useMemo(() => {
+    const map: Record<string, { emoji: string; count: number }[]> = {};
+    for (const msg of chatMessages) {
+      if (!msg) continue;
+      const msgType = (msg.message_type || msg.type || msg.kind || '').toLowerCase();
+      const isReaction = msgType === 'reactionmessage' || msgType === 'reaction' || msgType === 'reaction_message' || !!msg.reactionMessage;
+      if (isReaction) {
+        const emoji = (msg.content || msg.message || msg.reactionMessage?.text || '👍').trim();
+        const targetId = msg.target_message_id || msg.reaction_target_id || msg.target_id || msg.quoted_message_id || msg.quoted_id || msg.reactionMessage?.key?.id;
+        if (targetId && emoji && emoji !== 'null' && emoji !== 'undefined') {
+          if (!map[targetId]) map[targetId] = [];
+          const existing = map[targetId].find(r => r.emoji === emoji);
+          if (existing) {
+            existing.count += 1;
+          } else {
+            map[targetId].push({ emoji, count: 1 });
+          }
+        }
+      }
+    }
+    return map;
+  }, [chatMessages]);
+
   // Messages in active chat window: FIFO (First In, First Out / Chronological: oldest top, newest bottom)
   const sortedMessages = useMemo(() => {
-    return [...chatMessages].sort((a, b) => {
+    // 1. Exclude reaction messages from rendering as standalone row items
+    const nonReactionMsgs = chatMessages.filter((msg: any) => {
+      if (!msg) return false;
+      const msgType = (msg.message_type || msg.type || msg.kind || '').toLowerCase();
+      if (['reactionmessage', 'reaction', 'reaction_message'].includes(msgType)) return false;
+      if (msg.reactionMessage || msg.is_reaction) return false;
+      return true;
+    });
+
+    // 2. Deduplicate messages by message_id
+    const seenIds = new Set<string>();
+    const deduplicated: any[] = [];
+    for (const msg of nonReactionMsgs) {
+      const id = msg.message_id || msg.id;
+      if (id && !String(id).startsWith('temp_')) {
+        if (seenIds.has(String(id))) continue;
+        seenIds.add(String(id));
+      }
+      deduplicated.push(msg);
+    }
+
+    // 3. Sort chronologically
+    return deduplicated.sort((a, b) => {
       const timeA = new Date(a.message_timestamp || a.timestamp || a.created_at || 0).getTime();
       const timeB = new Date(b.message_timestamp || b.timestamp || b.created_at || 0).getTime();
       return timeA - timeB;
@@ -1717,6 +1763,18 @@ function playIncomingSound() {
                               <CheckCheck className="w-3.5 h-3.5 text-sky-500 font-bold" />
                             )}
                           </div>
+
+                          {/* Attached Reactions Badge */}
+                          {msg.message_id && reactionsMap[msg.message_id] && reactionsMap[msg.message_id].length > 0 && (
+                            <div className={`absolute -bottom-2.5 ${isMe ? 'right-3' : 'left-3'} z-10 flex items-center gap-1 bg-white/95 backdrop-blur-md px-2 py-0.5 rounded-full shadow-md border border-slate-200 text-[11px] font-bold text-slate-700 select-none cursor-pointer hover:scale-105 transition-transform`}>
+                              {reactionsMap[msg.message_id].map((r, idx) => (
+                                <span key={idx} className="flex items-center gap-0.5">
+                                  <span>{r.emoji}</span>
+                                  {r.count > 1 && <span className="text-[10px] text-slate-500 font-semibold">{r.count}</span>}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
