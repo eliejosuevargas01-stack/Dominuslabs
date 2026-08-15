@@ -24,3 +24,7 @@ certs/
 *.crt
 *.key
 *.pem
+
+# Git worktrees / local test clones
+test-integration/
+

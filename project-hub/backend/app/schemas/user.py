@@ -5,10 +5,7 @@ from datetime import datetime
 class UserBase(BaseModel):
     email: str
     role: str = "custom"
-    can_create_projects: bool = False
-    can_edit_projects: bool = False
-    can_manage_crm: bool = True
-    can_use_scrapper: bool = True
+    permissions: str = "read"
     tenant_id: Optional[str] = None
     whatsapp_token: Optional[str] = None
 
@@ -19,10 +16,7 @@ class UserUpdate(BaseModel):
     email: Optional[str] = None
     password: Optional[str] = None
     role: Optional[str] = None
-    can_create_projects: Optional[bool] = None
-    can_edit_projects: Optional[bool] = None
-    can_manage_crm: Optional[bool] = None
-    can_use_scrapper: Optional[bool] = None
+    permissions: Optional[str] = None
 
 class UserResponse(UserBase):
     id: int

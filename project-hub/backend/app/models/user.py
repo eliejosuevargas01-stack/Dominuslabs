@@ -11,11 +11,8 @@ class User(Base):
     tenant_id = Column(String, index=True, nullable=True)
     role = Column(String, default="custom", nullable=False)  # "admin" or "custom"
     
-    # Permission flags
-    can_create_projects = Column(Boolean, default=False, nullable=False)
-    can_edit_projects = Column(Boolean, default=False, nullable=False)
-    can_manage_crm = Column(Boolean, default=True, nullable=False)
-    can_use_scrapper = Column(Boolean, default=True, nullable=False)
+    # Permissions string (e.g., "read,write,update,delete")
+    permissions = Column(String, default="read", nullable=False)
     
     whatsapp_token = Column(String, unique=True, nullable=True)
     preferred_session_id = Column(String, nullable=True)

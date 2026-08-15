@@ -11,6 +11,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from app.main import app
 from app.core.database import Base, get_db
+from app.core.limiter import limiter
+
+# Disable rate limiting for pytest suite
+limiter.enabled = False
 
 # Create an in-memory SQLite database for testing
 SQLALCHEMY_DATABASE_URL = "sqlite://"
@@ -42,10 +46,7 @@ def db():
             email=admin_email,
             hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
             role="admin",
-            can_create_projects=True,
-            can_edit_projects=True,
-            can_manage_crm=True,
-            can_use_scrapper=True
+            permissions="read,write,update,delete"
         )
         seed_session.add(admin_user)
         
@@ -57,10 +58,7 @@ def db():
             email=viewer_email,
             hashed_password=get_password_hash(settings.VIEWER_PASSWORD),
             role="custom",
-            can_create_projects=True,
-            can_edit_projects=False,
-            can_manage_crm=True,
-            can_use_scrapper=True
+            permissions="read,write"
         )
         seed_session.add(viewer_user)
         seed_session.commit()

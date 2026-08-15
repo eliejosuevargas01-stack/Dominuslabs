@@ -52,17 +52,10 @@ def test_crm_endpoints(client):
         "message": "Olá, esta é uma mensagem de teste!",
         "session_id": "test_session"
     }
-    from unittest.mock import patch
-    with patch("httpx.AsyncClient.post") as mock_post, \
-         patch("app.api.endpoints.crm.get_oauth_token", return_value="mock_token") as mock_get_token:
-        class MockResponse:
-            status_code = 200
-            def json(self):
-                return {"status": "success", "message": "Message sent"}
-            @property
-            def text(self):
-                return '{"status": "success", "message": "Message sent"}'
-        mock_post.return_value = MockResponse()
+    from unittest.mock import patch, AsyncMock
+    with patch("app.services.whatsapp_service.get_m2m_jwt", new_callable=AsyncMock, return_value="mock_jwt_token"), \
+         patch("app.api.endpoints.whatsapp.make_whatsapp_api_request", new_callable=AsyncMock) as mock_wa_req:
+        mock_wa_req.return_value = {"status": "success", "message": {"id": "msg_test_123"}}
 
         res = client.post("/api/v1/crm/messages/send", json=send_payload, headers=headers)
         assert res.status_code == 200
@@ -70,24 +63,11 @@ def test_crm_endpoints(client):
         assert msg_sent["sender"] == "user"
         assert msg_sent["message"] == "Olá, esta é uma mensagem de teste!"
 
-        # Verify webhook payload sent to N8N contains who updated/sent it
-        mock_post.assert_called_once()
-        called_args, called_kwargs = mock_post.call_args
-        sent_json = called_kwargs["json"]
-        assert sent_json["updated_by"] == expected_email
-        assert sent_json["alterado_por"] == expected_email
-
     # Test send whatsapp message (Failure propagation)
-    with patch("httpx.AsyncClient.post") as mock_post, \
-         patch("app.api.endpoints.crm.get_oauth_token", return_value="mock_token") as mock_get_token:
-        class MockFailedResponse:
-            status_code = 400
-            def json(self):
-                return {"error": "bad_request", "message": "O numero informado nao esta registrado no WhatsApp."}
-            @property
-            def text(self):
-                return '{"error": "bad_request", "message": "O numero informado nao esta registrado no WhatsApp."}'
-        mock_post.return_value = MockFailedResponse()
+    with patch("app.services.whatsapp_service.get_m2m_jwt", new_callable=AsyncMock, return_value="mock_jwt_token"), \
+         patch("app.api.endpoints.whatsapp.make_whatsapp_api_request", new_callable=AsyncMock) as mock_wa_req:
+        from fastapi import HTTPException
+        mock_wa_req.side_effect = HTTPException(status_code=400, detail="O numero informado nao esta registrado no WhatsApp.")
 
         res = client.post("/api/v1/crm/messages/send", json=send_payload, headers=headers)
         assert res.status_code == 400

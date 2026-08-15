@@ -21,8 +21,8 @@ def base64url_decode(data: str) -> bytes:
     padding = '=' * (4 - (len(data) % 4))
     return base64.urlsafe_b64decode(data + padding)
 
-def create_access_token(data: dict, expires_in: int = 2592000) -> str:
-    """Create JWT token valid for 30 days by default"""
+def create_access_token(data: dict, expires_in: int = 3600) -> str:
+    """Create JWT token valid for 1 hour by default"""
     header = {"alg": "HS256", "typ": "JWT"}
     payload = data.copy()
     payload["exp"] = int(time.time()) + expires_in
@@ -103,7 +103,17 @@ def check_admin_role(credentials: HTTPAuthorizationCredentials = Security(securi
         )
     return email
 
-def check_project_create_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+def user_has_permission(user: User, required_perm: str) -> bool:
+    if not user:
+        return False
+    if user.role == "admin":
+        return True
+    if not user.permissions:
+        return False
+    perms = [p.strip().lower() for p in user.permissions.split(",")]
+    return required_perm.lower() in perms or "*" in perms
+
+def check_permission(required_perm: str, credentials: HTTPAuthorizationCredentials, db: Session) -> str:
     token = credentials.credentials
     payload = decode_access_token(token)
     if not payload:
@@ -112,45 +122,34 @@ def check_project_create_permission(credentials: HTTPAuthorizationCredentials = 
     user = db.query(User).filter(User.email == email).first()
     if not user:
         raise HTTPException(status_code=403, detail="Usuário não encontrado.")
-    if user.role != "admin" and not user.can_create_projects:
-        raise HTTPException(status_code=403, detail="Acesso negado: você não tem permissão para criar projetos.")
+    if not user_has_permission(user, required_perm):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Acesso negado: você não possui a permissão '{required_perm}' necessária."
+        )
     return email
+
+def check_read_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+    return check_permission("read", credentials, db)
+
+def check_write_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+    return check_permission("write", credentials, db)
+
+def check_update_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+    return check_permission("update", credentials, db)
+
+def check_delete_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+    return check_permission("delete", credentials, db)
+
+# Compatibility aliases for existing endpoint dependencies
+def check_project_create_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+    return check_write_permission(credentials, db)
 
 def check_project_edit_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
-    token = credentials.credentials
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
-    email = payload.get("sub", "")
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        raise HTTPException(status_code=403, detail="Usuário não encontrado.")
-    if user.role != "admin" and not user.can_edit_projects:
-        raise HTTPException(status_code=403, detail="Acesso negado: você não tem permissão para gerenciar/editar projetos.")
-    return email
+    return check_update_permission(credentials, db)
 
 def check_crm_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
-    token = credentials.credentials
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
-    email = payload.get("sub", "")
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        raise HTTPException(status_code=403, detail="Usuário não encontrado.")
-    if user.role != "admin" and not user.can_manage_crm:
-        raise HTTPException(status_code=403, detail="Acesso negado: você não tem permissão para gerenciar o CRM.")
-    return email
+    return check_read_permission(credentials, db)
 
 def check_scrapper_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
-    token = credentials.credentials
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
-    email = payload.get("sub", "")
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        raise HTTPException(status_code=403, detail="Usuário não encontrado.")
-    if user.role != "admin" and not user.can_use_scrapper:
-        raise HTTPException(status_code=403, detail="Acesso negado: você não tem permissão para usar o Scrapper.")
-    return email
+    return check_write_permission(credentials, db)

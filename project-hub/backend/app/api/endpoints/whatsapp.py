@@ -7,10 +7,11 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.auth import get_current_user, check_crm_permission
 from app.models.user import User
+from app.core.mtls_client import get_mtls_async_client
 
 router = APIRouter()
 
-async def get_user_token(email: str, db: Session, scope: str = "whatsapp:messages:send whatsapp:sessions:read whatsapp:sessions:write") -> str:
+async def get_user_token(email: str, db: Session, scope: str = "whatsapp:sessions:read") -> str:
     user = db.query(User).filter(User.email == email).first()
     if not user:
         raise HTTPException(
@@ -81,7 +82,6 @@ async def make_whatsapp_api_request(
         if "Authorization" not in req_headers and token:
             req_headers["Authorization"] = f"Bearer {token}"
 
-    from app.core.mtls_client import get_mtls_async_client
     async with get_mtls_async_client(timeout=timeout, service_name="whatsapp") as client:
         try:
             response = await client.request(
@@ -162,20 +162,12 @@ async def list_sessions(
     """
     List all sessions (WhatsApp and Instagram) belonging to the authenticated user.
     """
-    try:
-        token = await get_user_token(current_user, db)
-        return await make_whatsapp_api_request(
-            "GET",
-            "/api/sessions",
-            headers={"x-session-token": token}
-        )
-    except HTTPException as he:
-        if he.status_code in (412, 502, 503):
-            return []
-        raise he
-    except Exception as e:
-        print(f"[WA-SESSIONS] Erro em list_sessions: {e}", flush=True)
-        return []
+    token = await get_user_token(current_user, db)
+    return await make_whatsapp_api_request(
+        "GET",
+        "/api/sessions",
+        headers={"x-session-token": token}
+    )
 
 @router.post("/sessions")
 async def create_session(

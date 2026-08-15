@@ -72,7 +72,7 @@ async def check_token_validity(token: str) -> bool:
         return False
 
 
-async def get_oauth_token(user: User, db: Session, scope: str = "whatsapp:messages:send whatsapp:sessions:read whatsapp:sessions:write") -> str:
+async def get_oauth_token(user: User, db: Session, scope: str = "whatsapp:sessions:read") -> str:
     """
     Obtém o JWT M2M do Identity Worker para o tenant do usuário.
     """
@@ -101,12 +101,7 @@ async def send_whatsapp_message(
     scope = "whatsapp:messages:send"
     jwt_token = await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
 
-    target_session = session_id or user.preferred_session_id
-    if not target_session:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Sessão do WhatsApp não especificada."
-        )
+    target_session = session_id or user.preferred_session_id or "default"
 
     from app.api.endpoints.whatsapp import make_whatsapp_api_request
     clean_path = f"/api/sessions/{target_session}/messages/send"

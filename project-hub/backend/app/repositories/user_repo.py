@@ -22,10 +22,7 @@ class UserRepository:
             hashed_password=get_password_hash(obj_in.password),
             tenant_id=tenant_id,
             role=obj_in.role,
-            can_create_projects=obj_in.can_create_projects,
-            can_edit_projects=obj_in.can_edit_projects,
-            can_manage_crm=obj_in.can_manage_crm,
-            can_use_scrapper=obj_in.can_use_scrapper
+            permissions=obj_in.permissions
         )
         db.add(db_obj)
         db.commit()
