@@ -27,13 +27,16 @@ async def notify_lead_listeners(lead_id: str, event: str = "reload"):
         for user_email, queue in list(lead_listeners[lead_id]):
             await queue.put(event)
 
-async def notify_crm_chat_listeners(lead_id: str, is_from_me: bool = False, sender: str = "lead"):
+async def notify_crm_chat_listeners(lead_id: str, is_from_me: bool = False, sender: str = "lead", messages: Optional[List[Dict[str, Any]]] = None):
     import json
     payload = json.dumps({
         "lead_id": lead_id,
+        "contact_jid": lead_id,
         "is_from_me": is_from_me,
         "sender": sender,
-        "event": "reload"
+        "action": "new_message",
+        "event": "new_message",
+        "messages": messages or []
     })
     for user_email, queue in list(crm_chat_listeners):
         await queue.put(payload)
@@ -115,40 +118,46 @@ async def update_chat_webhook_post(
     is_from_me: Optional[bool] = None,
     sender: Optional[str] = None
 ):
+    messages_list = []
+    try:
+        raw_body = await request.json()
+        if isinstance(raw_body, list):
+            messages_list = raw_body
+        elif isinstance(raw_body, dict):
+            if "messages" in raw_body and isinstance(raw_body["messages"], list):
+                messages_list = raw_body["messages"]
+            elif "mensagens" in raw_body and isinstance(raw_body["mensagens"], list):
+                messages_list = raw_body["mensagens"]
+            else:
+                messages_list = [raw_body]
+    except Exception:
+        pass
+
     resolved_lead_id = lead_id or id or jid or phone
     explicit_from_me = is_from_me
     explicit_sender = sender
 
-    if not resolved_lead_id:
-        try:
-            body = await request.json()
-            if isinstance(body, dict):
-                resolved_lead_id = body.get("lead_id") or body.get("id") or body.get("jid") or body.get("phone")
-                if explicit_from_me is None:
-                    explicit_from_me = body.get("is_from_me") or body.get("from_me") or body.get("isFromMe")
-                if explicit_sender is None:
-                    explicit_sender = body.get("sender")
-        except Exception:
-            pass
-            
+    if not resolved_lead_id and messages_list:
+        first_msg = messages_list[0]
+        if isinstance(first_msg, dict):
+            resolved_lead_id = first_msg.get("contact_jid") or first_msg.get("lead_id") or first_msg.get("jid") or first_msg.get("phone")
+            if explicit_from_me is None:
+                explicit_from_me = first_msg.get("is_from_me") or first_msg.get("from_me") or first_msg.get("isFromMe")
+            if explicit_sender is None:
+                explicit_sender = first_msg.get("sender")
+
     if not resolved_lead_id:
         raise HTTPException(status_code=400, detail="Missing lead_id, jid, or phone parameter")
     
     from app.services.n8n_service import n8n_service
     n8n_service.invalidate_leads_cache()
-    
-    # 1. Trigger request to get_conversations (Action 2) to refresh preview list
-    try:
-        await n8n_service.get_conversations()
-    except Exception as e:
-        print(f"[UPDATE-CHAT] Aviso ao buscar conversas: {e}", flush=True)
 
     final_is_from_me = explicit_from_me if explicit_from_me is not None else False
     final_sender = explicit_sender or ("user" if final_is_from_me else "lead")
 
-    # 2. Notify real-time listeners to reload chat on frontend UI
+    # Broadcast message payload directly via SSE to connected clients (No GET get_chat_history call)
     await notify_lead_listeners(resolved_lead_id, "reload")
-    await notify_crm_chat_listeners(resolved_lead_id, is_from_me=final_is_from_me, sender=final_sender)
+    await notify_crm_chat_listeners(resolved_lead_id, is_from_me=final_is_from_me, sender=final_sender, messages=messages_list)
     
     notified_count = len(lead_listeners.get(resolved_lead_id, [])) + len(crm_chat_listeners)
     return {
@@ -156,6 +165,7 @@ async def update_chat_webhook_post(
         "lead_id": resolved_lead_id,
         "is_from_me": final_is_from_me,
         "sender": final_sender,
+        "messages_received": len(messages_list),
         "notified_sessions": notified_count,
         "active_clients_connected": len(crm_chat_listeners)
     }
@@ -175,19 +185,12 @@ async def update_chat_webhook_get(
         
     from app.services.n8n_service import n8n_service
     n8n_service.invalidate_leads_cache()
-    
-    # 1. Trigger request to get_conversations (Action 2) to refresh preview list
-    try:
-        await n8n_service.get_conversations()
-    except Exception as e:
-        print(f"[UPDATE-CHAT] Aviso ao buscar conversas: {e}", flush=True)
 
     final_is_from_me = is_from_me if is_from_me is not None else False
     final_sender = sender or ("user" if final_is_from_me else "lead")
 
-    # 2. Notify real-time listeners to reload chat on frontend UI
     await notify_lead_listeners(resolved_lead_id, "reload")
-    await notify_crm_chat_listeners(resolved_lead_id, is_from_me=final_is_from_me, sender=final_sender)
+    await notify_crm_chat_listeners(resolved_lead_id, is_from_me=final_is_from_me, sender=final_sender, messages=[])
     
     notified_count = len(lead_listeners.get(resolved_lead_id, [])) + len(crm_chat_listeners)
     return {
