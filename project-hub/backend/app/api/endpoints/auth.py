@@ -46,9 +46,11 @@ async def _provision_whatsapp_client(user: User, db: Session) -> None:
         async with httpx.AsyncClient(timeout=20.0) as client:
             logger.info(f"[WA-PROVISION] Provisionando cliente para {user.email}...")
             print(f"\n[M2M-AUTH-FLOW] >>> Enviando solicitação de provisionamento M2M para a WhatsApp API: email={user.email}", flush=True)
+            headers = {"X-Master-API-Key": settings.WHATSAPP_MASTER_SECRET} if getattr(settings, "WHATSAPP_MASTER_SECRET", None) else {}
             resp = await client.post(
                 provision_url,
                 json={"email": user.email, "password": user.hashed_password},
+                headers=headers
             )
 
             if resp.status_code == 409:
@@ -113,15 +115,18 @@ async def _maybe_provision(user: User, db: Session) -> None:
     Só chama o provisionamento se o usuário ainda não tiver
     credenciais na tabela whatsapp_accounts.
     """
-    existing = db.query(WhatsappAccount).filter(
-        WhatsappAccount.user_id == user.id
-    ).first()
+    try:
+        existing = db.query(WhatsappAccount).filter(
+            WhatsappAccount.user_id == user.id
+        ).first()
 
-    if existing:
-        logger.debug(f"[WA-PROVISION] {user.email} já tem credenciais — pulando provisão.")
-        return
+        if existing:
+            logger.debug(f"[WA-PROVISION] {user.email} já tem credenciais — pulando provisão.")
+            return
 
-    await _provision_whatsapp_client(user, db)
+        await _provision_whatsapp_client(user, db)
+    except Exception as e:
+        logger.error(f"[WA-PROVISION] Erro inesperado ao tentar provisionar no background para {user.email}: {e}")
 
 
 # ---------------------------------------------------------------------------
