@@ -451,7 +451,10 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
                 "profile_pic_url": profile_pic_url,
                 "channel": lead_channel,
                 "timestamp": ts,
-                "status": m.get("status") or msg.get("status", "received")
+                "status": m.get("status") or msg.get("status", "received"),
+                "quoted_message_id": m.get("quoted_message_id") or m.get("quoted_id") or m.get("quotedId") or None,
+                "quoted_participant": m.get("quoted_participant") or m.get("quoted_sender") or m.get("quotedParticipant") or None,
+                "quoted_text": m.get("quoted_text") or m.get("quoted_content") or m.get("quotedText") or None,
             })
         return mapped
 
@@ -494,7 +497,10 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             "profile_pic_url": profile_pic_url,
             "channel": lead_channel,
             "timestamp": ts,
-            "status": msg.get("status", "received")
+            "status": msg.get("status", "received"),
+            "quoted_message_id": msg.get("quoted_message_id") or msg.get("quoted_id") or msg.get("quotedId") or None,
+            "quoted_participant": msg.get("quoted_participant") or msg.get("quoted_sender") or msg.get("quotedParticipant") or None,
+            "quoted_text": msg.get("quoted_text") or msg.get("quoted_content") or msg.get("quotedText") or None,
         })
         return mapped
 
@@ -1236,7 +1242,13 @@ class N8NService:
                 "status": m.get("status") or "received",
                 "message_timestamp": ts_iso,
                 "timestamp": ts_iso,
-                "created_at": ts_iso
+                "created_at": ts_iso,
+                "media_url": m.get("media_url") or m.get("image_url") or m.get("url") or m.get("file_url") or None,
+                "participant": m.get("participant") or m.get("participant_jid") or None,
+                "participant_pushname": m.get("participant_pushname") or m.get("participant_push_name") or m.get("push_name") or None,
+                "quoted_message_id": m.get("quoted_message_id") or m.get("quoted_id") or m.get("quotedId") or None,
+                "quoted_participant": m.get("quoted_participant") or m.get("quoted_sender") or m.get("quotedParticipant") or None,
+                "quoted_text": m.get("quoted_text") or m.get("quoted_content") or m.get("quotedText") or None,
             })
 
         return [
