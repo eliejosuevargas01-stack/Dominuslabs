@@ -591,11 +591,49 @@ export default function ConnectionsView() {
         </div>
       </div>
 
-      {/* Grid List */}
+      {/* Grid List or Error View */}
       {loading && sessions.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[300px] glass-card">
           <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
           <p className="text-sm text-slate-400 mt-2 font-medium">Buscando conexões ativas...</p>
+        </div>
+      ) : error && sessions.length === 0 ? (
+        <div className="glass-card p-8 bg-gradient-to-br from-rose-50/90 via-white/80 to-amber-50/50 border border-rose-200/80 shadow-lg relative overflow-hidden text-center flex flex-col items-center justify-center min-h-[280px]">
+          <div className="w-16 h-16 rounded-2xl bg-rose-100/80 text-rose-600 flex items-center justify-center mb-4 shadow-inner ring-4 ring-rose-50">
+            <WifiOff className="w-8 h-8 animate-bounce" />
+          </div>
+          
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-100/80 text-rose-700 text-[10px] font-black uppercase tracking-wider mb-2 border border-rose-200">
+            <ShieldAlert className="w-3.5 h-3.5" />
+            Serviço de Comunicação Inativo
+          </div>
+
+          <h3 className="text-lg font-black text-slate-800 tracking-tight">
+            Não foi possível carregar as conexões
+          </h3>
+
+          <p className="text-xs text-rose-700/90 font-medium mt-1.5 max-w-md bg-white/60 p-3 rounded-xl border border-rose-100 font-mono">
+            {error}
+          </p>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 mt-5">
+            <button
+              onClick={loadSessions}
+              className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer hover:scale-105 active:scale-95"
+            >
+              <Loader2 className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              Tentar Novamente
+            </button>
+
+            <button
+              onClick={handleProvisionCredentials}
+              disabled={credProvisioning}
+              className="flex items-center gap-2 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:scale-105 active:scale-95 px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-60"
+            >
+              {credProvisioning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+              {credProvisioning ? 'Vinculando...' : 'Vincular com Whats API'}
+            </button>
+          </div>
         </div>
       ) : sessions.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[260px] glass-card text-center p-6 border-dashed border-2 border-violet-100">

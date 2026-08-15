@@ -198,8 +198,8 @@ export function schedulePreventiveTokenRefresh() {
     return;
   }
 
-  // Agenda disparo preventivo exatamente 1s antes do token expirar
-  const leadTimeSeconds = 1;
+  // Agenda disparo preventivo 60s antes do token expirar para garantir resiliência
+  const leadTimeSeconds = 60;
   const targetDelaySec = Math.max(secondsRemaining - leadTimeSeconds, 1);
   const delayMs = targetDelaySec * 1000;
 

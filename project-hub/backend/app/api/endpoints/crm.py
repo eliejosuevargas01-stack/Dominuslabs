@@ -121,6 +121,7 @@ async def get_conversations_action(
     return result
 
 @router.get("/chat-history/{contact_jid}")
+@router.get("/conversations/{contact_jid}")
 async def get_chat_history_action(
     contact_jid: str,
     session_id: Optional[str] = None,

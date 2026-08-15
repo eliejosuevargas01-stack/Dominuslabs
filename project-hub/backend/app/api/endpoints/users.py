@@ -108,10 +108,7 @@ def anonymize_my_data(
     user.access_token = None
     user.refresh_token = None
     user.role = "anonymized"
-    user.can_create_projects = False
-    user.can_edit_projects = False
-    user.can_manage_crm = False
-    user.can_use_scrapper = False
+    user.permissions = ""
     user.preferred_session_id = None
 
     db.commit()

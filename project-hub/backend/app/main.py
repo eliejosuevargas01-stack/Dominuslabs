@@ -52,10 +52,15 @@ if "sqlite" in db_type:
             if "token_expires_at" not in columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN token_expires_at DATETIME;"))
             
+            if "preferred_session_id" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN preferred_session_id VARCHAR(255);"))
+            if "permissions" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN permissions VARCHAR(255) DEFAULT 'read';"))
+            
             wa_columns = [c["name"] for c in inspector.get_columns("whatsapp_accounts")] if inspector.has_table("whatsapp_accounts") else []
             if "tenant_id" not in wa_columns and inspector.has_table("whatsapp_accounts"):
                 conn.execute(text("ALTER TABLE whatsapp_accounts ADD COLUMN tenant_id VARCHAR(255);"))
-        print("SQLite migration: users and whatsapp_accounts tenant_id columns checked/added successfully.")
+        print("SQLite migration: users and whatsapp_accounts tenant_id/permissions columns checked/added successfully.")
     except Exception as e:
         print(f"SQLite migration warning: {e}")
 else:
@@ -63,6 +68,12 @@ else:
     ddl_statements = [
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_token VARCHAR(255);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_session_id VARCHAR(255);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions VARCHAR(255) DEFAULT 'read';",
+        "ALTER TABLE users ALTER COLUMN can_create_projects DROP NOT NULL;",
+        "ALTER TABLE users ALTER COLUMN can_edit_projects DROP NOT NULL;",
+        "ALTER TABLE users ALTER COLUMN can_manage_crm DROP NOT NULL;",
+        "ALTER TABLE users ALTER COLUMN can_use_scrapper DROP NOT NULL;",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS access_token TEXT;",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token TEXT;",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_issued_at TIMESTAMP;",
@@ -96,10 +107,7 @@ def seed_database_users():
                 email=admin_email,
                 hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
                 role="admin",
-                can_create_projects=True,
-                can_edit_projects=True,
-                can_manage_crm=True,
-                can_use_scrapper=True,
+                permissions="read,write,update,delete",
                 whatsapp_token=f"wa_tok_{secrets.token_hex(16)}"
             )
             db.add(admin_user)
@@ -118,10 +126,7 @@ def seed_database_users():
                 email=viewer_email,
                 hashed_password=get_password_hash(settings.VIEWER_PASSWORD),
                 role="custom",
-                can_create_projects=True,
-                can_edit_projects=False,
-                can_manage_crm=True,
-                can_use_scrapper=True,
+                permissions="read,write",
                 whatsapp_token=f"wa_tok_{secrets.token_hex(16)}"
             )
             db.add(viewer_user)

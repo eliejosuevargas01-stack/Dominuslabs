@@ -13,7 +13,7 @@ export default defineConfig({
     allowedHosts: ['ayanna-serpentiform-earnest.ngrok-free.dev', '.ngrok-free.dev', 'localhost', '127.0.0.1'],
     proxy: {
       '/api': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:8005',
         changeOrigin: true,
       }
     }
