@@ -503,6 +503,15 @@ export default function OmnichannelView() {
     audioChunksRef.current = [];
   };
 
+  const blobToBase64 = (blob: Blob | File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(blob);
+    });
+  };
+
   const stopAndSendRecording = async () => {
     if (!mediaRecorderRef.current || !selectedChat) return;
 
@@ -524,19 +533,20 @@ export default function OmnichannelView() {
         return;
       }
 
-      const audioFile = new File([audioBlob], `voice_${Date.now()}.ogg`, { type: 'audio/ogg' });
-
       setUploadingMedia(true);
       try {
-        const formData = new FormData();
-        formData.append('file', audioFile);
-        formData.append('contact_jid', selectedChat.contact_jid);
-        if (selectedChat.session_id) {
-          formData.append('session_id', selectedChat.session_id);
-        }
-        formData.append('media_type', 'audio');
+        const base64Data = await blobToBase64(audioBlob);
 
-        await sendOmnichannelMedia(formData);
+        await sendOmnichannelMedia({
+          contact_jid: selectedChat.contact_jid,
+          session_id: selectedChat.session_id,
+          media: {
+            kind: 'audio',
+            mimeType: 'audio/ogg; codecs=opus',
+            fileName: `voice_${Date.now()}.ogg`,
+            data: base64Data
+          }
+        });
 
         const res: any = await fetchChatHistory(selectedChat.contact_jid, selectedChat.session_id);
         let msgsList: any[] = [];
@@ -604,15 +614,21 @@ export default function OmnichannelView() {
 
     setUploadingMedia(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('contact_jid', selectedChat.contact_jid);
-      if (selectedChat.session_id) {
-        formData.append('session_id', selectedChat.session_id);
-      }
-      formData.append('media_type', selectedMediaType);
+      const base64Data = await blobToBase64(file);
 
-      await sendOmnichannelMedia(formData);
+      await sendOmnichannelMedia({
+        contact_jid: selectedChat.contact_jid,
+        session_id: selectedChat.session_id,
+        text: messageInput.trim() || undefined,
+        media: {
+          kind: selectedMediaType,
+          mimeType: file.type || undefined,
+          fileName: file.name,
+          data: base64Data
+        }
+      });
+
+      setMessageInput('');
 
       // Instantly refresh history for active chat
       const res: any = await fetchChatHistory(selectedChat.contact_jid, selectedChat.session_id);
