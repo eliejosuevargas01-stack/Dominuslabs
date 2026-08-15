@@ -29,9 +29,22 @@ async def notify_lead_listeners(lead_id: str, event: str = "reload"):
 
 async def notify_crm_chat_listeners(lead_id: str, is_from_me: bool = False, sender: str = "lead", messages: Optional[List[Dict[str, Any]]] = None):
     import json
+    all_jids = [lead_id] if lead_id and "{{" not in lead_id and "$" not in lead_id else []
+    if messages:
+        for msg in messages:
+            if isinstance(msg, dict):
+                for k in ["contact_jid", "chat_jid", "group_jid", "remoteJid", "lead_id", "jid", "phone", "participant"]:
+                    val = msg.get(k)
+                    if val and isinstance(val, str) and "{{" not in val and "$" not in val:
+                        if val not in all_jids:
+                            all_jids.append(val)
+
+    primary_jid = all_jids[0] if all_jids else lead_id
+
     payload = json.dumps({
-        "lead_id": lead_id,
-        "contact_jid": lead_id,
+        "lead_id": primary_jid,
+        "contact_jid": primary_jid,
+        "all_jids": all_jids,
         "is_from_me": is_from_me,
         "sender": sender,
         "action": "new_message",
@@ -133,17 +146,26 @@ async def update_chat_webhook_post(
     except Exception:
         pass
 
-    body_jid = None
-    if messages_list and isinstance(messages_list[0], dict):
-        first_msg = messages_list[0]
-        body_jid = first_msg.get("contact_jid") or first_msg.get("lead_id") or first_msg.get("jid") or first_msg.get("phone")
-        if explicit_from_me is None:
-            explicit_from_me = first_msg.get("is_from_me") if first_msg.get("is_from_me") is not None else first_msg.get("from_me")
-        if explicit_sender is None:
-            explicit_sender = first_msg.get("sender")
+    explicit_from_me = is_from_me
+    explicit_sender = sender
+
+    body_jids = []
+    if messages_list:
+        for msg in messages_list:
+            if isinstance(msg, dict):
+                if explicit_from_me is None:
+                    explicit_from_me = msg.get("is_from_me") if msg.get("is_from_me") is not None else msg.get("from_me")
+                if explicit_sender is None:
+                    explicit_sender = msg.get("sender")
+
+                for k in ["contact_jid", "chat_jid", "group_jid", "remoteJid", "lead_id", "jid", "phone", "participant"]:
+                    val = msg.get(k)
+                    if val and isinstance(val, str) and "{{" not in val and "$" not in val:
+                        if val not in body_jids:
+                            body_jids.append(val)
 
     cleaned_query_lead = lead_id if (lead_id and "{{" not in lead_id and "$" not in lead_id) else None
-    resolved_lead_id = body_jid or cleaned_query_lead or lead_id or id or jid or phone
+    resolved_lead_id = (body_jids[0] if body_jids else None) or cleaned_query_lead or lead_id or id or jid or phone
 
     if not resolved_lead_id:
         raise HTTPException(status_code=400, detail="Missing lead_id, jid, or phone parameter")

@@ -946,7 +946,7 @@ function playIncomingSound() {
       eventSource.onmessage = (event) => {
         if (!event.data || event.data.startsWith(':')) return;
         try {
-          let notifiedJid = '';
+          let notifiedJids: string[] = [];
           let isFromMe = false;
           let newMsgs: any[] = [];
 
@@ -958,28 +958,45 @@ function playIncomingSound() {
               newMsgs = [parsed.message];
             }
 
-            const firstMsgJid = newMsgs[0]?.contact_jid || newMsgs[0]?.lead_id || newMsgs[0]?.jid || newMsgs[0]?.phone;
-            const validParsedJid = (parsed.lead_id && !parsed.lead_id.includes('{{')) ? parsed.lead_id : (parsed.contact_jid && !parsed.contact_jid.includes('{{')) ? parsed.contact_jid : null;
+            if (Array.isArray(parsed.all_jids)) {
+              for (const j of parsed.all_jids) {
+                if (j && typeof j === 'string' && !j.includes('{{') && !notifiedJids.includes(j)) {
+                  notifiedJids.push(j);
+                }
+              }
+            }
+            if (parsed.lead_id && typeof parsed.lead_id === 'string' && !parsed.lead_id.includes('{{') && !notifiedJids.includes(parsed.lead_id)) {
+              notifiedJids.push(parsed.lead_id);
+            }
+            if (parsed.contact_jid && typeof parsed.contact_jid === 'string' && !parsed.contact_jid.includes('{{') && !notifiedJids.includes(parsed.contact_jid)) {
+              notifiedJids.push(parsed.contact_jid);
+            }
 
-            notifiedJid = firstMsgJid || validParsedJid || parsed.lead_id || parsed.contact_jid || parsed.jid || '';
+            for (const msg of newMsgs) {
+              if (!msg) continue;
+              for (const k of ['contact_jid', 'chat_jid', 'group_jid', 'remoteJid', 'lead_id', 'jid', 'phone']) {
+                const val = msg[k];
+                if (val && typeof val === 'string' && !val.includes('{{') && !notifiedJids.includes(val)) {
+                  notifiedJids.push(val);
+                }
+              }
+            }
+
             if (parsed.is_from_me === true || parsed.from_me === true || parsed.sender === 'user' || parsed.sender === 'me') {
               isFromMe = true;
             }
           }
 
-          // 1. Play chime ONLY if message is NOT from me (incoming from contact)
+          // 1. Play chime ONLY if message is NOT from me
           if (!isFromMe) {
             playIncomingSound();
           }
 
-          // 2. Smart UX Verification: Is the notified chat CURRENTLY OPEN by the user?
-          const activeChat = selectedChatRef.current;
-          let isCurrentlyOpenChat = false;
-
-          const matchJids = (jidA: string, jidB: string) => {
-            if (!jidA || !jidB) return false;
-            const cleanA = jidA.split('@')[0].split(':')[0].trim().toLowerCase();
-            const cleanB = jidB.split('@')[0].split(':')[0].trim().toLowerCase();
+          // 2. Helper to match JIDs
+          const matchJids = (a: string, b: string) => {
+            if (!a || !b) return false;
+            const cleanA = String(a).split('@')[0].split(':')[0].trim().toLowerCase();
+            const cleanB = String(b).split('@')[0].split(':')[0].trim().toLowerCase();
             if (!cleanA || !cleanB) return false;
             if (cleanA === cleanB) return true;
             if (cleanA.length > 6 && cleanB.length > 6) {
@@ -988,12 +1005,24 @@ function playIncomingSound() {
             return false;
           };
 
-          if (activeChat && notifiedJid) {
-            const activeJid = activeChat.contact_jid || activeChat.phone || activeChat.jid || '';
-            isCurrentlyOpenChat = matchJids(activeJid, notifiedJid);
+          // 3. Smart UX Verification: Is the notified chat CURRENTLY OPEN by the user?
+          const activeChat = selectedChatRef.current;
+          let isCurrentlyOpenChat = false;
+
+          if (activeChat) {
+            const activeJids = [activeChat.contact_jid, activeChat.phone, activeChat.jid, activeChat.chat_jid].filter(Boolean);
+            for (const aJid of activeJids) {
+              for (const nJid of notifiedJids) {
+                if (matchJids(aJid, nJid)) {
+                  isCurrentlyOpenChat = true;
+                  break;
+                }
+              }
+              if (isCurrentlyOpenChat) break;
+            }
           }
 
-          // 3. CONDITIONAL 1: If chat IS OPEN -> Push message directly into chatMessages! ZERO GET REQUESTS!
+          // 4. CONDITIONAL 1: If chat IS OPEN -> Push message directly into chatMessages! ZERO GET REQUESTS!
           if (isCurrentlyOpenChat && newMsgs.length > 0) {
             setChatMessages((prevMsgs) => {
               const existingIds = new Set(prevMsgs.map((m: any) => String(m.message_id || m.id || m.key?.id)));
@@ -1017,7 +1046,7 @@ function playIncomingSound() {
             setTimeout(() => scrollToBottom(), 50);
           }
 
-          // 4. CONDITIONAL 2: Update Sidebar (conversations) locally
+          // 5. CONDITIONAL 2: Update Sidebar (conversations) locally
           if (newMsgs.length > 0) {
             const latestMsg = newMsgs[newMsgs.length - 1];
             const previewText = latestMsg.content || latestMsg.message || latestMsg.text || 'Nova mensagem';
@@ -1026,7 +1055,19 @@ function playIncomingSound() {
             setConversations((prevConvs) => {
               let matched = false;
               const updated = prevConvs.map((conv) => {
-                if (matchJids(conv.contact_jid, notifiedJid) || (conv.phone && matchJids(conv.phone, notifiedJid))) {
+                const convJids = [conv.contact_jid, conv.phone, conv.jid].filter(Boolean);
+                let convMatches = false;
+                for (const cJid of convJids) {
+                  for (const nJid of notifiedJids) {
+                    if (matchJids(cJid, nJid)) {
+                      convMatches = true;
+                      break;
+                    }
+                  }
+                  if (convMatches) break;
+                }
+
+                if (convMatches) {
                   matched = true;
                   return {
                     ...conv,
@@ -1039,7 +1080,7 @@ function playIncomingSound() {
                 return conv;
               });
 
-              if (!matched) {
+              if (!matched && !isCurrentlyOpenChat) {
                 loadConversations();
                 return prevConvs;
               }
@@ -1050,12 +1091,9 @@ function playIncomingSound() {
                 return timeB - timeA;
               });
             });
-          } else {
-            loadConversations();
           }
-
         } catch (err) {
-          loadConversations();
+          // Ignore
         }
       };
 
