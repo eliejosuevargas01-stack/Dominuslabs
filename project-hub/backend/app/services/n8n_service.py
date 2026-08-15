@@ -32,7 +32,6 @@ KNOWN_CONTACT_NAMES = {
     "123978559537397@lid": "Jucineide Castro",
     "120363359180966787@g.us": "Açougue 80",
     "164003712131226@lid": "Yanetzi",
-    "54177489223737@lid": "Dannyeliz",
 }
 
 logger = logging.getLogger("n8n_service")
