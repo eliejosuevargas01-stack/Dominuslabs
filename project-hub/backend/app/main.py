@@ -235,7 +235,11 @@ async def root_avatar_proxy(
     raise HTTPException(status_code=404, detail="Avatar não encontrado.")
 
 
+@app.get("/api/whatsapp/sessions/{session_id}/media")
+@app.get("/api/v1/whatsapp/sessions/{session_id}/media")
 @app.get("/api/sessions/{session_id}/media")
+@app.get("/api/crm/media")
+@app.get("/api/v1/crm/media")
 @app.get("/media")
 async def root_media_proxy(
     session_id: Optional[str] = None,
