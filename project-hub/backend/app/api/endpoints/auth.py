@@ -134,13 +134,16 @@ async def _maybe_provision(user: User, db: Session) -> None:
 # ---------------------------------------------------------------------------
 
 def _build_token_data(user: User) -> dict:
+    role = getattr(user, "role", "custom") or "custom"
+    perms = getattr(user, "permissions", "") or "read,write,update,delete"
+    is_admin = role == "admin"
     return {
         "sub": user.email,
-        "role": user.role,
-        "can_create_projects": user.can_create_projects,
-        "can_edit_projects": user.can_edit_projects,
-        "can_manage_crm": user.can_manage_crm,
-        "can_use_scrapper": user.can_use_scrapper,
+        "role": role,
+        "can_create_projects": getattr(user, "can_create_projects", None) if getattr(user, "can_create_projects", None) is not None else (is_admin or "write" in perms),
+        "can_edit_projects": getattr(user, "can_edit_projects", None) if getattr(user, "can_edit_projects", None) is not None else (is_admin or "write" in perms),
+        "can_manage_crm": getattr(user, "can_manage_crm", None) if getattr(user, "can_manage_crm", None) is not None else True,
+        "can_use_scrapper": getattr(user, "can_use_scrapper", None) if getattr(user, "can_use_scrapper", None) is not None else True,
     }
 
 
