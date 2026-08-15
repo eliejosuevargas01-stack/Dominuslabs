@@ -288,11 +288,14 @@ function getMediaUrl(msg: any, defaultSessionId?: string): string | null {
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
       return trimmed;
     }
-    if (trimmed.startsWith('/api/sessions/')) {
+    if (trimmed.startsWith('/api/whatsapp/sessions/') || trimmed.startsWith('/api/crm/media')) {
       return trimmed;
     }
+    if (trimmed.startsWith('/api/sessions/')) {
+      return trimmed.replace('/api/sessions/', '/api/whatsapp/sessions/');
+    }
     if (sessId && msgId) {
-      return `/api/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}`;
+      return `/api/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}`;
     }
     return trimmed;
   }
@@ -304,7 +307,7 @@ function getMediaUrl(msg: any, defaultSessionId?: string): string | null {
     const isMediaMsg = msgType.includes('audio') || msgType.includes('image') || msgType.includes('video') || msgType.includes('document') || msgType.includes('ptt') || ['[audio]', '[imagem]', '[video]', '[documento]'].includes(contentText);
     
     if (isMediaMsg) {
-      return `/api/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}`;
+      return `/api/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}`;
     }
   }
   return null;

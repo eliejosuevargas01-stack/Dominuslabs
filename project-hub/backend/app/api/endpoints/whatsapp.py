@@ -154,6 +154,69 @@ async def get_session_avatar(
         pass
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar não encontrado.")
 
+from fastapi.responses import Response
+
+@router.get("/sessions/{session_id}/media")
+async def get_session_media(
+    session_id: str,
+    messageId: Optional[str] = None,
+    message_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Proxy de mídia (imagens, áudios, vídeos e documentos) da WhatsApp API via mTLS.
+    Retorna o streaming/binário com o Content-Type correto ou redirecionamento.
+    Acessível por tags <img>, <video>, <audio> e <a> do navegador sem exigir token Bearer nos cabeçalhos.
+    """
+    target_msg_id = messageId or message_id
+    if not target_msg_id:
+        raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
+
+    try:
+        clean_path = f"/api/sessions/{session_id}/media?messageId={target_msg_id}"
+        res = await make_whatsapp_api_request("GET", clean_path, timeout=30.0)
+
+        if isinstance(res, dict):
+            if res.get("_is_binary"):
+                return Response(
+                    content=res["content"],
+                    media_type=res.get("content_type") or "application/octet-stream",
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Cache-Control": "public, max-age=86400"
+                    }
+                )
+            if res.get("url"):
+                return RedirectResponse(
+                    res["url"],
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Cache-Control": "public, max-age=86400"
+                    }
+                )
+            if res.get("data") and isinstance(res["data"], str):
+                base64_str = res["data"]
+                import base64
+                if "," in base64_str:
+                    header, base64_str = base64_str.split(",", 1)
+                    mime_type = header.split(";")[0].replace("data:", "") if "data:" in header else "application/octet-stream"
+                else:
+                    mime_type = res.get("mimeType") or res.get("mimetype") or "application/octet-stream"
+                
+                binary_data = base64.b64decode(base64_str)
+                return Response(
+                    content=binary_data,
+                    media_type=mime_type,
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Cache-Control": "public, max-age=86400"
+                    }
+                )
+    except Exception as e:
+        print(f"[WA-MEDIA] Erro ao buscar mídia proxy para session={session_id}, msg={target_msg_id}: {e}", flush=True)
+
+    raise HTTPException(status_code=404, detail="Mídia não encontrada ou indisponível.")
+
 @router.get("/sessions")
 async def list_sessions(
     db: Session = Depends(get_db),
