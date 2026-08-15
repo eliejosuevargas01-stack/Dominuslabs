@@ -502,9 +502,11 @@ async def provision_whatsapp(
     try:
         async with get_mtls_async_client(timeout=20.0, service_name="whatsapp") as client:
             print(f"[M2M-AUTH-FLOW] >>> Enviando solicitação mTLS de provisionamento M2M para WhatsApp API: email={user.email}, tenant_id={tenant_id}", flush=True)
+            headers = {"X-Master-API-Key": settings.WHATSAPP_MASTER_SECRET} if getattr(settings, "WHATSAPP_MASTER_SECRET", None) else {}
             resp = await client.post(
                 provision_url,
                 json={"email": user.email, "tenant_id": tenant_id, "password": user.hashed_password},
+                headers=headers
             )
 
             # Caso já exista na WhatsApp API (conflito 409), tenta reprovisionar
@@ -514,6 +516,7 @@ async def provision_whatsapp(
                 resp = await client.post(
                     reprovision_url,
                     json={"email": user.email, "tenant_id": tenant_id, "password": user.hashed_password},
+                    headers=headers
                 )
 
             if resp.status_code not in (200, 201):

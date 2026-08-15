@@ -537,6 +537,15 @@ async def whatsapp_inbound_webhook(request: Request):
     Inbound webhook for WhatsApp messages.
     Receives message payload and appends to in-memory conversation list.
     """
+    signature = request.headers.get("X-Signature")
+    if hasattr(settings, "WEBHOOK_SECRET") and settings.WEBHOOK_SECRET:
+        import hmac
+        import hashlib
+        body = await request.body()
+        expected_signature = hmac.new(settings.WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
+        if not signature or not hmac.compare_digest(signature, expected_signature):
+            return {"status": "ignored", "reason": "invalid signature"}
+
     payload = await request.json()
     lead_id = payload.get("lead_id")
     message_text = payload.get("message")
@@ -580,6 +589,15 @@ async def instagram_inbound_webhook(request: Request):
     Inbound webhook for Instagram messages.
     Receives message payload and appends to in-memory conversation list.
     """
+    signature = request.headers.get("X-Signature")
+    if hasattr(settings, "WEBHOOK_SECRET") and settings.WEBHOOK_SECRET:
+        import hmac
+        import hashlib
+        body = await request.body()
+        expected_signature = hmac.new(settings.WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
+        if not signature or not hmac.compare_digest(signature, expected_signature):
+            return {"status": "ignored", "reason": "invalid signature"}
+
     payload = await request.json()
     lead_id = payload.get("lead_id")
     message_text = payload.get("message")
