@@ -1216,8 +1216,8 @@ function playIncomingSound() {
     const map: Record<string, { emoji: string; count: number }[]> = {};
     for (const msg of chatMessages) {
       if (!msg) continue;
-      const msgType = (msg.message_type || msg.type || msg.kind || '').toLowerCase();
-      const isReaction = msgType === 'reactionmessage' || msgType === 'reaction' || msgType === 'reaction_message' || !!msg.reactionMessage;
+      const msgType = (msg.message_type || msg.type || msg.kind || '').toString().toLowerCase();
+      const isReaction = msgType.includes('reaction') || !!msg.reactionMessage || !!msg.is_reaction;
       if (isReaction) {
         const emoji = (msg.content || msg.message || msg.reactionMessage?.text || '👍').trim();
         const targetId = msg.target_message_id || msg.reaction_target_id || msg.target_id || msg.quoted_message_id || msg.quoted_id || msg.reactionMessage?.key?.id;
@@ -1240,9 +1240,8 @@ function playIncomingSound() {
     // 1. Exclude reaction messages from rendering as standalone row items
     const nonReactionMsgs = chatMessages.filter((msg: any) => {
       if (!msg) return false;
-      const msgType = (msg.message_type || msg.type || msg.kind || '').toLowerCase();
-      if (['reactionmessage', 'reaction', 'reaction_message'].includes(msgType)) return false;
-      if (msg.reactionMessage || msg.is_reaction) return false;
+      const msgType = (msg.message_type || msg.type || msg.kind || '').toString().toLowerCase();
+      if (msgType.includes('reaction') || msg.reactionMessage || msg.is_reaction) return false;
       return true;
     });
 
