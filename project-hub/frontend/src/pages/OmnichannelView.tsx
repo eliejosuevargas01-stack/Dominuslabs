@@ -952,15 +952,18 @@ function playIncomingSound() {
 
           if (event.data.startsWith('{')) {
             const parsed = JSON.parse(event.data);
-            notifiedJid = parsed.lead_id || parsed.contact_jid || parsed.jid || '';
-            if (parsed.is_from_me === true || parsed.from_me === true || parsed.sender === 'user' || parsed.sender === 'me') {
-              isFromMe = true;
-            }
-
-            if (Array.isArray(parsed.messages)) {
+            if (Array.isArray(parsed.messages) && parsed.messages.length > 0) {
               newMsgs = parsed.messages;
             } else if (parsed.message && typeof parsed.message === 'object') {
               newMsgs = [parsed.message];
+            }
+
+            const firstMsgJid = newMsgs[0]?.contact_jid || newMsgs[0]?.lead_id || newMsgs[0]?.jid || newMsgs[0]?.phone;
+            const validParsedJid = (parsed.lead_id && !parsed.lead_id.includes('{{')) ? parsed.lead_id : (parsed.contact_jid && !parsed.contact_jid.includes('{{')) ? parsed.contact_jid : null;
+
+            notifiedJid = firstMsgJid || validParsedJid || parsed.lead_id || parsed.contact_jid || parsed.jid || '';
+            if (parsed.is_from_me === true || parsed.from_me === true || parsed.sender === 'user' || parsed.sender === 'me') {
+              isFromMe = true;
             }
           }
 
@@ -973,23 +976,32 @@ function playIncomingSound() {
           const activeChat = selectedChatRef.current;
           let isCurrentlyOpenChat = false;
 
-          if (activeChat && activeChat.contact_jid && notifiedJid) {
-            const cleanNotified = notifiedJid.split('@')[0].trim().toLowerCase();
-            const cleanActive = activeChat.contact_jid.split('@')[0].trim().toLowerCase();
-            const cleanPhone = (activeChat.phone || '').split('@')[0].trim().toLowerCase();
+          const matchJids = (jidA: string, jidB: string) => {
+            if (!jidA || !jidB) return false;
+            const cleanA = jidA.split('@')[0].split(':')[0].trim().toLowerCase();
+            const cleanB = jidB.split('@')[0].split(':')[0].trim().toLowerCase();
+            if (!cleanA || !cleanB) return false;
+            if (cleanA === cleanB) return true;
+            if (cleanA.length > 6 && cleanB.length > 6) {
+              return cleanA.includes(cleanB) || cleanB.includes(cleanA);
+            }
+            return false;
+          };
 
-            isCurrentlyOpenChat = cleanNotified === cleanActive || (cleanPhone && cleanNotified === cleanPhone);
+          if (activeChat && notifiedJid) {
+            const activeJid = activeChat.contact_jid || activeChat.phone || activeChat.jid || '';
+            isCurrentlyOpenChat = matchJids(activeJid, notifiedJid);
           }
 
           // 3. CONDITIONAL 1: If chat IS OPEN -> Push message directly into chatMessages! ZERO GET REQUESTS!
           if (isCurrentlyOpenChat && newMsgs.length > 0) {
             setChatMessages((prevMsgs) => {
-              const existingIds = new Set(prevMsgs.map((m: any) => String(m.message_id || m.id)));
+              const existingIds = new Set(prevMsgs.map((m: any) => String(m.message_id || m.id || m.key?.id)));
               const msgsToAdd: any[] = [];
 
               for (const m of newMsgs) {
                 if (!m) continue;
-                const id = String(m.message_id || m.id || '');
+                const id = String(m.message_id || m.id || m.key?.id || '');
                 if (id && !existingIds.has(id)) {
                   existingIds.add(id);
                   msgsToAdd.push(m);
@@ -1014,15 +1026,13 @@ function playIncomingSound() {
             setConversations((prevConvs) => {
               let matched = false;
               const updated = prevConvs.map((conv) => {
-                const cJid = (conv.contact_jid || '').split('@')[0].trim().toLowerCase();
-                const nJid = notifiedJid.split('@')[0].trim().toLowerCase();
-                if (cJid === nJid) {
+                if (matchJids(conv.contact_jid, notifiedJid) || (conv.phone && matchJids(conv.phone, notifiedJid))) {
                   matched = true;
                   return {
                     ...conv,
                     last_message_preview: previewText,
                     last_message_timestamp: msgTs,
-                    unread_count: isCurrentlyOpenChat ? conv.unread_count : ((conv.unread_count || 0) + newMsgs.length),
+                    unread_count: isCurrentlyOpenChat ? 0 : ((conv.unread_count || 0) + newMsgs.length),
                     participant_pushname: latestMsg.participant_pushname || conv.participant_pushname
                   };
                 }
