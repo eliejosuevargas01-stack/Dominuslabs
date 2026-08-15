@@ -193,6 +193,7 @@ async def update_chat_webhook_post(
 
 @router.get("/crm/update-chat")
 async def update_chat_webhook_get(
+    request: Request,
     lead_id: Optional[str] = None,
     id: Optional[str] = None,
     jid: Optional[str] = None,
@@ -200,18 +201,53 @@ async def update_chat_webhook_get(
     is_from_me: Optional[bool] = None,
     sender: Optional[str] = None
 ):
-    resolved_lead_id = lead_id or id or jid or phone
+    messages_list = []
+    try:
+        raw_body = await request.json()
+        if isinstance(raw_body, list):
+            messages_list = raw_body
+        elif isinstance(raw_body, dict):
+            if "messages" in raw_body and isinstance(raw_body["messages"], list):
+                messages_list = raw_body["messages"]
+            elif "mensagens" in raw_body and isinstance(raw_body["mensagens"], list):
+                messages_list = raw_body["mensagens"]
+            else:
+                messages_list = [raw_body]
+    except Exception:
+        pass
+
+    explicit_from_me = is_from_me
+    explicit_sender = sender
+
+    body_jids = []
+    if messages_list:
+        for msg in messages_list:
+            if isinstance(msg, dict):
+                if explicit_from_me is None:
+                    explicit_from_me = msg.get("is_from_me") if msg.get("is_from_me") is not None else msg.get("from_me")
+                if explicit_sender is None:
+                    explicit_sender = msg.get("sender")
+
+                for k in ["contact_jid", "chat_jid", "group_jid", "remoteJid", "lead_id", "jid", "phone", "participant"]:
+                    val = msg.get(k)
+                    if val and isinstance(val, str) and "{{" not in val and "$" not in val:
+                        if val not in body_jids:
+                            body_jids.append(val)
+
+    cleaned_query_lead = lead_id if (lead_id and "{{" not in lead_id and "$" not in lead_id) else None
+    resolved_lead_id = (body_jids[0] if body_jids else None) or cleaned_query_lead or lead_id or id or jid or phone
+
     if not resolved_lead_id:
         raise HTTPException(status_code=400, detail="Missing lead_id, jid, or phone parameter")
         
     from app.services.n8n_service import n8n_service
     n8n_service.invalidate_leads_cache()
 
-    final_is_from_me = is_from_me if is_from_me is not None else False
-    final_sender = sender or ("user" if final_is_from_me else "lead")
+    final_is_from_me = explicit_from_me if explicit_from_me is not None else False
+    final_sender = explicit_sender or ("user" if final_is_from_me else "lead")
 
     await notify_lead_listeners(resolved_lead_id, "reload")
-    await notify_crm_chat_listeners(resolved_lead_id, is_from_me=final_is_from_me, sender=final_sender, messages=[])
+    await notify_crm_chat_listeners(resolved_lead_id, is_from_me=final_is_from_me, sender=final_sender, messages=messages_list)
     
     notified_count = len(lead_listeners.get(resolved_lead_id, [])) + len(crm_chat_listeners)
     return {
@@ -219,6 +255,7 @@ async def update_chat_webhook_get(
         "lead_id": resolved_lead_id,
         "is_from_me": final_is_from_me,
         "sender": final_sender,
+        "messages_received": len(messages_list),
         "notified_sessions": notified_count,
         "active_clients_connected": len(crm_chat_listeners)
     }
