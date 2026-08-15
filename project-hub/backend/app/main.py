@@ -161,9 +161,10 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_headers=["*"],
     )
 
-from fastapi.staticfiles import StaticFiles
-
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+if os.path.exists(settings.UPLOAD_DIR):
+    app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
 from fastapi.responses import RedirectResponse, Response
 from typing import Optional

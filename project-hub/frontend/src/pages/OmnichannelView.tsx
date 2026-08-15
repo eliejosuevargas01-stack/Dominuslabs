@@ -2,13 +2,15 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   MessageSquare, Send, Paperclip, Smile, Search, 
   RefreshCw, CheckCheck, Radio, ChevronLeft,
-  X, Users, MessageCircle, Volume2
+  X, Users, MessageCircle, Volume2, Maximize2, ExternalLink,
+  Download, FileText, Image as ImageIcon, Video, Mic
 } from 'lucide-react';
 import { 
   fetchConversations, 
   fetchContacts, 
   fetchChatHistory, 
   sendOmnichannelMessage,
+  sendOmnichannelMedia,
   fetchWhatsappSessions,
   API_BASE
 } from '../services/api';
@@ -308,7 +310,7 @@ function getMediaUrl(msg: any, defaultSessionId?: string): string | null {
   return null;
 }
 
-function renderMessageMedia(msg: any, defaultSessionId?: string) {
+function renderMessageMedia(msg: any, defaultSessionId?: string, onOpenLightbox?: (url: string) => void) {
   const mediaSrc = getMediaUrl(msg, defaultSessionId);
   const msgType = (msg.message_type || msg.type || '').toLowerCase();
   const contentText = (msg.content || msg.message || '').trim().toLowerCase();
@@ -320,29 +322,35 @@ function renderMessageMedia(msg: any, defaultSessionId?: string) {
 
   if (isImage && mediaSrc) {
     return (
-      <div className="media-container mb-2 overflow-hidden rounded-xl border border-slate-200/60 shadow-sm max-w-sm bg-slate-900/5">
-        <a href={mediaSrc} target="_blank" rel="noopener noreferrer" className="block group relative">
-          <img
-            src={mediaSrc}
-            alt="Mídia"
-            className="w-full max-h-80 object-cover rounded-xl transition-transform duration-200 group-hover:scale-[1.02]"
-            loading="lazy"
-            onError={(e) => {
-              (e.target as HTMLElement).style.display = 'none';
-            }}
-          />
-        </a>
+      <div 
+        className="media-container mb-2 overflow-hidden rounded-2xl border border-slate-200/80 shadow-md max-w-xs sm:max-w-sm bg-slate-900/5 group relative cursor-pointer"
+        onClick={() => onOpenLightbox && onOpenLightbox(mediaSrc)}
+      >
+        <img
+          src={mediaSrc}
+          alt="Imagem"
+          className="w-full max-h-72 object-cover rounded-2xl transition-transform duration-300 group-hover:scale-105"
+          loading="lazy"
+          onError={(e) => {
+            (e.target as HTMLElement).style.display = 'none';
+          }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3 rounded-2xl">
+          <span className="text-white text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md bg-black/40 px-3 py-1 rounded-full border border-white/20 shadow-sm">
+            <Maximize2 className="w-3.5 h-3.5" /> Ampliar Imagem
+          </span>
+        </div>
       </div>
     );
   }
 
   if (isVideo && mediaSrc) {
     return (
-      <div className="media-container mb-2 overflow-hidden rounded-xl border border-slate-200/60 shadow-sm max-w-sm bg-black">
+      <div className="media-container mb-2 overflow-hidden rounded-2xl border border-slate-800 shadow-md max-w-xs sm:max-w-sm bg-black">
         <video
           controls
           preload="metadata"
-          className="w-full max-h-80 rounded-xl"
+          className="w-full max-h-72 rounded-2xl"
           src={mediaSrc}
         >
           Seu navegador não suporta a reprodução de vídeo.
@@ -353,12 +361,17 @@ function renderMessageMedia(msg: any, defaultSessionId?: string) {
 
   if (isAudio && mediaSrc) {
     return (
-      <div className="media-container mb-2 p-2 rounded-xl bg-slate-100/90 border border-slate-200/60 shadow-sm max-w-xs flex flex-col gap-1">
-        <div className="flex items-center gap-2 text-xs font-bold text-slate-700 px-1">
-          <Volume2 className="w-4 h-4 text-purple-600 animate-pulse" />
-          <span>Mensagem de Áudio</span>
+      <div className="media-container mb-2 p-3 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100/70 border border-emerald-200/80 shadow-sm max-w-xs sm:max-w-sm flex flex-col gap-2">
+        <div className="flex items-center justify-between text-xs font-bold text-emerald-900 px-1">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+              <Volume2 className="w-4 h-4 animate-pulse" />
+            </div>
+            <span>Mensagem de Voz</span>
+          </div>
+          <span className="text-[10px] text-emerald-700 font-bold bg-emerald-200/60 px-2 py-0.5 rounded-full">Áudio</span>
         </div>
-        <audio controls preload="metadata" className="w-full h-9 rounded-lg" src={mediaSrc}>
+        <audio controls preload="metadata" className="w-full h-9 rounded-xl accent-emerald-600" src={mediaSrc}>
           Seu navegador não suporta o reprodutor de áudio.
         </audio>
       </div>
@@ -372,14 +385,16 @@ function renderMessageMedia(msg: any, defaultSessionId?: string) {
           href={mediaSrc}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-3 p-3 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 transition-colors shadow-sm max-w-xs"
+          className="flex items-center gap-3 p-3 rounded-2xl bg-purple-50 hover:bg-purple-100/90 border border-purple-200/80 text-purple-950 transition-all shadow-sm max-w-xs group"
         >
-          <div className="p-2 rounded-lg bg-purple-600 text-white shrink-0">
-            <Paperclip className="w-4 h-4" />
+          <div className="p-2.5 rounded-xl bg-purple-600 text-white shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+            <FileText className="w-5 h-5" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold truncate">Documento / Anexo</p>
-            <p className="text-[10px] text-purple-700">Clique para abrir ou baixar</p>
+            <p className="text-[10px] text-purple-700 flex items-center gap-1 font-medium mt-0.5">
+              <Download className="w-3 h-3" /> Clique para abrir/baixar
+            </p>
           </div>
         </a>
       </div>
@@ -388,15 +403,23 @@ function renderMessageMedia(msg: any, defaultSessionId?: string) {
 
   if (mediaSrc) {
     return (
-      <div className="media-container mb-2 overflow-hidden rounded-xl border border-slate-200/60 shadow-sm max-w-sm">
+      <div 
+        className="media-container mb-2 overflow-hidden rounded-2xl border border-slate-200/80 shadow-md max-w-xs sm:max-w-sm bg-slate-900/5 group relative cursor-pointer"
+        onClick={() => onOpenLightbox && onOpenLightbox(mediaSrc)}
+      >
         <img
           src={mediaSrc}
           alt="Arquivo de Mídia"
-          className="w-full max-h-80 object-cover rounded-xl"
+          className="w-full max-h-72 object-cover rounded-2xl group-hover:scale-105 transition-transform duration-300"
           onError={(e) => {
             (e.target as HTMLElement).style.display = 'none';
           }}
         />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3 rounded-2xl">
+          <span className="text-white text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md bg-black/40 px-3 py-1 rounded-full border border-white/20 shadow-sm">
+            <Maximize2 className="w-3.5 h-3.5" /> Ampliar Mídia
+          </span>
+        </div>
       </div>
     );
   }
@@ -425,7 +448,78 @@ export default function OmnichannelView() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
+  // Lightbox & Attachment Upload states
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState<boolean>(false);
+  const [showAttachMenu, setShowAttachMenu] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedMediaType, setSelectedMediaType] = useState<'image' | 'video' | 'audio' | 'document'>('image');
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Keyboard shortcut listener for Esc key to close lightbox/menus
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setLightboxUrl(null);
+        setShowAttachMenu(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleFileSelect = (type: 'image' | 'video' | 'audio' | 'document') => {
+    setSelectedMediaType(type);
+    setShowAttachMenu(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      if (type === 'image') fileInputRef.current.accept = 'image/*';
+      else if (type === 'video') fileInputRef.current.accept = 'video/*';
+      else if (type === 'audio') fileInputRef.current.accept = 'audio/*';
+      else fileInputRef.current.accept = '*/*';
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedChat) return;
+
+    setUploadingMedia(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('contact_jid', selectedChat.contact_jid);
+      if (selectedChat.session_id) {
+        formData.append('session_id', selectedChat.session_id);
+      }
+      formData.append('media_type', selectedMediaType);
+
+      await sendOmnichannelMedia(formData);
+
+      // Instantly refresh history for active chat
+      const res: any = await fetchChatHistory(selectedChat.contact_jid, selectedChat.session_id);
+      let msgsList: any[] = [];
+      if (Array.isArray(res) && res.length > 0) {
+        if (res[0].messages && Array.isArray(res[0].messages)) {
+          msgsList = res[0].messages;
+        } else if (res[0].mensagens && Array.isArray(res[0].mensagens)) {
+          msgsList = res[0].mensagens;
+        } else {
+          msgsList = res;
+        }
+      }
+      setChatMessages(msgsList);
+    } catch (err: any) {
+      alert(err.message || 'Falha ao enviar arquivo de mídia.');
+    } finally {
+      setUploadingMedia(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
 
   // Auto-scroll chat to bottom
   const scrollToBottom = () => {
@@ -1151,7 +1245,7 @@ function playIncomingSound() {
                     const senderName = !isMe && isGroup ? (msg.participant_pushname || msg.participant_name || msg.participant_push_name || msg.push_name || msg.participant || selectedChat?.participant_pushname || selectedChat?.participant) : null;
 
                     const isPlaceholderText = ['[imagem]', '[video]', '[audio]', '[documento]', '[mídia]'].includes(rawContent.toLowerCase());
-                    const mediaElement = renderMessageMedia(msg, selectedChat?.session_id);
+                    const mediaElement = renderMessageMedia(msg, selectedChat?.session_id, (url) => setLightboxUrl(url));
 
                     return (
                       <div
@@ -1197,6 +1291,63 @@ function playIncomingSound() {
                 <div ref={messagesEndRef} />
               </div>
 
+              {/* Hidden File Input */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+
+              {/* Attachment Popup Menu */}
+              {showAttachMenu && (
+                <div className="mx-4 mb-2 p-2 bg-white border border-slate-200 rounded-2xl shadow-xl flex items-center justify-around gap-2 animate-fadeIn z-20">
+                  <button
+                    type="button"
+                    onClick={() => handleFileSelect('image')}
+                    className="flex flex-col items-center gap-1 p-2.5 rounded-xl hover:bg-purple-50 text-purple-700 transition-colors cursor-pointer"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                    <span className="text-[10px] font-bold">Imagem</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleFileSelect('video')}
+                    className="flex flex-col items-center gap-1 p-2.5 rounded-xl hover:bg-blue-50 text-blue-700 transition-colors cursor-pointer"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center">
+                      <Video className="w-5 h-5" />
+                    </div>
+                    <span className="text-[10px] font-bold">Vídeo</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleFileSelect('audio')}
+                    className="flex flex-col items-center gap-1 p-2.5 rounded-xl hover:bg-emerald-50 text-emerald-700 transition-colors cursor-pointer"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center">
+                      <Mic className="w-5 h-5" />
+                    </div>
+                    <span className="text-[10px] font-bold">Áudio</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleFileSelect('document')}
+                    className="flex flex-col items-center gap-1 p-2.5 rounded-xl hover:bg-amber-50 text-amber-700 transition-colors cursor-pointer"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <span className="text-[10px] font-bold">Documento</span>
+                  </button>
+                </div>
+              )}
+
               {/* Bottom Message Input Bar */}
               <form 
                 onSubmit={handleSendMessage}
@@ -1215,7 +1366,10 @@ function playIncomingSound() {
                 {/* Attachment Toggle */}
                 <button
                   type="button"
-                  className="p-2 rounded-xl text-slate-500 hover:text-purple-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  onClick={() => setShowAttachMenu(!showAttachMenu)}
+                  className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                    showAttachMenu ? 'bg-purple-100 text-purple-700' : 'text-slate-500 hover:text-purple-600 hover:bg-slate-100'
+                  }`}
                   title="Anexar arquivo"
                 >
                   <Paperclip className="w-5 h-5" />
@@ -1224,7 +1378,8 @@ function playIncomingSound() {
                 {/* Input Text Field */}
                 <input
                   type="text"
-                  placeholder="Digite uma mensagem"
+                  placeholder={uploadingMedia ? "Enviando arquivo..." : "Digite uma mensagem"}
+                  disabled={uploadingMedia}
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
                   className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-purple-500/20 focus:bg-white transition-all border border-slate-200/60"
@@ -1233,7 +1388,7 @@ function playIncomingSound() {
                 {/* Send / Microphone Button */}
                 <button
                   type="submit"
-                  disabled={!messageInput.trim() || sending}
+                  disabled={!messageInput.trim() || sending || uploadingMedia}
                   className={`p-2.5 rounded-xl text-white font-bold transition-all shadow-md flex items-center justify-center cursor-pointer ${
                     messageInput.trim()
                       ? 'bg-gradient-to-r from-purple-700 to-indigo-600 hover:scale-105 active:scale-95'
@@ -1241,7 +1396,9 @@ function playIncomingSound() {
                   }`}
                   title="Enviar mensagem"
                 >
-                  {messageInput.trim() ? (
+                  {uploadingMedia ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : messageInput.trim() ? (
                     <Send className="w-4 h-4" />
                   ) : (
                     <Volume2 className="w-4 h-4" />
@@ -1262,6 +1419,51 @@ function playIncomingSound() {
           )}
         </div>
       </div>
+
+      {/* Modern Lightbox Modal for Image & Media Preview */}
+      {lightboxUrl && (
+        <div 
+          className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 transition-all duration-300 animate-fadeIn"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <div className="relative max-w-5xl max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            {/* Action Bar */}
+            <div className="absolute -top-12 right-0 flex items-center gap-3 z-10">
+              <a
+                href={lightboxUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/20 shadow-lg"
+                title="Abrir em nova aba"
+              >
+                <ExternalLink className="w-5 h-5" />
+              </a>
+              <a
+                href={lightboxUrl}
+                download
+                className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/20 shadow-lg"
+                title="Baixar mídia"
+              >
+                <Download className="w-5 h-5" />
+              </a>
+              <button
+                onClick={() => setLightboxUrl(null)}
+                className="p-2.5 rounded-full bg-white/20 hover:bg-red-500 text-white transition-colors border border-white/30 shadow-lg cursor-pointer"
+                title="Fechar (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Media Image Content */}
+            <img
+              src={lightboxUrl}
+              alt="Mídia Ampliada"
+              className="max-h-[85vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl border border-white/10"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
