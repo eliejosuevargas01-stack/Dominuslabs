@@ -1217,10 +1217,10 @@ function playIncomingSound() {
     for (const msg of chatMessages) {
       if (!msg) continue;
       const msgType = (msg.message_type || msg.type || msg.kind || '').toString().toLowerCase();
-      const isReaction = msgType.includes('reaction') || !!msg.reactionMessage || !!msg.is_reaction;
+      const isReaction = !!msg.reaction_target_message_id || !!msg.reaction_text || msgType.includes('reaction') || !!msg.reactionMessage || !!msg.is_reaction;
       if (isReaction) {
-        const emoji = (msg.content || msg.message || msg.reactionMessage?.text || '👍').trim();
-        const targetId = msg.target_message_id || msg.reaction_target_id || msg.target_id || msg.quoted_message_id || msg.quoted_id || msg.reactionMessage?.key?.id;
+        const emoji = (msg.reaction_text || msg.content || msg.message || msg.reactionMessage?.text || '').trim();
+        const targetId = msg.reaction_target_message_id || msg.reaction_target_id || msg.target_message_id || msg.target_id || msg.quoted_message_id || msg.quoted_id || msg.reactionMessage?.key?.id;
         if (targetId && emoji && emoji !== 'null' && emoji !== 'undefined') {
           if (!map[targetId]) map[targetId] = [];
           const existing = map[targetId].find(r => r.emoji === emoji);
@@ -1240,6 +1240,7 @@ function playIncomingSound() {
     // 1. Exclude reaction messages from rendering as standalone row items
     const nonReactionMsgs = chatMessages.filter((msg: any) => {
       if (!msg) return false;
+      if (msg.reaction_target_message_id || (msg.reaction_text !== undefined && msg.reaction_text !== null)) return false;
       const msgType = (msg.message_type || msg.type || msg.kind || '').toString().toLowerCase();
       if (msgType.includes('reaction') || msg.reactionMessage || msg.is_reaction) return false;
       return true;

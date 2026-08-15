@@ -455,6 +455,9 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
                 "quoted_message_id": m.get("quoted_message_id") or m.get("quoted_id") or m.get("quotedId") or None,
                 "quoted_participant": m.get("quoted_participant") or m.get("quoted_sender") or m.get("quotedParticipant") or None,
                 "quoted_text": m.get("quoted_text") or m.get("quoted_content") or m.get("quotedText") or None,
+                "reaction_text": m.get("reaction_text") or m.get("reactionText") or None,
+                "reaction_target_message_id": m.get("reaction_target_message_id") or m.get("reactionTargetMessageId") or None,
+                "reaction_target_sender_jid": m.get("reaction_target_sender_jid") or m.get("reactionTargetSenderJid") or None,
             })
         return mapped
 
@@ -501,6 +504,9 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             "quoted_message_id": msg.get("quoted_message_id") or msg.get("quoted_id") or msg.get("quotedId") or None,
             "quoted_participant": msg.get("quoted_participant") or msg.get("quoted_sender") or msg.get("quotedParticipant") or None,
             "quoted_text": msg.get("quoted_text") or msg.get("quoted_content") or msg.get("quotedText") or None,
+            "reaction_text": msg.get("reaction_text") or msg.get("reactionText") or None,
+            "reaction_target_message_id": msg.get("reaction_target_message_id") or msg.get("reactionTargetMessageId") or None,
+            "reaction_target_sender_jid": msg.get("reaction_target_sender_jid") or msg.get("reactionTargetSenderJid") or None,
         })
         return mapped
 
@@ -1249,6 +1255,9 @@ class N8NService:
                 "quoted_message_id": m.get("quoted_message_id") or m.get("quoted_id") or m.get("quotedId") or None,
                 "quoted_participant": m.get("quoted_participant") or m.get("quoted_sender") or m.get("quotedParticipant") or None,
                 "quoted_text": m.get("quoted_text") or m.get("quoted_content") or m.get("quotedText") or None,
+                "reaction_text": m.get("reaction_text") or m.get("reactionText") or None,
+                "reaction_target_message_id": m.get("reaction_target_message_id") or m.get("reactionTargetMessageId") or None,
+                "reaction_target_sender_jid": m.get("reaction_target_sender_jid") or m.get("reactionTargetSenderJid") or None,
             })
 
         return [
