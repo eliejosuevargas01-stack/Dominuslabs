@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   MessageSquare, Send, Paperclip, Smile, Search, 
   RefreshCw, CheckCheck, Radio, ChevronLeft,
-  X, Users, MessageCircle, Volume2, Maximize2, ExternalLink,
-  Download, FileText, Image as ImageIcon, Video, Mic, Trash2
+  X, Users, MessageCircle, Maximize2, ExternalLink,
+  Download, FileText, Image as ImageIcon, Video, Mic, Trash2,
+  Play, Pause
 } from 'lucide-react';
 import { 
   fetchConversations, 
@@ -310,7 +311,154 @@ function getMediaUrl(msg: any, defaultSessionId?: string): string | null {
   return null;
 }
 
-function renderMessageMedia(msg: any, defaultSessionId?: string, onOpenLightbox?: (url: string) => void) {
+function CustomAudioPlayer({ src, isOutgoing }: { src: string; isOutgoing?: boolean }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration || 0);
+    }
+  };
+
+  const handleEnded = () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseFloat(e.target.value);
+    setCurrentTime(time);
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+    }
+  };
+
+  const toggleSpeed = () => {
+    const speeds = [1, 1.5, 2];
+    const nextIdx = (speeds.indexOf(playbackRate) + 1) % speeds.length;
+    const newSpeed = speeds[nextIdx];
+    setPlaybackRate(newSpeed);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = newSpeed;
+    }
+  };
+
+  const formatTime = (secs: number) => {
+    if (isNaN(secs) || secs < 0) return '0:00';
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const waveformHeights = [
+    30, 45, 60, 40, 80, 55, 90, 70, 40, 65, 85, 50, 75, 95, 60, 40, 70, 85, 50, 65, 40, 80, 60, 35, 50
+  ];
+
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  return (
+    <div className={`media-container mb-2 p-3 rounded-2xl shadow-sm border max-w-xs sm:max-w-sm flex items-center gap-3 transition-all ${
+      isOutgoing 
+        ? 'bg-emerald-50/90 border-emerald-200/70 text-slate-800'
+        : 'bg-slate-50/90 border-slate-200/80 text-slate-800'
+    }`}>
+      <audio
+        ref={audioRef}
+        src={src}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onEnded={handleEnded}
+      />
+
+      {/* Play / Pause Button */}
+      <button
+        type="button"
+        onClick={togglePlay}
+        className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold transition-all shadow-md shrink-0 cursor-pointer ${
+          isOutgoing
+            ? 'bg-emerald-600 hover:bg-emerald-700 hover:scale-105 active:scale-95'
+            : 'bg-purple-600 hover:bg-purple-700 hover:scale-105 active:scale-95'
+        }`}
+      >
+        {isPlaying ? (
+          <Pause className="w-5 h-5 fill-current" />
+        ) : (
+          <Play className="w-5 h-5 fill-current ml-0.5" />
+        )}
+      </button>
+
+      {/* Center Waveform & Progress Slider */}
+      <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+        {/* Waveform Visualization */}
+        <div className="relative h-6 flex items-center gap-0.5 cursor-pointer overflow-hidden group">
+          {waveformHeights.map((h, i) => {
+            const barPercent = (i / waveformHeights.length) * 100;
+            const isPassed = barPercent <= progressPercent;
+            return (
+              <div
+                key={i}
+                style={{ height: `${h}%` }}
+                className={`w-1 rounded-full transition-colors ${
+                  isPassed
+                    ? isOutgoing ? 'bg-emerald-600' : 'bg-purple-600'
+                    : 'bg-slate-300 group-hover:bg-slate-400'
+                }`}
+              />
+            );
+          })}
+
+          <input
+            type="range"
+            min="0"
+            max={duration || 100}
+            value={currentTime}
+            onChange={handleSeek}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          />
+        </div>
+
+        {/* Timestamp & Speed Controls */}
+        <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500">
+          <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
+          
+          <button
+            type="button"
+            onClick={toggleSpeed}
+            className="px-1.5 py-0.5 rounded bg-slate-200/80 hover:bg-slate-300 text-slate-700 transition-colors text-[9px] font-bold cursor-pointer"
+            title="Velocidade de reprodução"
+          >
+            {playbackRate}x
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function renderMessageMedia(msg: any, defaultSessionId?: string, onOpenLightbox?: (url: string) => void, isFromMe?: boolean) {
   const mediaSrc = getMediaUrl(msg, defaultSessionId);
   const msgType = (msg.message_type || msg.type || '').toLowerCase();
   const contentText = (msg.content || msg.message || '').trim().toLowerCase();
@@ -360,22 +508,7 @@ function renderMessageMedia(msg: any, defaultSessionId?: string, onOpenLightbox?
   }
 
   if (isAudio && mediaSrc) {
-    return (
-      <div className="media-container mb-2 p-3 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100/70 border border-emerald-200/80 shadow-sm max-w-xs sm:max-w-sm flex flex-col gap-2">
-        <div className="flex items-center justify-between text-xs font-bold text-emerald-900 px-1">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-sm">
-              <Volume2 className="w-4 h-4 animate-pulse" />
-            </div>
-            <span>Mensagem de Voz</span>
-          </div>
-          <span className="text-[10px] text-emerald-700 font-bold bg-emerald-200/60 px-2 py-0.5 rounded-full">Áudio</span>
-        </div>
-        <audio controls preload="metadata" className="w-full h-9 rounded-xl accent-emerald-600" src={mediaSrc}>
-          Seu navegador não suporta o reprodutor de áudio.
-        </audio>
-      </div>
-    );
+    return <CustomAudioPlayer src={mediaSrc} isOutgoing={isFromMe} />;
   }
 
   if (isDocument && mediaSrc) {
@@ -1377,7 +1510,7 @@ function playIncomingSound() {
                     const senderName = !isMe && isGroup ? (msg.participant_pushname || msg.participant_name || msg.participant_push_name || msg.push_name || msg.participant || selectedChat?.participant_pushname || selectedChat?.participant) : null;
 
                     const isPlaceholderText = ['[imagem]', '[video]', '[audio]', '[documento]', '[mídia]'].includes(rawContent.toLowerCase());
-                    const mediaElement = renderMessageMedia(msg, selectedChat?.session_id, (url) => setLightboxUrl(url));
+                    const mediaElement = renderMessageMedia(msg, selectedChat?.session_id, (url) => setLightboxUrl(url), isMe);
 
                     return (
                       <div
