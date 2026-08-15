@@ -1612,19 +1612,30 @@ function playIncomingSound() {
                     const isPlaceholderText = ['[imagem]', '[video]', '[audio]', '[documento]', '[mídia]'].includes(rawContent.toLowerCase());
                     const mediaElement = renderMessageMedia(msg, selectedChat?.session_id, (url) => setLightboxUrl(url), isMe);
 
-                    const quotedText = msg.quoted_text || msg.quoted_content || msg.quotedMessage?.text || msg.context_info?.quotedMessage?.conversation || null;
+                    let quotedText = msg.quoted_text || msg.quoted_content || msg.quotedMessage?.text || msg.context_info?.quotedMessage?.conversation || null;
                     const quotedId = msg.quoted_message_id || msg.quoted_id || null;
                     let quotedSender = msg.quoted_participant || msg.quoted_sender || null;
 
+                    // Fallback: If quotedText is null/empty but quotedId exists, resolve from chatMessages
+                    if (!quotedText && quotedId) {
+                      const targetMsg = chatMessages.find((m: any) => m.message_id === quotedId);
+                      if (targetMsg) {
+                        quotedText = (targetMsg.content || targetMsg.message || targetMsg.text || '').trim();
+                        if (!quotedSender) {
+                          quotedSender = targetMsg.is_from_me ? 'Você' : (targetMsg.participant_pushname || targetMsg.push_name || resolveContactName(selectedChat));
+                        }
+                      }
+                    }
+
                     if (quotedSender) {
-                      if (quotedSender === selectedChat?.contact_jid || quotedSender === selectedChat?.phone) {
+                      if (quotedSender === selectedChat?.contact_jid || quotedSender === selectedChat?.phone || quotedSender === selectedChat?.contact_phone) {
                         quotedSender = resolveContactName(selectedChat);
                       } else if (msg.participant_pushname && (quotedSender === msg.contact_jid || quotedSender === msg.participant)) {
                         quotedSender = msg.participant_pushname;
                       } else if (quotedSender.includes('@')) {
                         const matchedContact = contacts.find(c => c.contact_jid === quotedSender || c.phone === quotedSender.split('@')[0]);
                         if (matchedContact) {
-                          quotedSender = matchedContact.name || matchedContact.pushname || matchedContact.phone;
+                          quotedSender = resolveContactName(matchedContact);
                         } else {
                           quotedSender = quotedSender.split('@')[0];
                         }
