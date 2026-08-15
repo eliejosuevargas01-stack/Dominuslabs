@@ -12,6 +12,7 @@ import LeadDetailView from './pages/LeadDetailView';
 import ConnectionsView from './pages/ConnectionsView';
 import OmnichannelView from './pages/OmnichannelView';
 import { LogOut } from 'lucide-react';
+import { Toaster } from 'sonner';
 import './App.css';
 import './index.css';
 
@@ -116,6 +117,8 @@ function App() {
   return (
     <Router>
       <div className="min-h-screen text-slate-800 font-sans relative">
+        <Toaster position="top-right" richColors closeButton />
+
         {/* Background Animation Bubbles */}
         <div className="animated-bg">
           <div className="bg-bubble-1"></div>
