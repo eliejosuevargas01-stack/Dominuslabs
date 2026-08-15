@@ -74,12 +74,18 @@ async def test_full_m2m_flow():
 
         mock_client_instance = AsyncMock()
         mock_client_instance.post = mock_post
+        mock_client_instance.request = AsyncMock(side_effect=lambda method, url, **kwargs: mock_post(url, **kwargs))
 
         with patch("app.services.identity_service.get_mtls_async_client") as mock_mtls_identity, \
-             patch("app.services.whatsapp_service.get_mtls_async_client") as mock_mtls_wa:
+             patch("app.api.endpoints.whatsapp.get_mtls_async_client", create=True) as mock_mtls_wa_module, \
+             patch("app.services.whatsapp_service.get_mtls_async_client", create=True) as mock_mtls_wa_svc, \
+             patch("app.api.endpoints.whatsapp.make_whatsapp_api_request", new_callable=AsyncMock) as mock_make_request:
+
+            mock_make_request.return_value = {"status": "success", "message_id": f"msg_{user.tenant_id}"}
             
             mock_mtls_identity.return_value.__aenter__.return_value = mock_client_instance
-            mock_mtls_wa.return_value.__aenter__.return_value = mock_client_instance
+            mock_mtls_wa_module.return_value.__aenter__.return_value = mock_client_instance
+            mock_mtls_wa_svc.return_value.__aenter__.return_value = mock_client_instance
 
             # 3. Solicitação do JWT M2M ao Identity Worker
             scope = "whatsapp:messages:send"
@@ -101,7 +107,8 @@ async def test_full_m2m_flow():
                 user=user,
                 db=db,
                 to_phone="5511999998888",
-                message_text="Olá! Teste mTLS + JWT M2M Dominius."
+                message_text="Olá! Teste mTLS + JWT M2M Dominius.",
+                session_id="test_session_id"
             )
             assert res is not None
             assert res.get("status") == "success"
