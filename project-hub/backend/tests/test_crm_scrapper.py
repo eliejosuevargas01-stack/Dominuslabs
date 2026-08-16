@@ -334,7 +334,7 @@ def test_crm_chat_update_global_sse(client):
         import json
         event_dict = json.loads(event_data)
         assert event_dict["lead_id"] == "test_global_update"
-        assert event_dict["event"] == "reload"
+        assert event_dict["event"] == "new_message"
 
     # Clean up
     if ("admin@dominuslabs.online", queue) in crm_chat_listeners:

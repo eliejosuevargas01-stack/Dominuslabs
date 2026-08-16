@@ -1,6 +1,20 @@
 # Relatório de Revisão de Código e Mapeamento de Bugs - Dominus Labs Backend
 
-## 1. `project-hub/backend/app/api/endpoints/whatsapp.py`
+## 1. `project-hub/backend/tests/test_crm_scrapper.py`
+
+*   **Bug**: Asserção desatualizada do formato de Webhook SSE (`test_crm_chat_update_global_sse`).
+*   **Severidade**: Alta (Causa quebra no pipeline de testes unitários).
+*   **Descrição**: O teste esperava que o evento WebSocket do CRM emitido possuísse a propriedade `"event": "reload"`, no entanto, o endpoint em `app/api/endpoints/webhooks.py` foi atualizado na regra de negócio atual para retornar um objeto mais rico em propriedades contendo `"event": "new_message"`. Com essa divergência, os testes estavam quebrando em um ponto crucial da validação de escuta global de webhooks.
+*   **Refatoração**:
+    ```python
+    # Antes
+    assert event_dict["event"] == "reload"
+
+    # Depois
+    assert event_dict["event"] == "new_message"
+    ```
+
+## 2. `project-hub/backend/app/api/endpoints/whatsapp.py`
 
 *   **Bug**: Falta do cabeçalho `X-Master-API-Key` no provisionamento server-to-server.
 *   **Severidade**: Crítica
@@ -22,7 +36,7 @@
     )
     ```
 
-## 2. `project-hub/backend/app/api/endpoints/webhooks.py`
+## 3. `project-hub/backend/app/api/endpoints/webhooks.py`
 
 *   **Bug**: Falta de Validação de Assinatura (Webhook Signature/HMAC) no Inbound do WhatsApp e Instagram.
 *   **Severidade**: Crítica
@@ -49,7 +63,7 @@
         payload = await request.json()
     ```
 
-## 3. `project-hub/backend/app/api/endpoints/auth.py`
+## 4. `project-hub/backend/app/api/endpoints/auth.py`
 
 *   **Bug**: Falta do cabeçalho `X-Master-API-Key` na etapa de provisionamento assíncrono (background).
 *   **Severidade**: Crítica
