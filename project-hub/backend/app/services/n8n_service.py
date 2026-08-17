@@ -1710,9 +1710,6 @@ class N8NService:
             logger.info("CRM_SEND_WHATSAPP_WEBHOOK_URL not configured. Message logged locally in-memory.")
             return update_local_mock_state(default_id, message_text, default_ts)
 
-        sep = "&" if "?" in url else "?"
-        post_url = url if "action=" in url else f"{url}{sep}action=send_message"
-
         # Match Evolution API payload structure as well as direct params
         outgoing_payload = {
             "action": "send_message",
@@ -1739,9 +1736,11 @@ class N8NService:
             outgoing_payload["whatsapp_api_url"] = public_url
             outgoing_payload["whatsapp_send_url"] = f"{public_url}/api/sessions/{payload['session_id']}/messages/send"
 
+        encrypted_payload = encrypt_payload(outgoing_payload, "n8n")
+
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
-                response = await client.post(post_url, json=outgoing_payload, timeout=30.0)
+                response = await client.post(url, json=encrypted_payload, timeout=30.0)
                 
                 # Check for the specific authentication error format returned by n8n
                 is_auth_error = False
