@@ -2,6 +2,7 @@ import os
 import json
 import base64
 import logging
+import re
 from typing import Dict, Any, Optional
 
 from cryptography.hazmat.primitives import hashes
@@ -18,11 +19,26 @@ from app.core.config import settings
 logger = logging.getLogger("crypto")
 
 
+import re
+
 def clean_pem(pem_str: str) -> bytes:
-    """Cleans up a PEM string and converts it to bytes."""
+    """Sanitizes PEM key strings from environment variables and converts to bytes."""
     if not pem_str:
         return b""
     cleaned = pem_str.strip().strip('"').strip("'").replace("\\n", "\n").strip()
+
+    # Re-format PEM block if lines were collapsed or contains unexpected whitespace
+    if "-----BEGIN" in cleaned:
+        match = re.search(r"-----BEGIN ([A-Z0-9\s]+)-----\s*(.*?)\s*-----END \1-----", cleaned, re.DOTALL)
+        if match:
+            header_type = match.group(1).strip()
+            raw_body = match.group(2)
+            # Remove any internal whitespace or newlines from base64 body
+            body = re.sub(r"\s+", "", raw_body).strip()
+            # Wrap base64 body into RFC-compliant 64-character lines
+            formatted_body = "\n".join(body[i:i+64] for i in range(0, len(body), 64))
+            cleaned = f"-----BEGIN {header_type}-----\n{formatted_body}\n-----END {header_type}-----\n"
+
     if not cleaned.endswith("\n"):
         cleaned += "\n"
     return cleaned.encode("utf-8")
