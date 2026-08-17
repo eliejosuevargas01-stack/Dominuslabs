@@ -42,10 +42,10 @@ services:
       - dominuslabs_uploads:/app/uploads
     environment:
       - UPLOAD_DIR=/app/uploads
-      - DATABASE_URL=postgresql://dominus:REMOVED_SECRET@ko80ok0gg08wgok0so0go0c4:5432/postgres
-      - ADMIN_USERNAME=Eliejosuevargas01
+      - DATABASE_URL=postgresql://dominus:YOUR_DB_PASSWORD@ko80ok0gg08wgok0so0go0c4:5432/postgres
+      - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=change_this_password
-      - JWT_SECRET=dominuslabs-super-secret-key-2026
+      - JWT_SECRET=change_this_jwt_secret
       - BACKEND_CORS_ORIGINS=["http://localhost:3000", "http://localhost:80", "https://seu-dominio-frontend.com"]
     restart: always
 

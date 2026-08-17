@@ -1,14 +1,15 @@
+import os
 import sys
 import uuid
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
-# Database credentials provided by the user
-DB_HOST = "127.0.0.1"
-DB_PORT = "5431"
-DB_USER = "dominus"
-DB_PASSWORD = "REMOVED_SECRET"
-DB_NAME = "postgres"
+# Database credentials from environment variables
+DB_HOST = os.getenv("POSTGRES_HOST", os.getenv("DB_HOST", "localhost"))
+DB_PORT = os.getenv("POSTGRES_PORT", os.getenv("DB_PORT", "5432"))
+DB_USER = os.getenv("POSTGRES_USER", os.getenv("DB_USER", "postgres"))
+DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", os.getenv("DB_PASSWORD", ""))
+DB_NAME = os.getenv("POSTGRES_DB", os.getenv("DB_NAME", "postgres"))
 
 print(f"Tentando conectar ao PostgreSQL em {DB_HOST}:{DB_PORT}...")
 try:
