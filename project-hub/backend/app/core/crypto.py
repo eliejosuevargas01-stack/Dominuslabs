@@ -19,22 +19,42 @@ from app.core.config import settings
 logger = logging.getLogger("crypto")
 
 
-import re
+import urllib.parse
 
 def clean_pem(pem_str: str) -> bytes:
-    """Sanitizes PEM key strings from environment variables and converts to bytes."""
+    """Sanitizes PEM key strings from environment variables (handles raw, single-line, base64-encoded, url-encoded) and converts to bytes."""
     if not pem_str:
         return b""
-    cleaned = pem_str.strip().strip('"').strip("'").replace("\\n", "\n").strip()
 
-    # Re-format PEM block if lines were collapsed or contains unexpected whitespace
+    cleaned = pem_str.strip().strip('"').strip("'")
+
+    # 1. Handle URL-encoded PEM strings
+    if "%2D" in cleaned or "%0A" in cleaned or "%3D" in cleaned:
+        try:
+            cleaned = urllib.parse.unquote(cleaned)
+        except Exception:
+            pass
+
+    # 2. Handle Base64-encoded PEM strings (common in Coolify/Docker envs to avoid newline issues)
+    if "-----BEGIN" not in cleaned:
+        try:
+            decoded_bytes = base64.b64decode(cleaned)
+            decoded_str = decoded_bytes.decode("utf-8", errors="ignore")
+            if "-----BEGIN" in decoded_str:
+                cleaned = decoded_str
+        except Exception:
+            pass
+
+    cleaned = cleaned.replace("\\n", "\n").replace("\r\n", "\n").strip()
+
+    # 3. Re-format PEM block if lines were collapsed or contain unexpected whitespace
     if "-----BEGIN" in cleaned:
-        match = re.search(r"-----BEGIN ([A-Z0-9\s]+)-----\s*(.*?)\s*-----END \1-----", cleaned, re.DOTALL)
+        match = re.search(r"-----BEGIN ([A-Z0-9\s\-]+)-----\s*(.*?)\s*-----END \1-----", cleaned, re.DOTALL | re.IGNORECASE)
         if match:
-            header_type = match.group(1).strip()
+            header_type = match.group(1).strip().upper()
             raw_body = match.group(2)
-            # Remove any internal whitespace or newlines from base64 body
-            body = re.sub(r"\s+", "", raw_body).strip()
+            # Remove any non-base64 characters from body
+            body = re.sub(r"[^A-Za-z0-9+/=]", "", raw_body).strip()
             # Wrap base64 body into RFC-compliant 64-character lines
             formatted_body = "\n".join(body[i:i+64] for i in range(0, len(body), 64))
             cleaned = f"-----BEGIN {header_type}-----\n{formatted_body}\n-----END {header_type}-----\n"

@@ -18,20 +18,38 @@ logger = logging.getLogger("mtls_client")
 def clean_pem_content(raw_pem: str) -> str:
     """
     Sanitiza strings PEM vindas de variáveis de ambiente:
-    Trata tanto quebras com \\n quanto blocos colados em linha única separados por espaços.
+    Trata quebras com \\n, blocos colados em linha única, strings codificadas em Base64 ou URL-encoded.
     """
     if not raw_pem:
         return ""
-    cleaned = raw_pem.strip().strip('"').strip("'").replace("\\n", "\n").strip()
 
-    # Se o PEM foi colado numa única linha com espaços separando o base64 (ex: "-----BEGIN CERTIFICATE----- MIID...")
-    if "-----BEGIN" in cleaned and "\n" not in cleaned:
-        # Extrai o tipo do bloco PEM (CERTIFICATE ou PRIVATE KEY)
-        match = re.search(r"-----BEGIN ([A-Z0-9\s]+)-----\s*(.*?)\s*-----END \1-----", cleaned)
+    import urllib.parse
+    cleaned = raw_pem.strip().strip('"').strip("'")
+
+    if "%2D" in cleaned or "%0A" in cleaned or "%3D" in cleaned:
+        try:
+            cleaned = urllib.parse.unquote(cleaned)
+        except Exception:
+            pass
+
+    if "-----BEGIN" not in cleaned:
+        try:
+            import base64
+            decoded_bytes = base64.b64decode(cleaned)
+            decoded_str = decoded_bytes.decode("utf-8", errors="ignore")
+            if "-----BEGIN" in decoded_str:
+                cleaned = decoded_str
+        except Exception:
+            pass
+
+    cleaned = cleaned.replace("\\n", "\n").replace("\r\n", "\n").strip()
+
+    if "-----BEGIN" in cleaned:
+        match = re.search(r"-----BEGIN ([A-Z0-9\s\-]+)-----\s*(.*?)\s*-----END \1-----", cleaned, re.DOTALL | re.IGNORECASE)
         if match:
-            header_type = match.group(1)
-            body = match.group(2).replace(" ", "")
-            # Quebra o corpo em linhas de 64 caracteres como manda o padrão X.509/PEM
+            header_type = match.group(1).strip().upper()
+            raw_body = match.group(2)
+            body = re.sub(r"[^A-Za-z0-9+/=]", "", raw_body).strip()
             formatted_body = "\n".join(body[i:i+64] for i in range(0, len(body), 64))
             cleaned = f"-----BEGIN {header_type}-----\n{formatted_body}\n-----END {header_type}-----\n"
 
