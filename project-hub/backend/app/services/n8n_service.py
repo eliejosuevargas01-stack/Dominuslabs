@@ -1116,17 +1116,13 @@ class N8NService:
             N8NService._leads_cache_url = url
             return mapped_mock
 
-        sep = "&" if "?" in url else "?"
-        endpoint_url = f"{url}{sep}action=get_contacts"
         encrypted_body = encrypt_payload({"action": "get_contacts"}, "n8n")
-
         raw_leads = None
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
-                # Tenta primeiro POST com payload criptografado
                 response = await client.post(url, json=encrypted_body, timeout=30.0)
-                if response.status_code >= 400 or not response.text:
-                    response = await client.get(endpoint_url, timeout=30.0)
+                if response.status_code >= 400:
+                    logger.warning(f"[N8N-STEALTH] POST request to {url} returned status {response.status_code}. Ensure the n8n Webhook node HTTP Method is set to POST.")
                 response.raise_for_status()
                 data = response.json()
                 if isinstance(data, dict) and data.get("_encrypted") is True:
@@ -1139,7 +1135,7 @@ class N8NService:
                 elif isinstance(data, dict) and "mensagens" in data:
                     raw_leads = [data]
             except Exception as e:
-                logger.error(f"Error calling GET leads webhook: {e}. Falling back to mock data.", exc_info=True)
+                logger.error(f"Error calling POST leads webhook: {e}. Falling back to mock data.", exc_info=True)
 
         if not raw_leads:
             mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
@@ -1179,15 +1175,13 @@ class N8NService:
         if not url:
             return []
 
-        sep = "&" if "?" in url else "?"
-        endpoint_url = f"{url}{sep}action=get_conversations"
         encrypted_body = encrypt_payload({"action": "get_conversations"}, "n8n")
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.post(url, json=encrypted_body, timeout=30.0)
-                if response.status_code >= 400 or not response.text:
-                    response = await client.get(endpoint_url, timeout=30.0)
+                if response.status_code >= 400:
+                    logger.warning(f"[N8N-STEALTH] POST request to {url} returned status {response.status_code}. Ensure the n8n Webhook node HTTP Method is set to POST.")
                 response.raise_for_status()
                 data = response.json()
                 if isinstance(data, dict) and data.get("_encrypted") is True:
@@ -1216,7 +1210,7 @@ class N8NService:
 
                 return mapped
             except Exception as e:
-                logger.error(f"Error calling GET conversations webhook: {e}")
+                logger.error(f"Error calling POST conversations webhook: {e}")
                 return []
 
     @staticmethod
@@ -1530,13 +1524,6 @@ class N8NService:
         if cached_lead:
             lid = cached_lead.get("lid") or cached_lead.get("LID") or cached_lead.get("Lid")
 
-        sep = "&" if "?" in url else "?"
-        endpoint_url = f"{url}{sep}action=get_chat_history&lead_id={target_jid}"
-        if lid:
-            endpoint_url += f"&lid={lid}"
-        if target_session:
-            endpoint_url += f"&session_id={target_session}"
-
         outgoing_body = {
             "action": "get_chat_history",
             "lead_id": target_jid,
@@ -1550,8 +1537,8 @@ class N8NService:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
                 response = await client.post(url, json=encrypted_body, timeout=30.0)
-                if response.status_code >= 400 or not response.text:
-                    response = await client.get(endpoint_url, timeout=30.0)
+                if response.status_code >= 400:
+                    logger.warning(f"[N8N-STEALTH] POST request to {url} returned status {response.status_code}. Ensure the n8n Webhook node HTTP Method is set to POST.")
                 response.raise_for_status()
                 body = response.text.strip()
                 raw_msgs = []
