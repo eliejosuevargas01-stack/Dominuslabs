@@ -49,7 +49,11 @@ def clean_pem(pem_str: str) -> bytes:
 
     # 3. Re-format PEM block if lines were collapsed or contain unexpected whitespace
     if "-----BEGIN" in cleaned:
-        match = re.search(r"-----BEGIN ([A-Z0-9\s\-]+)-----\s*(.*?)\s*-----END \1-----", cleaned, re.DOTALL | re.IGNORECASE)
+        if "-----END" not in cleaned:
+            logger.error(f"[CRYPTO-PEM-ERROR] ❌ DOMINUS_PRIVATE_KEY está TRUNCADA/INCOMPLETA no ambiente ({len(pem_str)} chars). Falta o cabeçalho -----END PRIVATE KEY-----.")
+            print(f"[CRYPTO-PEM-ERROR] ❌ DOMINUS_PRIVATE_KEY está TRUNCADA/INCOMPLETA ({len(pem_str)} chars). Verifique a variável de ambiente no Coolify.", flush=True)
+
+        match = re.search(r"-----BEGIN ([A-Z0-9\s\-]+)-----\s*(.*?)\s*(?:-----END \1-----|$)", cleaned, re.DOTALL | re.IGNORECASE)
         if match:
             header_type = match.group(1).strip().upper()
             raw_body = match.group(2)
