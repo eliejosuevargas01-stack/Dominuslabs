@@ -78,7 +78,8 @@ def get_public_key(target: str) -> Optional[bytes]:
     elif target == "idpw":
         return clean_pem(settings.IDPW_PUBLIC_KEY)
     elif target == "n8n":
-        return clean_pem(settings.N8N_PUBLIC_KEY)
+        key = settings.N8N_PUBLIC_KEY or settings.DOMINUS_PUBLIC_KEY
+        return clean_pem(key)
     elif target == "dominus":
         return clean_pem(settings.DOMINUS_PUBLIC_KEY)
     return None

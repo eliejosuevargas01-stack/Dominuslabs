@@ -6,6 +6,7 @@ import re
 import time
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
+from app.core.crypto import encrypt_payload, decrypt_payload
 from datetime import datetime
 
 RAW_LEADS_CACHE = {}
@@ -1117,13 +1118,20 @@ class N8NService:
 
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=get_contacts"
+        encrypted_body = encrypt_payload({"action": "get_contacts"}, "n8n")
 
         raw_leads = None
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
-                response = await client.get(endpoint_url, timeout=30.0)
+                # Tenta primeiro POST com payload criptografado
+                response = await client.post(url, json=encrypted_body, timeout=30.0)
+                if response.status_code >= 400 or not response.text:
+                    response = await client.get(endpoint_url, timeout=30.0)
                 response.raise_for_status()
                 data = response.json()
+                if isinstance(data, dict) and data.get("_encrypted") is True:
+                    data = decrypt_payload(data)
+
                 if isinstance(data, list):
                     raw_leads = data
                 elif isinstance(data, dict) and "leads" in data:
@@ -1165,7 +1173,7 @@ class N8NService:
     @staticmethod
     async def get_conversations() -> List[dict]:
         """
-        Obtém a lista de conversas ativas via action=get_conversations no webhook CRM.
+        Obtém a lista de conversas ativas via action=get_conversations no webhook CRM com Zero-Trust.
         """
         url = settings.CRM_GET_MESSAGES_WEBHOOK_URL or settings.CRM_GET_LEADS_WEBHOOK_URL
         if not url:
@@ -1173,12 +1181,18 @@ class N8NService:
 
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=get_conversations"
+        encrypted_body = encrypt_payload({"action": "get_conversations"}, "n8n")
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
-                response = await client.get(endpoint_url, timeout=30.0)
+                response = await client.post(url, json=encrypted_body, timeout=30.0)
+                if response.status_code >= 400 or not response.text:
+                    response = await client.get(endpoint_url, timeout=30.0)
                 response.raise_for_status()
                 data = response.json()
+                if isinstance(data, dict) and data.get("_encrypted") is True:
+                    data = decrypt_payload(data)
+
                 raw_convs = []
                 if isinstance(data, list):
                     raw_convs = data
@@ -1508,14 +1522,29 @@ class N8NService:
         if target_session:
             endpoint_url += f"&session_id={target_session}"
 
+        outgoing_body = {
+            "action": "get_chat_history",
+            "lead_id": target_jid,
+            "contact_jid": target_jid,
+            "session_id": target_session
+        }
+        if lid:
+            outgoing_body["lid"] = lid
+        encrypted_body = encrypt_payload(outgoing_body, "n8n")
+
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
-                response = await client.get(endpoint_url, timeout=30.0)
+                response = await client.post(url, json=encrypted_body, timeout=30.0)
+                if response.status_code >= 400 or not response.text:
+                    response = await client.get(endpoint_url, timeout=30.0)
                 response.raise_for_status()
                 body = response.text.strip()
                 raw_msgs = []
                 if body:
                     data = response.json()
+                    if isinstance(data, dict) and data.get("_encrypted") is True:
+                        data = decrypt_payload(data)
+
                     if isinstance(data, list):
                         for d in data:
                             if isinstance(d, dict):
