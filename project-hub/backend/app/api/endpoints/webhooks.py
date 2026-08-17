@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -368,14 +369,10 @@ async def github_webhook_by_token(public_token: str, request: Request, db: Sessi
         except Exception:
             deploy_date = datetime.utcnow()
 
-        webhook_service.process_deploy_webhook(
-            db=db,
-            project_id=project.id,
-            provider="netlify",
-            status=status,
-            deploy_url=deploy_url,
-            deploy_date=deploy_date
-        )
+        await run_in_threadpool(
+        webhook_service.process_deploy_webhook,
+        db, project.id, "netlify", status, deploy_url, deploy_date
+    )
         await notify_listeners(public_token)
         return {"status": "success", "type": "netlify_deploy"}
 
@@ -399,14 +396,10 @@ async def github_webhook_by_token(public_token: str, request: Request, db: Sessi
             except Exception:
                 commit_date = datetime.utcnow()
 
-            webhook_service.process_github_webhook(
-                db=db,
-                project_id=project.id,
-                commit_hash=commit_hash,
-                message=message,
-                author=author,
-                commit_date=commit_date
-            )
+            await run_in_threadpool(
+        webhook_service.process_github_webhook,
+        db, project.id, commit_hash, message, author, commit_date
+    )
             processed_count += 1
             
         await notify_listeners(public_token)
@@ -426,13 +419,9 @@ async def github_webhook_by_token(public_token: str, request: Request, db: Sessi
     except ValueError:
         commit_date = datetime.utcnow()
 
-    webhook_service.process_github_webhook(
-        db=db,
-        project_id=project.id,
-        commit_hash=commit_hash,
-        message=message,
-        author=author,
-        commit_date=commit_date
+    await run_in_threadpool(
+        webhook_service.process_github_webhook,
+        db, project.id, commit_hash, message, author, commit_date
     )
 
     await notify_listeners(public_token)
@@ -478,14 +467,10 @@ async def github_webhook(request: Request, db: Session = Depends(get_db)):
             except Exception:
                 commit_date = datetime.utcnow()
 
-            webhook_service.process_github_webhook(
-                db=db,
-                project_id=project.id,
-                commit_hash=commit_hash,
-                message=message,
-                author=author,
-                commit_date=commit_date
-            )
+            await run_in_threadpool(
+        webhook_service.process_github_webhook,
+        db, project.id, commit_hash, message, author, commit_date
+    )
             processed_count += 1
             
         await notify_listeners(project.public_token)
@@ -506,13 +491,9 @@ async def github_webhook(request: Request, db: Session = Depends(get_db)):
     except ValueError:
         commit_date = datetime.utcnow()
 
-    webhook_service.process_github_webhook(
-        db=db,
-        project_id=project_id,
-        commit_hash=commit_hash,
-        message=message,
-        author=author,
-        commit_date=commit_date
+    await run_in_threadpool(
+        webhook_service.process_github_webhook,
+        db, project_id, commit_hash, message, author, commit_date
     )
 
     from app.models.project import Project
@@ -540,13 +521,9 @@ async def deploy_webhook(request: Request, db: Session = Depends(get_db)):
     except ValueError:
         deploy_date = datetime.utcnow()
 
-    webhook_service.process_deploy_webhook(
-        db=db,
-        project_id=project_id,
-        provider=provider,
-        status=status,
-        deploy_url=deploy_url,
-        deploy_date=deploy_date
+    await run_in_threadpool(
+        webhook_service.process_deploy_webhook,
+        db, project_id, provider, status, deploy_url, deploy_date
     )
 
     from app.models.project import Project
