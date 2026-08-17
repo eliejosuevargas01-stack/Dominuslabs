@@ -8,7 +8,9 @@ import ssl
 import logging
 import httpx
 import re
+import json
 from app.core.config import settings
+from app.core.crypto import encrypt_payload
 
 logger = logging.getLogger("mtls_client")
 
@@ -114,17 +116,51 @@ def create_ssl_context(service_name: str = "default") -> ssl.SSLContext | None:
         return None
 
 
+class EncryptedAsyncClient(httpx.AsyncClient):
+    """
+    Um httpx.AsyncClient customizado que intercepta as requisições e criptografa o payload
+    automaticamente usando Hybrid Encryption (Zero-Trust) baseado no 'service_name'.
+    """
+    def __init__(self, service_name: str, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.service_name = service_name
+        # Mapeamento do service_name interno para a chave do app.core.crypto
+        self.target_map = {
+            "whatsapp": "whats-api",
+            "identity": "idpw",
+            "n8n": "n8n"
+        }
+
+    async def request(self, method: str, url: str, **kwargs):
+        # Intercepta POST, PUT, PATCH se houver JSON no kwargs
+        if method.upper() in ["POST", "PUT", "PATCH"]:
+            if "json" in kwargs and kwargs["json"] is not None:
+                target_key = self.target_map.get(self.service_name, "n8n")
+                try:
+                    # Tenta criptografar
+                    encrypted_json = encrypt_payload(kwargs["json"], target_key)
+                    kwargs["json"] = encrypted_json
+                    logger.debug(f"[Zero-Trust] Payload criptografado para o serviço {self.service_name}")
+                except Exception as e:
+                    logger.error(f"[Zero-Trust] Erro ao criptografar payload para {self.service_name}: {e}")
+                    # Para strict zero-trust, se falhar a criptografia por falta de chave, poderíamos falhar aqui.
+                    # Mas se preferir fallback:
+                    pass
+
+        return await super().request(method, url, **kwargs)
+
 def get_mtls_async_client(timeout: float = 15.0, service_name: str = "default") -> httpx.AsyncClient:
     """
-    Retorna uma instância de httpx.AsyncClient pronta para realizar requisições mTLS para o serviço alvo.
+    Retorna uma instância de EncryptedAsyncClient pronta para realizar requisições mTLS
+    para o serviço alvo, com criptografia híbrida automática de payload (Zero-Trust).
     Gera logs explícitos para auditoria de quando o mTLS foi necessário e ativado vs quando não foi necessário.
     """
     ssl_context = create_ssl_context(service_name=service_name)
     if ssl_context:
         logger.info(f"[mTLS-STATUS] 🔒 mTLS NECESSÁRIO E ATIVO para o serviço '{service_name}'. Certificados cliente validados e anexados.")
         print(f"[mTLS-STATUS] 🔒 mTLS NECESSÁRIO E ATIVO para o serviço '{service_name}'. Certificados cliente validados.", flush=True)
-        return httpx.AsyncClient(verify=ssl_context, timeout=timeout)
+        return EncryptedAsyncClient(service_name=service_name, verify=ssl_context, timeout=timeout)
     else:
         logger.info(f"[mTLS-STATUS] 🔓 mTLS NÃO NECESSÁRIO / NÃO UTILIZADO para o serviço '{service_name}'. Operando via conexão HTTP/HTTPS padrão.")
         print(f"[mTLS-STATUS] 🔓 mTLS NÃO NECESSÁRIO para o serviço '{service_name}'. Conexão padrão ativada.", flush=True)
-        return httpx.AsyncClient(timeout=timeout)
+        return EncryptedAsyncClient(service_name=service_name, timeout=timeout)

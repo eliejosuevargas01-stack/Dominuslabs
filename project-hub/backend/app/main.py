@@ -11,7 +11,7 @@ import os
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.database import Base, engine, get_db
-from app.core.middleware import AuditLoggingMiddleware
+from app.core.middleware import AuditLoggingMiddleware, DecryptionMiddleware
 
 # Import all models to ensure they are registered on Base.metadata
 from app.models.project import Project
@@ -153,6 +153,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Enterprise Audit Logging Middleware
 app.add_middleware(AuditLoggingMiddleware)
+app.add_middleware(DecryptionMiddleware)
 
 # Set all CORS enabled origins
 if settings.BACKEND_CORS_ORIGINS:

@@ -1,11 +1,44 @@
 import time
+import json
 import logging
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import Response, JSONResponse
+
+from app.core.crypto import decrypt_payload
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("enterprise_audit")
+
+class DecryptionMiddleware(BaseHTTPMiddleware):
+    """
+    Intercepts incoming requests and decrypts them if they are Hybrid Encrypted.
+    """
+    async def dispatch(self, request: Request, call_next):
+        if request.method in ["POST", "PUT", "PATCH"]:
+            content_type = request.headers.get("Content-Type", "")
+            if "application/json" in content_type:
+                try:
+                    body = await request.body()
+                    if body:
+                        payload = json.loads(body.decode("utf-8"))
+                        if isinstance(payload, dict) and payload.get("_encrypted") is True:
+                            decrypted_payload = decrypt_payload(payload)
+                            
+                            # Replace the request body with the decrypted one
+                            async def receive():
+                                return {"type": "http.request", "body": json.dumps(decrypted_payload).encode("utf-8")}
+                            request._receive = receive
+                except Exception as e:
+                    logger.error(f"Failed to decrypt incoming request: {e}")
+                    return JSONResponse(
+                        status_code=400,
+                        content={"detail": "Failed to decrypt the payload. Invalid key, format or tampering detected."}
+                    )
+        
+        response = await call_next(request)
+        return response
+
 
 class AuditLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):

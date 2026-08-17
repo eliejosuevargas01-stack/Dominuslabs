@@ -10,3 +10,4 @@ aiofiles
 httpx
 cachetools
 slowapi
+cryptography

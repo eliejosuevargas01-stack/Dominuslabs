@@ -65,6 +65,13 @@ class Settings(BaseSettings):
     MTLS_CA_CERT_PATH: str = os.getenv("MTLS_CA_CERT_PATH", "")
     ENABLE_MTLS: bool = os.getenv("ENABLE_MTLS", "false").lower() in ("true", "1")
 
+    # Hybrid Encryption Keys (Zero-Trust)
+    DOMINUS_PRIVATE_KEY: str = os.getenv("DOMINUS_PRIVATE_KEY", "")
+    DOMINUS_PUBLIC_KEY: str = os.getenv("DOMINUS_PUBLIC_KEY", "")
+    WHATS_API_PUBLIC_KEY: str = os.getenv("WHATS_API_PUBLIC_KEY", "")
+    IDPW_PUBLIC_KEY: str = os.getenv("IDPW_PUBLIC_KEY", "")
+    N8N_PUBLIC_KEY: str = os.getenv("N8N_PUBLIC_KEY", "")
+
     class Config:
         case_sensitive = True
 
