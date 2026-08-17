@@ -53,8 +53,11 @@ def clean_pem(pem_str: str) -> bytes:
         if match:
             header_type = match.group(1).strip().upper()
             raw_body = match.group(2)
-            # Remove any non-base64 characters from body
-            body = re.sub(r"[^A-Za-z0-9+/=]", "", raw_body).strip()
+            # Remove any non-base64 characters and any internal '=' signs from raw_body
+            b64_only = re.sub(r"[^A-Za-z0-9+/]", "", raw_body).strip()
+            # Recalculate valid Base64 padding (0, 1, or 2 '=' at the end)
+            pad_needed = (4 - (len(b64_only) % 4)) % 4
+            body = b64_only + ("=" * pad_needed)
             # Wrap base64 body into RFC-compliant 64-character lines
             formatted_body = "\n".join(body[i:i+64] for i in range(0, len(body), 64))
             cleaned = f"-----BEGIN {header_type}-----\n{formatted_body}\n-----END {header_type}-----\n"
@@ -148,8 +151,16 @@ def decrypt_payload(encrypted_dict: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("Private key missing.")
 
     try:
-        # Load Dominus private key
-        private_key = load_pem_private_key(private_key_pem, password=None)
+        # Load Dominus private key with fallback for OpenSSH keys
+        try:
+            private_key = load_pem_private_key(private_key_pem, password=None)
+        except Exception as pem_err:
+            try:
+                from cryptography.hazmat.primitives.serialization import load_ssh_private_key
+                private_key = load_ssh_private_key(private_key_pem, password=None)
+            except Exception:
+                logger.error(f"Failed to load DOMINUS_PRIVATE_KEY ({len(private_key_pem)} bytes): {pem_err}")
+                raise pem_err
 
         # 1. Extract values and decode from Base64
         encrypted_key = base64.b64decode(encrypted_dict["encryptedKey"])
