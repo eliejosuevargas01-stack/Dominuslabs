@@ -79,18 +79,23 @@ def encrypt_payload(payload_dict: Dict[str, Any], target: str) -> Dict[str, Any]
         )
 
         # 4. Return the formatted JSON object with Base64 values
-        return {
+        result = {
             "_encrypted": True,
             "encryptedKey": base64.b64encode(encrypted_key).decode('utf-8'),
             "iv": base64.b64encode(iv).decode('utf-8'),
             "authTag": base64.b64encode(auth_tag).decode('utf-8'),
             "payload": base64.b64encode(ciphertext).decode('utf-8')
         }
+        if target == "idpw":
+            logger.info("[FLOW-STEP 3] json idpw criptografado")
+            print("[FLOW-STEP 3] json idpw criptografado", flush=True)
+        return result
 
     except Exception as e:
+        if target == "idpw":
+            logger.error(f"[FLOW-STEP 3] ERROR json idpw criptografado: {e}")
+            print(f"[FLOW-STEP 3] ERROR json idpw criptografado: {e}", flush=True)
         logger.error(f"Error encrypting payload for {target}: {e}")
-        # In case of error, you might want to raise it or just return the original payload
-        # depending on security strictness. For Zero-Trust, raising is better.
         raise e
 
 

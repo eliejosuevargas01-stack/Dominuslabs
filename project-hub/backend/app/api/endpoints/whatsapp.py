@@ -7,8 +7,10 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.auth import get_current_user, check_crm_permission
 from app.models.user import User
+import logging
 from app.core.mtls_client import get_mtls_async_client
 
+logger = logging.getLogger("whatsapp")
 router = APIRouter()
 
 async def get_user_token(email: str, db: Session, scope: str = "whatsapp:sessions:read") -> str:
@@ -91,10 +93,19 @@ async def make_whatsapp_api_request(
                 json=json_data
             )
         except Exception as e:
+            logger.error(f"[FLOW-STEP 6] ERROR autenticado no whats api com jwt: {e}")
+            print(f"[FLOW-STEP 6] ERROR autenticado no whats api com jwt: {e}", flush=True)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
             )
+
+        if response.status_code >= 400:
+            logger.error(f"[FLOW-STEP 6] ERROR autenticado no whats api com jwt: status={response.status_code}")
+            print(f"[FLOW-STEP 6] ERROR autenticado no whats api com jwt: status={response.status_code}", flush=True)
+        else:
+            logger.info(f"[FLOW-STEP 6] autenticado no whats api com jwt: status={response.status_code}")
+            print(f"[FLOW-STEP 6] autenticado no whats api com jwt: status={response.status_code}", flush=True)
         
         if response.status_code in (301, 302, 303, 307) and response.headers.get("location"):
             return {"url": response.headers.get("location")}

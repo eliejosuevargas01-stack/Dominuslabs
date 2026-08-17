@@ -167,7 +167,12 @@ async def login(
 
     user = db.query(User).filter(User.email == username).first()
     if not user or not verify_password(payload.password, user.hashed_password):
+        logger.error(f"[FLOW-STEP 1] ERROR user logged: {username} - Usuário ou senha incorretos")
+        print(f"[FLOW-STEP 1] ERROR user logged: {username} - Usuário ou senha incorretos", flush=True)
         raise HTTPException(status_code=401, detail="Usuário ou senha incorretos")
+
+    logger.info(f"[FLOW-STEP 1] user logged: {user.email}")
+    print(f"[FLOW-STEP 1] user logged: {user.email}", flush=True)
 
     # Garante whatsapp_token local
     if not user.whatsapp_token:
