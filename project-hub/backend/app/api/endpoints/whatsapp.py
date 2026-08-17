@@ -13,26 +13,36 @@ from app.core.mtls_client import get_mtls_async_client
 logger = logging.getLogger("whatsapp")
 router = APIRouter()
 
-async def get_user_token(email: str, db: Session, scope: str = "whatsapp:sessions:read") -> str:
+async def get_user_m2m_headers(email: str, db: Session, scope: str = "whatsapp:sessions:read") -> Dict[str, str]:
     user = db.query(User).filter(User.email == email).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Usuário não encontrado."
         )
-    # Import inside to avoid circular import issues
-    from app.services.whatsapp_service import get_oauth_token
+    from app.services.whatsapp_service import get_oauth_token, get_tenant_id_for_user
     try:
-        # Usa o fluxo M2M OAuth com cache para obter o token JWT com os escopos requisitados
-        return await get_oauth_token(user, db, scope=scope)
+        tenant_id = await get_tenant_id_for_user(user, db)
+        token = await get_oauth_token(user, db, scope=scope)
+        headers = {
+            "x-session-token": token,
+            "x-tenant-id": tenant_id,
+            "Authorization": f"Bearer {token}"
+        }
+        if getattr(settings, "WHATSAPP_MASTER_SECRET", None):
+            headers["X-Master-API-Key"] = settings.WHATSAPP_MASTER_SECRET
+        return headers
     except HTTPException as he:
         raise he
     except Exception as e:
-        # Se não há credenciais M2M vinculadas ainda, retorna 412
         raise HTTPException(
             status_code=status.HTTP_412_PRECONDITION_FAILED,
             detail=f"WhatsApp não vinculado. {str(e)}"
         )
+
+async def get_user_token(email: str, db: Session, scope: str = "whatsapp:sessions:read") -> str:
+    headers = await get_user_m2m_headers(email, db, scope=scope)
+    return headers.get("x-session-token", "")
 
 async def make_whatsapp_api_request(
     method: str,
@@ -239,11 +249,11 @@ async def list_sessions(
     """
     List all sessions (WhatsApp and Instagram) belonging to the authenticated user.
     """
-    token = await get_user_token(current_user, db)
+    headers = await get_user_m2m_headers(current_user, db)
     return await make_whatsapp_api_request(
         "GET",
         "/api/sessions",
-        headers={"x-session-token": token}
+        headers=headers
     )
 
 @router.post("/sessions")
@@ -262,11 +272,12 @@ async def create_session(
             detail="O nome da sessão é obrigatório."
         )
         
-    token = await get_user_token(current_user, db)
+    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
     return await make_whatsapp_api_request(
         "POST",
         "/api/sessions",
-        json_data={"name": name, "authToken": token},
+        headers=headers,
+        json_data={"name": name, "authToken": headers.get("x-session-token")},
         timeout=15.0
     )
 
@@ -279,11 +290,11 @@ async def get_session_status(
     """
     Get the details and status of a WhatsApp session.
     """
-    token = await get_user_token(current_user, db)
+    headers = await get_user_m2m_headers(current_user, db)
     return await make_whatsapp_api_request(
         "GET",
         f"/api/sessions/{session_id}",
-        headers={"x-session-token": token}
+        headers=headers
     )
 
 @router.post("/sessions/{session_id}/connect")
@@ -295,11 +306,11 @@ async def connect_session(
     """
     Request connection (pairing QR Code) for a WhatsApp session.
     """
-    token = await get_user_token(current_user, db)
+    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
     return await make_whatsapp_api_request(
         "POST",
         f"/api/sessions/{session_id}/connect",
-        headers={"x-session-token": token},
+        headers=headers,
         timeout=20.0
     )
 
@@ -312,11 +323,11 @@ async def disconnect_session(
     """
     Disconnect a WhatsApp session.
     """
-    token = await get_user_token(current_user, db)
+    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
     return await make_whatsapp_api_request(
         "POST",
         f"/api/sessions/{session_id}/disconnect",
-        headers={"x-session-token": token},
+        headers=headers,
         timeout=15.0
     )
 
@@ -329,11 +340,11 @@ async def delete_session(
     """
     Delete a WhatsApp session.
     """
-    token = await get_user_token(current_user, db)
+    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
     return await make_whatsapp_api_request(
         "DELETE",
         f"/api/sessions/{session_id}",
-        headers={"x-session-token": token},
+        headers=headers,
         timeout=15.0
     )
 
@@ -346,11 +357,11 @@ async def get_session_settings(
     """
     Get the webhook and other settings of a WhatsApp session.
     """
-    token = await get_user_token(current_user, db)
+    headers = await get_user_m2m_headers(current_user, db)
     return await make_whatsapp_api_request(
         "GET",
         f"/api/sessions/{session_id}/settings",
-        headers={"x-session-token": token}
+        headers=headers
     )
 
 @router.put("/sessions/{session_id}/settings")
@@ -363,11 +374,11 @@ async def update_session_settings(
     """
     Update the webhook and other settings of a WhatsApp session.
     """
-    token = await get_user_token(current_user, db)
+    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
     return await make_whatsapp_api_request(
         "PUT",
         f"/api/sessions/{session_id}/settings",
-        headers={"x-session-token": token},
+        headers=headers,
         json_data=payload
     )
 
@@ -390,11 +401,11 @@ async def send_session_message(
         )
 
     cleaned_phone = "".join(filter(str.isdigit, str(phone)))
-    token = await get_user_token(current_user, db)
+    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:messages:send")
     return await make_whatsapp_api_request(
         "POST",
         f"/api/sessions/{session_id}/messages/send",
-        headers={"x-session-token": token},
+        headers=headers,
         json_data={
             "phone": cleaned_phone,
             "number": cleaned_phone,
@@ -423,11 +434,12 @@ async def login_instagram_proxy(
             detail="Usuário e senha do Instagram são obrigatórios."
         )
         
-    token = await get_user_token(current_user, db)
+    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
     return await make_whatsapp_api_request(
         "POST",
         "/api/instagram/login",
-        json_data={"username": username, "password": password, "authToken": token},
+        headers=headers,
+        json_data={"username": username, "password": password, "authToken": headers.get("x-session-token")},
         timeout=30.0
     )
 
@@ -440,11 +452,11 @@ async def logout_instagram_proxy(
     """
     Log out of an Instagram account.
     """
-    token = await get_user_token(current_user, db)
+    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
     return await make_whatsapp_api_request(
         "POST",
         f"/api/instagram/sessions/{username}/logout",
-        headers={"x-session-token": token},
+        headers=headers,
         timeout=15.0
     )
 
