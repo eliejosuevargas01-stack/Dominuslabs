@@ -1058,6 +1058,17 @@ class N8NService:
     CACHE_TTL = 10.0  # seconds
 
     @staticmethod
+    def _enrich_payload(base_payload: dict, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> dict:
+        p = dict(base_payload)
+        resolved_tenant = tenant_id or getattr(settings, "ADMIN_TENANT_ID", os.getenv("ADMIN_TENANT_ID", "admin"))
+        resolved_user = user_id or p.get("user_id") or p.get("alterado_por") or p.get("updated_by") or "system"
+        p["tenant_id"] = resolved_tenant
+        p["user_id"] = resolved_user
+        p["alterado_por"] = resolved_user
+        p["updated_by"] = resolved_user
+        return p
+
+    @staticmethod
     def invalidate_leads_cache():
         N8NService._leads_cache = None
         N8NService._leads_cache_time = 0.0
@@ -1065,7 +1076,7 @@ class N8NService:
         logger.info("CRM Leads Cache explicitly invalidated.")
 
     @staticmethod
-    async def run_scrapper(payload: dict, platform: str = "meta_ads") -> dict:
+    async def run_scrapper(payload: dict, platform: str = "meta_ads", user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> dict:
         fallback_url = settings.SCRAPPER_META_WEBHOOK_URL if platform == "meta_ads" else settings.SCRAPPER_MAPS_WEBHOOK_URL
         url = payload.get("webhook_url") or fallback_url
         if not url:
@@ -1073,13 +1084,13 @@ class N8NService:
             return {"status": "success", "message": "Scrapper triggered (MOCK Mode)", "data": payload}
 
         outgoing_payload = {
+            "action": "run_scrapper",
             "queries": payload.get("queries", []),
             "min_results": payload.get("min_results", 10),
             "max_results": payload.get("max_results", 20),
         }
         if "target_platform" in payload and payload["target_platform"]:
             outgoing_payload["target_platform"] = payload["target_platform"]
-            # If target_platform is whatsapp or instagram, also set contact_channel for maximum N8N compatibility
             if payload["target_platform"] in ("whatsapp", "instagram"):
                 outgoing_payload["contact_channel"] = payload["target_platform"]
         if "contact_channel" in payload and payload["contact_channel"]:
@@ -1087,17 +1098,23 @@ class N8NService:
         if "objective" in payload and payload["objective"]:
             outgoing_payload["objective"] = payload["objective"]
 
+        outgoing_payload = N8NService._enrich_payload(outgoing_payload, user_id=user_id or payload.get("user_id"), tenant_id=tenant_id or payload.get("tenant_id"))
+        encrypted_payload = encrypt_payload(outgoing_payload, "n8n")
+
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
-                response = await client.post(url, json=outgoing_payload, timeout=30.0)
+                response = await client.post(url, json=encrypted_payload, timeout=30.0)
                 response.raise_for_status()
-                return clean_n8n_response(response.json())
+                res_data = response.json()
+                if isinstance(res_data, dict) and res_data.get("_encrypted") is True:
+                    res_data = decrypt_payload(res_data)
+                return clean_n8n_response(res_data)
             except Exception as e:
                 logger.error(f"Error calling Scrapper webhook: {e}")
                 return {"status": "error", "message": str(e)}
 
     @staticmethod
-    async def get_leads() -> List[dict]:
+    async def get_leads(user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> List[dict]:
         url = settings.CRM_GET_LEADS_WEBHOOK_URL
         # Check cache
         if N8NService._leads_cache is not None:
@@ -1116,7 +1133,8 @@ class N8NService:
             N8NService._leads_cache_url = url
             return mapped_mock
 
-        encrypted_body = encrypt_payload({"action": "get_contacts"}, "n8n")
+        outgoing_body = N8NService._enrich_payload({"action": "get_contacts"}, user_id=user_id, tenant_id=tenant_id)
+        encrypted_body = encrypt_payload(outgoing_body, "n8n")
         raw_leads = None
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
@@ -1167,7 +1185,7 @@ class N8NService:
         return mapped_leads
 
     @staticmethod
-    async def get_conversations() -> List[dict]:
+    async def get_conversations(user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> List[dict]:
         """
         Obtém a lista de conversas ativas via action=get_conversations no webhook CRM com Zero-Trust.
         """
@@ -1175,7 +1193,8 @@ class N8NService:
         if not url:
             return []
 
-        encrypted_body = encrypt_payload({"action": "get_conversations"}, "n8n")
+        outgoing_body = N8NService._enrich_payload({"action": "get_conversations"}, user_id=user_id, tenant_id=tenant_id)
+        encrypted_body = encrypt_payload(outgoing_body, "n8n")
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
@@ -1214,11 +1233,11 @@ class N8NService:
                 return []
 
     @staticmethod
-    async def get_chat_history(lead_id: str) -> List[dict]:
+    async def get_chat_history(lead_id: str, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> List[dict]:
         """
         Alias para get_messages utilizando action=get_chat_history.
         """
-        return await N8NService.get_messages(lead_id)
+        return await N8NService.get_messages(lead_id, user_id=user_id, tenant_id=tenant_id)
 
     @staticmethod
     async def get_chat_history_response(lead_id: str) -> List[dict]:
@@ -1378,10 +1397,11 @@ class N8NService:
                 mapped["updated_by"] = current_user
             return mapped
 
-        # Encrypt action and lead_id inside payload for Zero-Trust stealth
+        # Encrypt action, lead_id, user_id and tenant_id inside payload for Zero-Trust stealth
         outgoing_payload["action"] = "update_lead"
         outgoing_payload["id"] = lead_id
         outgoing_payload["lead_id"] = lead_id
+        outgoing_payload = N8NService._enrich_payload(outgoing_payload, user_id=current_user, tenant_id=tenant_id)
         encrypted_payload = encrypt_payload(outgoing_payload, "n8n")
 
         sep = "&" if "?" in url else "?"
@@ -1425,7 +1445,7 @@ class N8NService:
                 return mapped
 
     @staticmethod
-    async def delete_lead(lead_id: str) -> dict:
+    async def delete_lead(lead_id: str, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> dict:
         N8NService.invalidate_leads_cache()
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
 
@@ -1453,7 +1473,8 @@ class N8NService:
 
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=delete_lead&id={lead_id}"
-        encrypted_payload = encrypt_payload({"action": "delete_lead", "id": lead_id, "lead_id": lead_id}, "n8n")
+        outgoing_body = N8NService._enrich_payload({"action": "delete_lead", "id": lead_id, "lead_id": lead_id}, user_id=user_id, tenant_id=tenant_id)
+        encrypted_payload = encrypt_payload(outgoing_body, "n8n")
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
@@ -1475,7 +1496,7 @@ class N8NService:
                 return {"status": "success", "message": f"Deleted locally. API Error: {str(e)}", "id": lead_id}
 
     @staticmethod
-    async def get_messages(lead_id: str) -> List[dict]:
+    async def get_messages(lead_id: str, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> List[dict]:
         all_msgs = list(MOCK_CONVERSATIONS.get(lead_id, []))
         url = settings.CRM_GET_MESSAGES_WEBHOOK_URL
 
@@ -1532,6 +1553,7 @@ class N8NService:
         }
         if lid:
             outgoing_body["lid"] = lid
+        outgoing_body = N8NService._enrich_payload(outgoing_body, user_id=user_id, tenant_id=tenant_id)
         encrypted_body = encrypt_payload(outgoing_body, "n8n")
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
@@ -1644,7 +1666,7 @@ class N8NService:
         return None
 
     @staticmethod
-    async def send_whatsapp_message(payload: dict) -> dict:
+    async def send_whatsapp_message(payload: dict, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> dict:
         url = settings.CRM_SEND_WHATSAPP_WEBHOOK_URL
         lead_id = payload.get("lead_id")
         message_text = payload.get("message")
@@ -1661,7 +1683,7 @@ class N8NService:
         
         if not lid:
             try:
-                leads = await N8NService.get_leads()
+                leads = await N8NService.get_leads(user_id=user_id, tenant_id=tenant_id)
                 lead_obj = next((l for l in leads if str(l.get("id")) == str(lead_id)), None)
                 if lead_obj:
                     lid = lead_obj.get("lid")
@@ -1736,6 +1758,7 @@ class N8NService:
             outgoing_payload["whatsapp_api_url"] = public_url
             outgoing_payload["whatsapp_send_url"] = f"{public_url}/api/sessions/{payload['session_id']}/messages/send"
 
+        outgoing_payload = N8NService._enrich_payload(outgoing_payload, user_id=user_id or payload.get("updated_by") or payload.get("user_id"), tenant_id=tenant_id or payload.get("tenant_id"))
         encrypted_payload = encrypt_payload(outgoing_payload, "n8n")
 
         async with httpx.AsyncClient(follow_redirects=True) as client:

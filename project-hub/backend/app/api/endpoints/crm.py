@@ -21,7 +21,7 @@ async def read_leads(
     Fetch all leads from the n8n CRM webhook or fallback to direct WhatsApp API.
     """
     try:
-        leads = await n8n_service.get_leads()
+        leads = await n8n_service.get_leads(user_id=current_user)
         if leads and len(leads) > 0:
             return leads
     except Exception as e:
@@ -36,7 +36,7 @@ async def read_lead(lead_id: str, current_user: str = Depends(get_current_user))
     """
     Fetch a single lead by its ID.
     """
-    leads = await n8n_service.get_leads()
+    leads = await n8n_service.get_leads(user_id=current_user)
     lead = next((l for l in leads if str(l.get("id")) == str(lead_id)), None)
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -55,7 +55,7 @@ async def delete_lead(lead_id: str, current_user: str = Depends(check_crm_permis
     """
     Delete a lead.
     """
-    result = await n8n_service.delete_lead(lead_id)
+    result = await n8n_service.delete_lead(lead_id, user_id=current_user)
     return result
 
 # ---------------------------------------------------------------------------
@@ -72,7 +72,7 @@ async def get_contacts_action(
     Retorna a lista completa de contatos cadastrados.
     """
     try:
-        leads = await n8n_service.get_leads()
+        leads = await n8n_service.get_leads(user_id=current_user)
         contacts = []
         for l in leads:
             contacts.append({
@@ -98,14 +98,14 @@ async def get_conversations_action(
     Retorna a prévia de todas as conversas agrupadas ou separadas por sessão.
     """
     try:
-        convs = await n8n_service.get_conversations()
+        convs = await n8n_service.get_conversations(user_id=current_user)
         if convs and len(convs) > 0:
             return convs
     except Exception as e:
         print(f"[CRM] n8n get_conversations error: {e}", flush=True)
 
     # Fallback return standard leads format mapped to conversations preview
-    leads = await n8n_service.get_leads()
+    leads = await n8n_service.get_leads(user_id=current_user)
     result = []
     for l in leads:
         result.append({
@@ -133,7 +133,7 @@ async def get_chat_history_action(
     Busca o histórico de mensagens de uma conversa com n8n ou Whats API.
     """
     lookup_id = f"{contact_jid}___{session_id}" if session_id and session_id != "default" else contact_jid
-    return await n8n_service.get_chat_history_response(lookup_id)
+    return await n8n_service.get_messages(lookup_id, user_id=current_user)
 
 from fastapi.responses import RedirectResponse, Response
 
