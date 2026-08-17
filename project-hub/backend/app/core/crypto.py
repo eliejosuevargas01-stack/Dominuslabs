@@ -87,14 +87,14 @@ def encrypt_payload(payload_dict: Dict[str, Any], target: str) -> Dict[str, Any]
             "payload": base64.b64encode(ciphertext).decode('utf-8')
         }
         if target == "idpw":
-            logger.info("[FLOW-STEP 3] json idpw criptografado")
-            print("[FLOW-STEP 3] json idpw criptografado", flush=True)
+            logger.info("[FLOW-STEP 3] Identity Worker payload encrypted successfully")
+            print("[FLOW-STEP 3] Identity Worker payload encrypted successfully", flush=True)
         return result
 
     except Exception as e:
         if target == "idpw":
-            logger.error(f"[FLOW-STEP 3] ERROR json idpw criptografado: {e}")
-            print(f"[FLOW-STEP 3] ERROR json idpw criptografado: {e}", flush=True)
+            logger.error(f"[FLOW-STEP 3] ERROR: Failed to encrypt Identity Worker payload ({e})")
+            print(f"[FLOW-STEP 3] ERROR: Failed to encrypt Identity Worker payload ({e})", flush=True)
         logger.error(f"Error encrypting payload for {target}: {e}")
         raise e
 

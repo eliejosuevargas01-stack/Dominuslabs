@@ -52,11 +52,11 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
             "aud": "whatsapp-api",
             "audience": "whatsapp-api"
         }
-        logger.info("[FLOW-STEP 2] json idpw call created")
-        print("[FLOW-STEP 2] json idpw call created", flush=True)
+        logger.info("[FLOW-STEP 2] Identity Worker request payload created")
+        print("[FLOW-STEP 2] Identity Worker request payload created", flush=True)
     except Exception as create_err:
-        logger.error(f"[FLOW-STEP 2] ERROR json idpw call created: {create_err}")
-        print(f"[FLOW-STEP 2] ERROR json idpw call created: {create_err}", flush=True)
+        logger.error(f"[FLOW-STEP 2] ERROR: Failed to create Identity Worker request payload ({create_err})")
+        print(f"[FLOW-STEP 2] ERROR: Failed to create Identity Worker request payload ({create_err})", flush=True)
         raise create_err
 
     logger.info(f"[IDENTITY-WORKER] Requisitando novo JWT M2M via mTLS para tenant_id={tenant_id}, scope={scope}...")
@@ -66,31 +66,31 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
         async with get_mtls_async_client(timeout=10.0, service_name="identity") as client:
             resp = await client.post(url, json=payload, headers=headers)
             if resp.status_code == 200:
-                logger.info("[FLOW-STEP 4] response from idpw obtainer")
-                print("[FLOW-STEP 4] response from idpw obtainer", flush=True)
+                logger.info("[FLOW-STEP 4] Received successful response from Identity Worker")
+                print("[FLOW-STEP 4] Received successful response from Identity Worker", flush=True)
                 data = resp.json()
                 if isinstance(data, dict) and data.get("_encrypted") is True:
                     try:
                         data = decrypt_payload(data)
-                        logger.info("[FLOW-STEP 5] decriptografada a resposta do idpw")
-                        print("[FLOW-STEP 5] decriptografada a resposta do idpw", flush=True)
+                        logger.info("[FLOW-STEP 5] Identity Worker response payload decrypted successfully")
+                        print("[FLOW-STEP 5] Identity Worker response payload decrypted successfully", flush=True)
                     except Exception as decrypt_err:
-                        logger.error(f"[FLOW-STEP 5] ERROR decriptografada a resposta do idpw: {decrypt_err}")
-                        print(f"[FLOW-STEP 5] ERROR decriptografada a resposta do idpw: {decrypt_err}", flush=True)
+                        logger.error(f"[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker response payload ({decrypt_err})")
+                        print(f"[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker response payload ({decrypt_err})", flush=True)
                         raise HTTPException(
                             status_code=status.HTTP_502_BAD_GATEWAY,
                             detail="Falha ao decriptografar credencial emitida pelo Identity Worker."
                         )
                 else:
-                    logger.info("[FLOW-STEP 5] decriptografada a resposta do idpw")
-                    print("[FLOW-STEP 5] decriptografada a resposta do idpw", flush=True)
+                    logger.info("[FLOW-STEP 5] Identity Worker response payload decrypted successfully")
+                    print("[FLOW-STEP 5] Identity Worker response payload decrypted successfully", flush=True)
 
                 token = data.get("access_token")
                 expires_in = data.get("expires_in", 300)
 
                 if not token:
-                    logger.error(f"[FLOW-STEP 5] ERROR decriptografada a resposta do idpw: access_token ausente em {data}")
-                    print(f"[FLOW-STEP 5] ERROR decriptografada a resposta do idpw: access_token ausente", flush=True)
+                    logger.error("[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker response payload (access_token missing)")
+                    print("[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker response payload (access_token missing)", flush=True)
                     raise HTTPException(
                         status_code=status.HTTP_502_BAD_GATEWAY,
                         detail="Identity Worker retornou credencial incompleta."
@@ -100,22 +100,22 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
                 logger.info(f"[IDENTITY-WORKER] ✅ JWT M2M emitido com sucesso para tenant_id={tenant_id} (exp={expires_in}s)")
                 return token
             elif resp.status_code in (401, 403):
-                logger.error(f"[FLOW-STEP 4] ERROR response from idpw obtainer: status={resp.status_code}")
-                print(f"[FLOW-STEP 4] ERROR response from idpw obtainer: status={resp.status_code}", flush=True)
+                logger.error(f"[FLOW-STEP 4] ERROR: Identity Worker response failed (status {resp.status_code})")
+                print(f"[FLOW-STEP 4] ERROR: Identity Worker response failed (status {resp.status_code})", flush=True)
                 raise HTTPException(
                     status_code=resp.status_code,
                     detail=f"Acesso M2M negado pelo Identity Worker (status {resp.status_code}): {resp.text}"
                 )
             else:
-                logger.error(f"[FLOW-STEP 4] ERROR response from idpw obtainer: status={resp.status_code}")
-                print(f"[FLOW-STEP 4] ERROR response from idpw obtainer: status={resp.status_code}", flush=True)
+                logger.error(f"[FLOW-STEP 4] ERROR: Identity Worker response failed (status {resp.status_code})")
+                print(f"[FLOW-STEP 4] ERROR: Identity Worker response failed (status {resp.status_code})", flush=True)
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
                     detail=f"Identity Worker recusou a solicitação M2M (status {resp.status_code})."
                 )
     except httpx.RequestError as e:
-        logger.error(f"[FLOW-STEP 4] ERROR response from idpw obtainer: {e}")
-        print(f"[FLOW-STEP 4] ERROR response from idpw obtainer: {e}", flush=True)
+        logger.error(f"[FLOW-STEP 4] ERROR: Identity Worker response failed ({e})")
+        print(f"[FLOW-STEP 4] ERROR: Identity Worker response failed ({e})", flush=True)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Serviço Identity Worker inacessível ({url}). Verifique a URL e a conexão mTLS."

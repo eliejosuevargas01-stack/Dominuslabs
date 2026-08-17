@@ -93,19 +93,19 @@ async def make_whatsapp_api_request(
                 json=json_data
             )
         except Exception as e:
-            logger.error(f"[FLOW-STEP 6] ERROR autenticado no whats api com jwt: {e}")
-            print(f"[FLOW-STEP 6] ERROR autenticado no whats api com jwt: {e}", flush=True)
+            logger.error(f"[FLOW-STEP 6] ERROR: WhatsApp API authentication with JWT failed ({e})")
+            print(f"[FLOW-STEP 6] ERROR: WhatsApp API authentication with JWT failed ({e})", flush=True)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
             )
 
         if response.status_code >= 400:
-            logger.error(f"[FLOW-STEP 6] ERROR autenticado no whats api com jwt: status={response.status_code}")
-            print(f"[FLOW-STEP 6] ERROR autenticado no whats api com jwt: status={response.status_code}", flush=True)
+            logger.error(f"[FLOW-STEP 6] ERROR: WhatsApp API authentication with JWT failed (status {response.status_code})")
+            print(f"[FLOW-STEP 6] ERROR: WhatsApp API authentication with JWT failed (status {response.status_code})", flush=True)
         else:
-            logger.info(f"[FLOW-STEP 6] autenticado no whats api com jwt: status={response.status_code}")
-            print(f"[FLOW-STEP 6] autenticado no whats api com jwt: status={response.status_code}", flush=True)
+            logger.info("[FLOW-STEP 6] Authenticated with WhatsApp API using JWT")
+            print("[FLOW-STEP 6] Authenticated with WhatsApp API using JWT", flush=True)
         
         if response.status_code in (301, 302, 303, 307) and response.headers.get("location"):
             return {"url": response.headers.get("location")}
