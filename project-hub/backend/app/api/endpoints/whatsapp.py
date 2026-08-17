@@ -104,6 +104,9 @@ async def make_whatsapp_api_request(
         # Try decoding JSON if content-type is json or by default
         try:
             res_data = response.json()
+            if isinstance(res_data, dict) and res_data.get("_encrypted") is True:
+                from app.core.crypto import decrypt_payload
+                res_data = decrypt_payload(res_data)
             if response.status_code >= 400:
                 detail_msg = res_data.get("message") or res_data.get("detail") or "Erro na API de WhatsApp."
                 raise HTTPException(status_code=response.status_code, detail=detail_msg)

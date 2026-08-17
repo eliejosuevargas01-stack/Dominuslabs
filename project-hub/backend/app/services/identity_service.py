@@ -12,6 +12,7 @@ from cachetools import TTLCache
 from fastapi import HTTPException, status
 from app.core.config import settings
 from app.core.mtls_client import get_mtls_async_client
+from app.core.crypto import decrypt_payload
 
 logger = logging.getLogger("identity_service")
 
@@ -59,6 +60,17 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
             resp = await client.post(url, json=payload, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
+                if isinstance(data, dict) and data.get("_encrypted") is True:
+                    try:
+                        data = decrypt_payload(data)
+                        logger.debug("[IDENTITY-WORKER] Payload de resposta Zero-Trust decriptografado com sucesso.")
+                    except Exception as decrypt_err:
+                        logger.error(f"[IDENTITY-WORKER] Falha ao decriptografar resposta do Worker: {decrypt_err}")
+                        raise HTTPException(
+                            status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail="Falha ao decriptografar credencial emitida pelo Identity Worker."
+                        )
+
                 token = data.get("access_token")
                 expires_in = data.get("expires_in", 300)
 
