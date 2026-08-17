@@ -1384,15 +1384,26 @@ class N8NService:
                 mapped["updated_by"] = current_user
             return mapped
 
-        # Append action parameter to CRM N8N query parameters
+        # Encrypt action and lead_id inside payload for Zero-Trust stealth
+        outgoing_payload["action"] = "update_lead"
+        outgoing_payload["id"] = lead_id
+        outgoing_payload["lead_id"] = lead_id
+        encrypted_payload = encrypt_payload(outgoing_payload, "n8n")
+
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=update_lead&id={lead_id}"
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
-                response = await client.put(endpoint_url, json=outgoing_payload, timeout=30.0)
+                # Tenta primeiro POST com payload 100% criptografado sem expor id/action na URL
+                response = await client.post(url, json=encrypted_payload, timeout=30.0)
+                if response.status_code >= 400 or not response.text:
+                    response = await client.put(endpoint_url, json=outgoing_payload, timeout=30.0)
                 response.raise_for_status()
                 res_data = clean_n8n_response(response.json())
+                if isinstance(res_data, dict) and res_data.get("_encrypted") is True:
+                    res_data = decrypt_payload(res_data)
+
                 if isinstance(res_data, dict) and ("company_name" in res_data or "nome_empresa" in res_data or "empresa_nome" in res_data):
                     mapped = map_n8n_lead(res_data)
                 else:
@@ -1446,18 +1457,25 @@ class N8NService:
             logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead deleted locally in-memory.")
             return {"status": "success", "message": "Lead deleted locally (MOCK Mode)", "id": lead_id}
 
-        # Append action parameter to CRM N8N query parameters (using same update URL)
         sep = "&" if "?" in url else "?"
         endpoint_url = f"{url}{sep}action=delete_lead&id={lead_id}"
+        encrypted_payload = encrypt_payload({"action": "delete_lead", "id": lead_id, "lead_id": lead_id}, "n8n")
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
-                response = await client.delete(endpoint_url, timeout=30.0)
+                response = await client.post(url, json=encrypted_payload, timeout=30.0)
+                if response.status_code >= 400 or not response.text:
+                    response = await client.delete(endpoint_url, timeout=30.0)
                 response.raise_for_status()
                 try:
                     res_data = clean_n8n_response(response.json())
+                    if isinstance(res_data, dict) and res_data.get("_encrypted") is True:
+                        res_data = decrypt_payload(res_data)
                     if isinstance(res_data, dict):
                         return res_data
+                except Exception:
+                    pass
+                return {"status": "success", "id": lead_id}
                 except Exception:
                     pass
                 return {"status": "success", "id": lead_id}
