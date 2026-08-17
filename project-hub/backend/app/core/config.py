@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     
     WHATSAPP_API_URL: str = os.getenv("WHATSAPP_API_URL", "http://localhost:3000")
     WHATSAPP_PUBLIC_URL: str = os.getenv("WHATSAPP_PUBLIC_URL", "https://dominuslabs.online")
-    WHATSAPP_MASTER_SECRET: str = os.getenv("WHATSAPP_MASTER_SECRET", "default_master_secret")
+    WHATSAPP_MASTER_SECRET: str = os.getenv("WHATSAPP_MASTER_SECRET", os.getenv("WHATSAPP_MASTER_KEY", os.getenv("MASTER_API_KEY", "default_master_secret")))
     IDENTITY_WORKER_URL: str = os.getenv("IDENTITY_WORKER_URL", "https://identity.dominus.online")
 
     # mTLS Security Settings
