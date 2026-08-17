@@ -1476,9 +1476,6 @@ class N8NService:
                 except Exception:
                     pass
                 return {"status": "success", "id": lead_id}
-                except Exception:
-                    pass
-                return {"status": "success", "id": lead_id}
             except Exception as e:
                 logger.error(f"Error calling DELETE lead webhook: {e}")
                 return {"status": "success", "message": f"Deleted locally. API Error: {str(e)}", "id": lead_id}
