@@ -464,9 +464,9 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         return mapped
 
     # 2. Support direct whats-api / n8n single incoming message object
-    if "is_from_me" in msg or "message_id" in msg or "contact_jid" in msg or "push_name" in msg or "session_id" in msg:
+    if "is_from_me" in msg or "message_id" in msg or "contact_jid" in msg or "push_name" in msg or "session_id" in msg or "content" in msg or "chat_kind" in msg:
         msg_id = str(msg.get("message_id") or msg.get("id") or "")
-        is_from_me = msg.get("is_from_me", False)
+        is_from_me = msg.get("is_from_me") if msg.get("is_from_me") is not None else msg.get("from_me", False)
         sender = "user" if is_from_me else "lead"
         direction = "outgoing" if is_from_me else "incoming"
         
@@ -483,7 +483,8 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             "id": msg_id,
             "message_id": msg_id,
             "session_id": msg.get("session_id"),
-            "contact_jid": msg.get("contact_jid"),
+            "tenant_id": msg.get("tenant_id") or "admin",
+            "contact_jid": msg.get("contact_jid") or msg.get("jid"),
             "is_from_me": is_from_me,
             "sender": sender,
             "direction": direction,
@@ -491,17 +492,19 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             "message": raw_text,
             "content": raw_text,
             "caption": msg.get("caption", ""),
-            "message_type": msg.get("message_type", "conversation"),
+            "message_type": msg.get("message_type") or msg.get("type") or "conversation",
             "chat_kind": msg.get("chat_kind", "private"),
             "image_url": raw_media,
             "media_url": raw_media,
-            "push_name": msg.get("push_name"),
-            "participant_pushname": msg.get("participant_pushname") or msg.get("participant_push_name") or msg.get("participant_name"),
+            "push_name": msg.get("push_name") or msg.get("participant_pushname"),
+            "participant_pushname": msg.get("participant_pushname") or msg.get("participant_push_name") or msg.get("participant_name") or msg.get("push_name"),
             "participant": msg.get("participant") or msg.get("participant_jid"),
             "display_phone": msg.get("display_phone"),
             "profile_pic_url": profile_pic_url,
             "channel": lead_channel,
             "timestamp": ts,
+            "message_timestamp": ts,
+            "created_at": msg.get("created_at") or ts,
             "status": msg.get("status", "received"),
             "quoted_message_id": msg.get("quoted_message_id") or msg.get("quoted_id") or msg.get("quotedId") or None,
             "quoted_participant": msg.get("quoted_participant") or msg.get("quoted_sender") or msg.get("quotedParticipant") or None,
