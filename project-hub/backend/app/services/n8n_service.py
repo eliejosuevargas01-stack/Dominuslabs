@@ -1216,8 +1216,15 @@ class N8NService:
                 unpacked = unpack_n8n_raw_leads(raw_convs)
                 mapped = [map_n8n_lead(l) for l in unpacked if isinstance(l, dict)]
                 
-                # Step 2: Append conversation inbox state to cached contact profile
+                # Step 2: Append conversation inbox state to cached contact profile & compute last_message_preview
                 for m in mapped:
+                    if not m.get("last_message_preview"):
+                        msgs = m.get("mensagens") or m.get("messages") or []
+                        if isinstance(msgs, list) and len(msgs) > 0:
+                            last_msg = msgs[0] if isinstance(msgs[0], dict) else {}
+                            m["last_message_preview"] = extract_text_content(last_msg) or last_msg.get("content") or last_msg.get("message") or ""
+                            if not m.get("last_message_timestamp") and last_msg.get("message_timestamp"):
+                                m["last_message_timestamp"] = last_msg["message_timestamp"]
                     c_jid = m.get("contact_jid") or m.get("jid") or m.get("id")
                     if c_jid:
                         ProgressiveContactCache.set_conversation(c_jid, m)

@@ -1048,8 +1048,18 @@ function playIncomingSound() {
 
           // 5. CONDITIONAL 2: Update Sidebar (conversations) locally
           if (newMsgs.length > 0) {
+            const extractContent = (m: any): string => {
+              if (!m) return '';
+              if (typeof m.content === 'string' && m.content.trim()) return m.content.trim();
+              if (typeof m.message === 'string' && m.message.trim()) return m.message.trim();
+              if (typeof m.text === 'string' && m.text.trim()) return m.text.trim();
+              if (typeof m.body === 'string' && m.body.trim()) return m.body.trim();
+              if (Array.isArray(m.messages) && m.messages.length > 0) return extractContent(m.messages[m.messages.length - 1]);
+              if (Array.isArray(m.mensagens) && m.mensagens.length > 0) return extractContent(m.mensagens[m.mensagens.length - 1]);
+              return '';
+            };
             const latestMsg = newMsgs[newMsgs.length - 1];
-            const previewText = latestMsg.content || latestMsg.message || latestMsg.text || 'Nova mensagem';
+            const previewText = extractContent(latestMsg) || 'Nova mensagem';
             const msgTs = latestMsg.message_timestamp || latestMsg.created_at || new Date().toISOString();
 
             setConversations((prevConvs) => {
@@ -1147,13 +1157,21 @@ function playIncomingSound() {
         const enrichedData = data.map((item: any) => {
           const jid = item.contact_jid || item.jid || item.id || '';
           const resolvedName = resolveContactName(item) || 'Contato';
+          let preview = item.last_message_preview || item.ultima_mensagem || item.content || item.message || '';
+          if (!preview) {
+            const msgs = Array.isArray(item.messages) ? item.messages : (Array.isArray(item.mensagens) ? item.mensagens : []);
+            if (msgs.length > 0) {
+              const lastM = msgs[msgs.length - 1];
+              preview = lastM.content || lastM.message || lastM.text || lastM.body || '';
+            }
+          }
           return {
             ...item,
             contact_jid: jid,
             push_name: resolvedName,
             display_phone: item.display_phone || null,
             profile_pic_url: item.profile_pic_url || '',
-            last_message_preview: item.last_message_preview || '',
+            last_message_preview: preview,
             last_message_timestamp: item.last_message_timestamp || new Date().toISOString()
           };
         });

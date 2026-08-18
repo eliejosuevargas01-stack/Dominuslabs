@@ -138,7 +138,18 @@ async def _process_update_chat(
     try:
         raw_body = await request.json()
         if isinstance(raw_body, list):
-            messages_list = raw_body
+            extracted = []
+            for item in raw_body:
+                if isinstance(item, dict):
+                    if not body_dict:
+                        body_dict = item
+                    if "messages" in item and isinstance(item["messages"], list):
+                        extracted.extend(item["messages"])
+                    elif "mensagens" in item and isinstance(item["mensagens"], list):
+                        extracted.extend(item["mensagens"])
+                    else:
+                        extracted.append(item)
+            messages_list = extracted
         elif isinstance(raw_body, dict):
             body_dict = raw_body
             if "messages" in raw_body and isinstance(raw_body["messages"], list):
