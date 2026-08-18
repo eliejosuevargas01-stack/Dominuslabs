@@ -64,7 +64,7 @@ export default function Login() {
           </h1>
           <p className="text-xs text-slate-400 font-semibold tracking-wider uppercase flex items-center justify-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            Internal workstation
+            Portal Corporativo de Alta Performance
           </p>
         </div>
 
@@ -126,7 +126,7 @@ export default function Login() {
 
         {/* Footer info */}
         <p className="text-[10px] text-center text-slate-400 font-medium">
-          Acesso restrito ao administrador da Dominuslabs.
+          Acesso estritamente autenticado e monitorado. Criptografia ponta a ponta Dominus Labs.
         </p>
 
       </div>

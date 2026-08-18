@@ -23,20 +23,20 @@ import { toast } from 'sonner';
 import { fetchCompanySettings, updateCompanySettings, type CompanySettings, type MenuItem } from '../services/api';
 
 const TONE_OPTIONS = [
-  { id: 'Formal', label: 'Formal e Profissional', desc: 'Comunicação séria, objetiva e alinhada a normas corporativas.' },
-  { id: 'Amigável', label: 'Amigável e Receptivo', desc: 'Linguagem acolhedora, calorosa e focada no bom relacionamento.' },
-  { id: 'Consultivo', label: 'Consultivo e Especialista', desc: 'Foco em entender a dor do cliente e oferecer soluções embasadas.' },
-  { id: 'Descontraído', label: 'Descontraído e Jovem', desc: 'Uso leve de emojis, linguagem moderna e tom informal.' },
-  { id: 'Vendedor', label: 'Vendedor e Persuasivo', desc: 'Foco alto em conversão, ofertas e senso de urgência.' },
+  { id: 'Formal', label: 'Corporativo & Institucional', desc: 'Comunicação executiva, altamente formal, fundamentada em diretrizes corporativas e conformidade.' },
+  { id: 'Amigável', label: 'Relacional & Receptivo', desc: 'Abordagem humanizada, calorosa e focada na excelência da experiência do cliente (CX).' },
+  { id: 'Consultivo', label: 'Consultivo & Especialista', desc: 'Atendimento direcionado à resolução estratégica de dores, com embasamento técnico e autoridade.' },
+  { id: 'Descontraído', label: 'Dinâmico & Moderno', desc: 'Tom fluido, engajador e contemporâneo, adequado para audiências jovens e ecossistemas de inovação.' },
+  { id: 'Vendedor', label: 'Comercial & Orientado a Resultados', desc: 'Foco incisivo em conversão de pipeline, proposta de valor e aceleração do ciclo de vendas.' },
 ];
 
 const PAYMENT_METHODS = [
-  'Pix',
-  'Cartão de Crédito',
+  'Pix Instantâneo (Bacen)',
+  'Cartão de Crédito Corporate',
   'Cartão de Débito',
-  'Dinheiro',
-  'Boleto Bancário',
-  'Faturamento / Link de Pagamento'
+  'Transferência Bancária (TED/DOC)',
+  'Boleto Bancário Registrado',
+  'Faturamento Faturado / Link de Pagamento'
 ];
 
 export default function CompanySettingsView() {
@@ -51,13 +51,13 @@ export default function CompanySettingsView() {
     email: '',
     address: '',
     business_hours: '',
-    tone_of_voice: 'Amigável',
+    tone_of_voice: 'Consultivo',
     custom_instructions: '',
     exchange_policy: '',
     delivery_policy: '',
     terms_of_service: '',
     menu_catalog: [],
-    accepted_payment_types: ['Pix', 'Cartão de Crédito'],
+    accepted_payment_types: ['Pix Instantâneo (Bacen)', 'Cartão de Crédito Corporate'],
     payment_notes: '',
     values_mission: '',
     additional_notes: ''
@@ -85,10 +85,10 @@ export default function CompanySettingsView() {
       setSettings({
         ...data,
         menu_catalog: data.menu_catalog || [],
-        accepted_payment_types: data.accepted_payment_types || ['Pix', 'Cartão de Crédito']
+        accepted_payment_types: data.accepted_payment_types || ['Pix Instantâneo (Bacen)', 'Cartão de Crédito Corporate']
       });
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao carregar configurações.');
+      toast.error(err.message || 'Erro ao sincronizar diretrizes corporativas.');
     } finally {
       setLoading(false);
     }
@@ -99,9 +99,9 @@ export default function CompanySettingsView() {
     try {
       const updated = await updateCompanySettings(settings, "default");
       setSettings(updated);
-      toast.success('Configurações salvas com sucesso!');
+      toast.success('Diretrizes e parâmetros corporativos salvos com sucesso!');
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao salvar configurações.');
+      toast.error(err.message || 'Erro ao atualizar parâmetros institucionais.');
     } finally {
       setSaving(false);
     }
@@ -117,7 +117,7 @@ export default function CompanySettingsView() {
 
   const handleSaveMenuItem = () => {
     if (!newItem.name.trim()) {
-      toast.error('Informe o nome do item.');
+      toast.error('Informe a denominação oficial do item/solução.');
       return;
     }
 
@@ -132,14 +132,14 @@ export default function CompanySettingsView() {
     setIsMenuModalOpen(false);
     setNewItem({ name: '', category: '', price: 0, description: '', available: true });
     setEditingIndex(null);
-    toast.success('Item adicionado ao catálogo com sucesso!');
+    toast.success('Item homologado e incluído no catálogo corporativo!');
   };
 
   const handleDeleteMenuItem = (index: number) => {
     const currentCatalog = [...(settings.menu_catalog || [])];
     currentCatalog.splice(index, 1);
     setSettings({ ...settings, menu_catalog: currentCatalog });
-    toast.info('Item removido.');
+    toast.info('Item descontinuado do catálogo.');
   };
 
   const openEditMenuItem = (index: number) => {
@@ -153,7 +153,7 @@ export default function CompanySettingsView() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
         <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
-        <p className="text-sm font-medium text-slate-500">Carregando configurações da empresa...</p>
+        <p className="text-sm font-semibold text-slate-600">Carregando governança e parâmetros organizacionais...</p>
       </div>
     );
   }
@@ -163,12 +163,12 @@ export default function CompanySettingsView() {
       {/* Header Area */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/80 backdrop-blur-md p-6 rounded-2xl border border-violet-100 shadow-sm">
         <div>
-          <h1 className="text-2xl font-display font-extrabold text-slate-900 flex items-center gap-2">
+          <h1 className="text-2xl font-display font-extrabold text-slate-900 flex items-center gap-2.5">
             <Building2 className="w-7 h-7 text-purple-600" />
-            Configurações Gerais da Empresa
+            Governança & Parâmetros da Empresa
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Gerencie perfil, tom de voz para a IA, políticas institucionais, cardápio/catálogo e formas de pagamento.
+            Gestão centralizada de dados institucionais, persona & tom de voz para IA, SLAs comerciais, produtos e condições financeiras.
           </p>
         </div>
 
@@ -178,18 +178,18 @@ export default function CompanySettingsView() {
           className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-700 to-indigo-600 hover:from-purple-800 hover:to-indigo-700 text-white font-semibold text-sm px-6 py-2.5 rounded-xl shadow-md shadow-purple-600/20 transition-all cursor-pointer disabled:opacity-50 self-start sm:self-auto"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          {saving ? 'Salvando...' : 'Salvar Alterações'}
+          {saving ? 'Aplicando Alterações...' : 'Salvar Alterações'}
         </button>
       </div>
 
       {/* Tabs Navigation */}
       <div className="flex border-b border-violet-100 bg-white/60 p-1.5 rounded-xl overflow-x-auto gap-1">
         {[
-          { id: 'general', label: 'Dados da Empresa & Missão', icon: Building2 },
-          { id: 'tone', label: 'Tom de Voz & IA', icon: Bot },
-          { id: 'policies', label: 'Políticas & Termos', icon: ShieldAlert },
-          { id: 'menu', label: 'Cardápio / Catálogo', icon: UtensilsCrossed },
-          { id: 'payments', label: 'Formas de Pagamento', icon: CreditCard },
+          { id: 'general', label: 'Dados Institucionais & Cultura', icon: Building2 },
+          { id: 'tone', label: 'Persona, Tom de Voz & IA', icon: Bot },
+          { id: 'policies', label: 'Políticas, SLAs & Compliance', icon: ShieldAlert },
+          { id: 'menu', label: 'Portfólio & Catálogo', icon: UtensilsCrossed },
+          { id: 'payments', label: 'Diretrizes Financeiras & Pagamento', icon: CreditCard },
         ].map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -217,97 +217,97 @@ export default function CompanySettingsView() {
           <div className="space-y-6">
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
               <Building2 className="w-5 h-5 text-purple-600" />
-              Informações Institucionais e Contato
+              Identificação Corporativa e Canais Oficiais
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-slate-400" /> Nome da Empresa
+                  <Building2 className="w-3.5 h-3.5 text-slate-400" /> Razão Social / Nome Fantasia
                 </label>
                 <input
                   type="text"
                   value={settings.company_name || ''}
                   onChange={(e) => setSettings({ ...settings, company_name: e.target.value })}
-                  placeholder="Ex: Dominus Labs Agência Digital"
+                  placeholder="Ex: Dominus Labs Tecnologia e Inovação S/A"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-slate-400" /> CNPJ / CPF
+                  <FileText className="w-3.5 h-3.5 text-slate-400" /> Inscrição CNPJ / Documento Fiscal
                 </label>
                 <input
                   type="text"
                   value={settings.cnpj_cpf || ''}
                   onChange={(e) => setSettings({ ...settings, cnpj_cpf: e.target.value })}
-                  placeholder="Ex: 00.000.000/0001-00"
+                  placeholder="Ex: 12.345.678/0001-90"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-slate-400" /> Telefone / WhatsApp Comercial
+                  <Phone className="w-3.5 h-3.5 text-slate-400" /> Telefone / WhatsApp Corporativo
                 </label>
                 <input
                   type="text"
                   value={settings.phone || ''}
                   onChange={(e) => setSettings({ ...settings, phone: e.target.value })}
-                  placeholder="Ex: +55 (11) 99999-9999"
+                  placeholder="Ex: +55 (11) 4003-8800"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-slate-400" /> E-mail Oficial de Suporte
+                  <Mail className="w-3.5 h-3.5 text-slate-400" /> E-mail Institucional de Atendimento
                 </label>
                 <input
                   type="email"
                   value={settings.email || ''}
                   onChange={(e) => setSettings({ ...settings, email: e.target.value })}
-                  placeholder="Ex: contato@suaempresa.com.br"
+                  placeholder="Ex: governanca@dominuslabs.com.br"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
                 />
               </div>
 
               <div className="md:col-span-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400" /> Endereço Físico / Sede
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" /> Endereço da Sede Corporativa
                 </label>
                 <input
                   type="text"
                   value={settings.address || ''}
                   onChange={(e) => setSettings({ ...settings, address: e.target.value })}
-                  placeholder="Ex: Av. Paulista, 1000, Cj. 42 - Bela Vista, São Paulo/SP"
+                  placeholder="Ex: Av. das Nações Unidas, 12901 - Torre Leste, 18º andar - Brooklin, São Paulo/SP"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
                 />
               </div>
 
               <div className="md:col-span-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" /> Horário de Funcionamento
+                  <Clock className="w-3.5 h-3.5 text-slate-400" /> Expediente / Janela Operacional
                 </label>
                 <input
                   type="text"
                   value={settings.business_hours || ''}
                   onChange={(e) => setSettings({ ...settings, business_hours: e.target.value })}
-                  placeholder="Ex: Segunda a Sexta das 08h às 18h | Sábados das 09h às 13h"
+                  placeholder="Ex: Segunda a Sexta-feira: 08:00 às 18:00 (Horário de Brasília - UTC-3)"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
                 />
               </div>
 
               <div className="md:col-span-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-                  <Award className="w-3.5 h-3.5 text-slate-400" /> Missão, Visão e Valores
+                  <Award className="w-3.5 h-3.5 text-slate-400" /> Missão, Visão e Diretrizes de Valor
                 </label>
                 <textarea
                   rows={4}
                   value={settings.values_mission || ''}
                   onChange={(e) => setSettings({ ...settings, values_mission: e.target.value })}
-                  placeholder="Descreva aqui o propósito da empresa e seus valores fundamentais que devem orientar o atendimento..."
+                  placeholder="Descreva a declaração de missão, tese de mercado e valores organizacionais que orientam o posicionamento estratégico..."
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
                 />
               </div>
@@ -320,12 +320,12 @@ export default function CompanySettingsView() {
           <div className="space-y-6">
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
               <Bot className="w-5 h-5 text-purple-600" />
-              Tom de Voz do Atendimento e Instruções da IA
+              Diretrizes de Persona & Engenharia de Prompt para IA
             </h2>
 
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-3">
-                Selecione o Estilo de Comunicação Predominante
+                Estilo de Comunicação Predominante do Agente Virtual
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {TONE_OPTIONS.map((tone) => {
@@ -353,16 +353,16 @@ export default function CompanySettingsView() {
 
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-purple-600" /> Instruções Específicas e Comportamento para Chatbots
+                <Sparkles className="w-3.5 h-3.5 text-purple-600" /> Regras de Negócio e Restrições de Atendimento Automático
               </label>
               <p className="text-xs text-slate-500 mb-2">
-                Insira regras estritas, saudações padrão, restrições ou termos que a IA deve utilizar no atendimento automático.
+                Instruções determinísticas aplicadas à camada de raciocínio da IA (System Instructions, limites de autoridade, diretrizes de transbordo humano).
               </p>
               <textarea
                 rows={6}
                 value={settings.custom_instructions || ''}
                 onChange={(e) => setSettings({ ...settings, custom_instructions: e.target.value })}
-                placeholder="Exemplo: Sempre cumprimente pelo primeiro nome. Nunca ofereça descontos superiores a 10% sem autorização prévia. Se o cliente perguntar sobre prazos, informe que o tempo de resposta do suporte é de até 15 minutos."
+                placeholder="Exemplo: Priorize a qualificação de BANT antes de agendar uma reunião. Não conceda descontos acima de 5% sem transbordo para um executivo de contas. Mantenha conformidade estrita com as normas da LGPD."
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all font-mono text-slate-700"
               />
             </div>
@@ -374,45 +374,45 @@ export default function CompanySettingsView() {
           <div className="space-y-6">
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
               <ShieldAlert className="w-5 h-5 text-purple-600" />
-              Políticas Comerciais e Termos
+              Termos de Contrato, SLAs e Políticas Operacionais
             </h2>
 
             <div className="space-y-5">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                  Política de Troca, Devolução e Garantia
+                  Política de Garantia, Troca e Rescisão Contratual
                 </label>
                 <textarea
                   rows={4}
                   value={settings.exchange_policy || ''}
                   onChange={(e) => setSettings({ ...settings, exchange_policy: e.target.value })}
-                  placeholder="Explique os critérios para trocas, reembolsos, garantia do produto ou cancelamento..."
+                  placeholder="Especifique os prazos normativos de garantia, SLA de substituição de componentes e cláusulas de rescisão..."
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                  Política de Frete, Entrega e Prazos
+                  Política de Logística, Entregas e Acordo de Nível de Serviço (SLA)
                 </label>
                 <textarea
                   rows={4}
                   value={settings.delivery_policy || ''}
                   onChange={(e) => setSettings({ ...settings, delivery_policy: e.target.value })}
-                  placeholder="Detalhamento sobre taxas de entrega, prazos médios por região e transportadoras parceiras..."
+                  placeholder="Detalhamento sobre prazos de implantação, despacho de insumos ou SLAs de disponibilização em nuvem..."
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                  Termos de Serviço e Privacidade (LGPD)
+                  Termos de Uso, Licenciamento e Conformidade LGPD
                 </label>
                 <textarea
                   rows={4}
                   value={settings.terms_of_service || ''}
                   onChange={(e) => setSettings({ ...settings, terms_of_service: e.target.value })}
-                  placeholder="Resumo dos termos contratuais e diretrizes sobre o uso de dados e privacidade..."
+                  placeholder="Resumo executivo dos termos de prestação de serviços, propriedade intelectual e governança de dados..."
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
                 />
               </div>
@@ -427,10 +427,10 @@ export default function CompanySettingsView() {
               <div>
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                   <UtensilsCrossed className="w-5 h-5 text-purple-600" />
-                  Catálogo de Produtos / Cardápio
+                  Portfólio de Soluções & Catálogo de Produtos
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Cadastre itens para consulta rápida e recomendação automática pelo robô comercial.
+                  Gerenciamento da grade comercial para referência automática do agente de IA e equipe de vendas.
                 </p>
               </div>
 
@@ -443,7 +443,7 @@ export default function CompanySettingsView() {
                 className="inline-flex items-center gap-1.5 bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold text-xs px-3.5 py-2 rounded-xl transition-all cursor-pointer self-start sm:self-auto"
               >
                 <Plus className="w-4 h-4" />
-                Adicionar Item
+                Cadastrar Solução
               </button>
             </div>
 
@@ -457,13 +457,13 @@ export default function CompanySettingsView() {
                     <div>
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <span className="font-bold text-slate-900 text-base">{item.name}</span>
-                        <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-xs whitespace-nowrap">
-                          R$ {Number(item.price || 0).toFixed(2)}
+                        <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 text-xs whitespace-nowrap">
+                          R$ {Number(item.price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
 
                       {item.category && (
-                        <span className="inline-block text-[11px] font-semibold text-slate-500 bg-slate-200/60 px-2 py-0.5 rounded-full mb-2">
+                        <span className="inline-block text-[11px] font-semibold text-slate-600 bg-slate-200/60 px-2.5 py-0.5 rounded-full mb-2">
                           {item.category}
                         </span>
                       )}
@@ -475,7 +475,7 @@ export default function CompanySettingsView() {
 
                     <div className="flex items-center justify-between border-t border-slate-200/60 pt-2 text-xs">
                       <span className={`font-semibold ${item.available ? 'text-emerald-600' : 'text-rose-500'}`}>
-                        {item.available ? '● Disponível' : '○ Indisponível'}
+                        {item.available ? '● Ativo para Oferta' : '○ Indisponível no Momento'}
                       </span>
 
                       <div className="flex items-center gap-2">
@@ -500,8 +500,8 @@ export default function CompanySettingsView() {
             ) : (
               <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                 <UtensilsCrossed className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-slate-600">Nenhum item cadastrado no catálogo</p>
-                <p className="text-xs text-slate-400 mt-1">Clique no botão acima para incluir produtos ou ofertas.</p>
+                <p className="text-sm font-semibold text-slate-600">Nenhum item homologado no portfólio</p>
+                <p className="text-xs text-slate-400 mt-1">Utilize o botão superior para cadastrar novas ofertas corporativas.</p>
               </div>
             )}
           </div>
@@ -512,12 +512,12 @@ export default function CompanySettingsView() {
           <div className="space-y-6">
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
               <CreditCard className="w-5 h-5 text-purple-600" />
-              Métodos e Condições de Pagamento
+              Meios de Pagamento Homologados & Faturamento
             </h2>
 
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-3">
-                Selecione as Formas de Pagamento Aceitas pela Empresa
+                Modalidades Financeiras Habilitadas
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 {PAYMENT_METHODS.map((method) => {
@@ -546,13 +546,13 @@ export default function CompanySettingsView() {
 
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-                <DollarSign className="w-3.5 h-3.5 text-slate-400" /> Instruções, Chaves Pix e Descontos
+                <DollarSign className="w-3.5 h-3.5 text-slate-400" /> Chaves Pix, Condições Comerciais e Faturamento
               </label>
               <textarea
                 rows={4}
                 value={settings.payment_notes || ''}
                 onChange={(e) => setSettings({ ...settings, payment_notes: e.target.value })}
-                placeholder="Exemplo: Chave Pix CNPJ: 00.000.000/0001-00 (Dominus Labs). Oferecemos 5% de desconto para pagamentos à vista via Pix."
+                placeholder="Exemplo: Chave Pix CNPJ: 12.345.678/0001-90 (Dominus Labs). Faturamento disponível para PJ sob consulta de crédito (15/30 dias)."
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
               />
             </div>
@@ -565,34 +565,34 @@ export default function CompanySettingsView() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
             <h3 className="text-base font-bold text-slate-900">
-              {editingIndex !== null ? 'Editar Item do Catálogo' : 'Novo Item do Catálogo'}
+              {editingIndex !== null ? 'Editar Item do Portfólio' : 'Cadastrar Nova Solução / Item'}
             </h3>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Nome do Item/Produto *</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Denominação do Item / Solução *</label>
                 <input
                   type="text"
                   value={newItem.name}
                   onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                  placeholder="Ex: Consultoria de Agente IA"
+                  placeholder="Ex: Licença Plataforma Agente IA Enterprise"
                   className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-purple-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Categoria</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Categoria Comercial</label>
                   <input
                     type="text"
                     value={newItem.category || ''}
                     onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
-                    placeholder="Ex: Serviços"
+                    placeholder="Ex: SaaS / Licenciamento"
                     className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-purple-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Preço (R$)</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Valor Unitário (R$)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -604,12 +604,12 @@ export default function CompanySettingsView() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Descrição</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Descrição / Escopo Técnico</label>
                 <textarea
                   rows={3}
                   value={newItem.description || ''}
                   onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                  placeholder="Resumo das características..."
+                  placeholder="Resumo executivo do escopo..."
                   className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-purple-500"
                 />
               </div>
@@ -621,7 +621,7 @@ export default function CompanySettingsView() {
                   onChange={(e) => setNewItem({ ...newItem, available: e.target.checked })}
                   className="rounded text-purple-600 focus:ring-purple-500"
                 />
-                Item disponível para comercialização
+                Solução homologada para comercialização imediata
               </label>
             </div>
 
@@ -636,7 +636,7 @@ export default function CompanySettingsView() {
                 onClick={handleSaveMenuItem}
                 className="px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-sm cursor-pointer"
               >
-                Salvar Item
+                Homologar Solução
               </button>
             </div>
           </div>
