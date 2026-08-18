@@ -12,6 +12,10 @@ import LeadDetailView from './pages/LeadDetailView';
 import ConnectionsView from './pages/ConnectionsView';
 import OmnichannelView from './pages/OmnichannelView';
 import CompanySettingsView from './pages/CompanySettingsView';
+import DashboardOperationalView from './pages/DashboardOperationalView';
+import AiIntelligenceView from './pages/AiIntelligenceView';
+import AutomationsView from './pages/AutomationsView';
+import CampaignsWizardView from './pages/CampaignsWizardView';
 import { LogOut } from 'lucide-react';
 import { Toaster } from 'sonner';
 import './App.css';
@@ -143,6 +147,46 @@ function App() {
                 </DashboardLayout>
               </ProtectedRoute>
             } 
+          />
+          <Route
+            path="/dashboard-operacional"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <DashboardOperationalView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ia-inteligencia"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <AiIntelligenceView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/automacoes"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <AutomationsView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/campanhas-wizard"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <CampaignsWizardView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
           />
           <Route
             path="/settings"
