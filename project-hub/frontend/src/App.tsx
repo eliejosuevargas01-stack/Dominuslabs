@@ -11,6 +11,7 @@ import CrmView from './pages/CrmView';
 import LeadDetailView from './pages/LeadDetailView';
 import ConnectionsView from './pages/ConnectionsView';
 import OmnichannelView from './pages/OmnichannelView';
+import CompanySettingsView from './pages/CompanySettingsView';
 import { LogOut } from 'lucide-react';
 import { Toaster } from 'sonner';
 import './App.css';
@@ -142,6 +143,16 @@ function App() {
                 </DashboardLayout>
               </ProtectedRoute>
             } 
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <CompanySettingsView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
           />
           <Route 
             path="/project-hub/project/:id" 

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Search, Users, Folder, LogOut, Menu, X, PanelLeftClose, PanelLeftOpen, Briefcase, Radio, MessageSquare } from 'lucide-react';
+import { Search, Users, Folder, LogOut, Menu, X, PanelLeftClose, PanelLeftOpen, Briefcase, Radio, MessageSquare, Building2 } from 'lucide-react';
 import { useState } from 'react';
 
 interface SidebarProps {
@@ -17,6 +17,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
     { name: 'CRM Comercial', path: '/crm', icon: Users },
     { name: 'Conexões', path: '/connections', icon: Radio },
     { name: 'Scrapper', path: '/scrapper', icon: Search },
+    { name: 'Configurações', path: '/settings', icon: Building2 },
     { name: 'Cases', path: '/cases-dashboard', icon: Briefcase },
     { name: 'Project Hub', path: '/project-hub', icon: Folder },
   ];

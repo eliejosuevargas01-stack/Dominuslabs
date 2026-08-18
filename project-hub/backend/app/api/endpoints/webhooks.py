@@ -7,6 +7,7 @@ import json
 import asyncio
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.services.webhook_service import webhook_service
 
 router = APIRouter()
