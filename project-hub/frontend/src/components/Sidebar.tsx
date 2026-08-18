@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Search, Users, Folder, LogOut, Menu, X, PanelLeftClose, PanelLeftOpen, Briefcase, Radio, MessageSquare } from 'lucide-react';
+import { Search, Users, Folder, LogOut, Menu, X, PanelLeftClose, PanelLeftOpen, Briefcase, Radio, MessageSquare, Building2, BarChart2, Cpu, Workflow, Megaphone } from 'lucide-react';
 import { useState } from 'react';
 
 interface SidebarProps {
@@ -13,11 +13,16 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
   const [isOpen, setIsOpen] = useState(false);
 
   const menuItems = [
-    { name: 'Omnichannel', path: '/omnichannel', icon: MessageSquare },
-    { name: 'CRM Comercial', path: '/crm', icon: Users },
-    { name: 'Conexões', path: '/connections', icon: Radio },
-    { name: 'Scrapper', path: '/scrapper', icon: Search },
-    { name: 'Cases', path: '/cases-dashboard', icon: Briefcase },
+    { name: 'Resumo Operacional', path: '/dashboard-operacional', icon: BarChart2 },
+    { name: 'Central Omnichannel', path: '/omnichannel', icon: MessageSquare },
+    { name: 'CRM & Pipeline', path: '/crm', icon: Users },
+    { name: 'Consumo & IA', path: '/ia-inteligencia', icon: Cpu },
+    { name: 'Automações & Regras', path: '/automacoes', icon: Workflow },
+    { name: 'Campanhas Ativas', path: '/campanhas-wizard', icon: Megaphone },
+    { name: 'Conexões & APIs', path: '/connections', icon: Radio },
+    { name: 'Scrapper & Leads', path: '/scrapper', icon: Search },
+    { name: 'Governança & Empresa', path: '/settings', icon: Building2 },
+    { name: 'Cases & Portfólio', path: '/cases-dashboard', icon: Briefcase },
     { name: 'Project Hub', path: '/project-hub', icon: Folder },
   ];
 
@@ -102,7 +107,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
           <div className={`flex items-center gap-2 ${isCollapsed ? 'md:justify-center' : ''}`} title="Workstation">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></div>
             <span className={`text-[10px] uppercase tracking-wider font-extrabold text-emerald-800 bg-emerald-100/80 border border-emerald-200/30 px-2.5 py-0.5 rounded-full whitespace-nowrap transition-all duration-200 ${isCollapsed ? 'md:hidden' : 'block'}`}>
-              Workstation
+              Estação Corporativa
             </span>
           </div>
 

@@ -11,6 +11,11 @@ import CrmView from './pages/CrmView';
 import LeadDetailView from './pages/LeadDetailView';
 import ConnectionsView from './pages/ConnectionsView';
 import OmnichannelView from './pages/OmnichannelView';
+import CompanySettingsView from './pages/CompanySettingsView';
+import DashboardOperationalView from './pages/DashboardOperationalView';
+import AiIntelligenceView from './pages/AiIntelligenceView';
+import AutomationsView from './pages/AutomationsView';
+import CampaignsWizardView from './pages/CampaignsWizardView';
 import { LogOut } from 'lucide-react';
 import { Toaster } from 'sonner';
 import './App.css';
@@ -63,7 +68,7 @@ function Header() {
         <div className="flex items-center gap-2 sm:gap-3">
           <span className="hidden sm:flex text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200 items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-            Internal Workstation
+            Ambiente Interno Corporativo
           </span>
 
           {isLoggedIn && (
@@ -142,6 +147,56 @@ function App() {
                 </DashboardLayout>
               </ProtectedRoute>
             } 
+          />
+          <Route
+            path="/dashboard-operacional"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <DashboardOperationalView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ia-inteligencia"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <AiIntelligenceView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/automacoes"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <AutomationsView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/campanhas-wizard"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <CampaignsWizardView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <CompanySettingsView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
           />
           <Route 
             path="/project-hub/project/:id" 

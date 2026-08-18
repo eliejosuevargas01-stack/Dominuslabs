@@ -277,6 +277,61 @@ export async function deleteProject(id: string | number) {
   return res.json();
 }
 
+// ---------------------------------------------------------------------------
+// Configurações Gerais da Empresa
+// ---------------------------------------------------------------------------
+
+export interface MenuItem {
+  id?: string;
+  name: string;
+  category?: string;
+  price?: number;
+  description?: string;
+  available?: boolean;
+  image_url?: string;
+}
+
+export interface CompanySettings {
+  id?: number;
+  tenant_id?: string;
+  company_name?: string;
+  cnpj_cpf?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  business_hours?: string;
+  tone_of_voice?: string;
+  custom_instructions?: string;
+  exchange_policy?: string;
+  delivery_policy?: string;
+  terms_of_service?: string;
+  menu_catalog?: MenuItem[];
+  accepted_payment_types?: string[];
+  payment_notes?: string;
+  values_mission?: string;
+  additional_notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function fetchCompanySettings(tenantId: string = "default"): Promise<CompanySettings> {
+  const res = await fetchWithAuth(`${API_BASE}/company-settings/?tenant_id=${tenantId}`);
+  if (!res.ok) throw new Error("Falha ao carregar configurações da empresa.");
+  return res.json();
+}
+
+export async function updateCompanySettings(settings: CompanySettings, tenantId: string = "default"): Promise<CompanySettings> {
+  const res = await fetchWithAuth(`${API_BASE}/company-settings/?tenant_id=${tenantId}`, {
+    method: "PUT",
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao salvar configurações da empresa.");
+  }
+  return res.json();
+}
+
 export async function fetchPublicProject(publicToken: string) {
   // Public route - no auth headers needed
   const res = await fetch(`${API_BASE}/projects/public/${publicToken}`);
