@@ -81,7 +81,8 @@ async def get_contacts_action(
                 "display_phone": l.get("display_phone") or l.get("whatsapp") or None,
                 "profile_pic_url": l.get("profile_pic_url") or "",
                 "created_at": l.get("created_at") or datetime.utcnow().isoformat() + "Z",
-                "updated_at": l.get("updated_at") or datetime.utcnow().isoformat() + "Z"
+                "updated_at": l.get("updated_at") or datetime.utcnow().isoformat() + "Z",
+                "tenant_id": l.get("tenant_id") or "admin"
             })
         return contacts
     except Exception as e:
