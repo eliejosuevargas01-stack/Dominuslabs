@@ -121,10 +121,12 @@ async def crm_chats_events(request: Request, token: Optional[str] = None):
                     
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-@router.post("/crm/update-chat")
-async def update_chat_webhook_post(
+async def _process_update_chat(
     request: Request,
+    contact_id: Optional[str] = None,
     lead_id: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    session_id: Optional[str] = None,
     id: Optional[str] = None,
     jid: Optional[str] = None,
     phone: Optional[str] = None,
@@ -132,11 +134,13 @@ async def update_chat_webhook_post(
     sender: Optional[str] = None
 ):
     messages_list = []
+    body_dict = {}
     try:
         raw_body = await request.json()
         if isinstance(raw_body, list):
             messages_list = raw_body
         elif isinstance(raw_body, dict):
+            body_dict = raw_body
             if "messages" in raw_body and isinstance(raw_body["messages"], list):
                 messages_list = raw_body["messages"]
             elif "mensagens" in raw_body and isinstance(raw_body["mensagens"], list):
@@ -150,6 +154,13 @@ async def update_chat_webhook_post(
     explicit_sender = sender
 
     body_jids = []
+    body_tenant = None
+    body_session = None
+
+    if body_dict:
+        body_tenant = body_dict.get("tenant_id") or body_dict.get("tenantId") or body_dict.get("tenant")
+        body_session = body_dict.get("session_id") or body_dict.get("sessionId") or body_dict.get("session") or body_dict.get("whatsapp_instance")
+
     if messages_list:
         for msg in messages_list:
             if isinstance(msg, dict):
@@ -157,108 +168,109 @@ async def update_chat_webhook_post(
                     explicit_from_me = msg.get("is_from_me") if msg.get("is_from_me") is not None else msg.get("from_me")
                 if explicit_sender is None:
                     explicit_sender = msg.get("sender")
+                if not body_tenant:
+                    body_tenant = msg.get("tenant_id") or msg.get("tenantId") or msg.get("tenant")
+                if not body_session:
+                    body_session = msg.get("session_id") or msg.get("sessionId") or msg.get("session") or msg.get("whatsapp_instance")
 
-                for k in ["contact_jid", "chat_jid", "group_jid", "remoteJid", "lead_id", "jid", "phone", "participant"]:
+                for k in ["contact_id", "contact_jid", "chat_jid", "group_jid", "remoteJid", "lead_id", "jid", "phone", "participant"]:
                     val = msg.get(k)
                     if val and isinstance(val, str) and "{{" not in val and "$" not in val:
                         if val not in body_jids:
                             body_jids.append(val)
 
-    cleaned_query_lead = lead_id if (lead_id and "{{" not in lead_id and "$" not in lead_id) else None
-    resolved_lead_id = (body_jids[0] if body_jids else None) or cleaned_query_lead or lead_id or id or jid or phone
+    def clean_param(val: Optional[str]) -> Optional[str]:
+        if val and isinstance(val, str) and "{{" not in val and "$" not in val:
+            return val.strip()
+        return None
 
-    if not resolved_lead_id:
-        raise HTTPException(status_code=400, detail="Missing lead_id, jid, or phone parameter")
-    
+    cleaned_contact_id = clean_param(contact_id)
+    cleaned_lead_id = clean_param(lead_id)
+    cleaned_jid = clean_param(jid)
+    cleaned_phone = clean_param(phone)
+    cleaned_id = clean_param(id)
+
+    resolved_contact_id = cleaned_contact_id or (body_jids[0] if body_jids else None) or cleaned_lead_id or cleaned_jid or cleaned_phone or cleaned_id or contact_id or lead_id or jid or phone or id
+    resolved_tenant_id = clean_param(tenant_id) or clean_param(body_tenant) or request.headers.get("x-tenant-id") or getattr(settings, "ADMIN_TENANT_ID", "admin")
+    resolved_session_id = clean_param(session_id) or clean_param(body_session) or request.headers.get("x-session-id") or "default"
+
+    if not resolved_contact_id or "{{" in str(resolved_contact_id) or "$" in str(resolved_contact_id):
+        raise HTTPException(status_code=400, detail="Missing contact_id or contact_jid parameter")
+
     from app.services.n8n_service import n8n_service
     n8n_service.invalidate_leads_cache()
 
     final_is_from_me = explicit_from_me if explicit_from_me is not None else False
     final_sender = explicit_sender or ("user" if final_is_from_me else "lead")
 
-    # Broadcast message payload directly via SSE to connected clients (No GET get_chat_history call)
-    await notify_lead_listeners(resolved_lead_id, "reload")
-    await notify_crm_chat_listeners(resolved_lead_id, is_from_me=final_is_from_me, sender=final_sender, messages=messages_list)
-    
-    notified_count = len(lead_listeners.get(resolved_lead_id, [])) + len(crm_chat_listeners)
+    await notify_lead_listeners(resolved_contact_id, "reload")
+    await notify_crm_chat_listeners(resolved_contact_id, is_from_me=final_is_from_me, sender=final_sender, messages=messages_list)
+
+    notified_count = len(lead_listeners.get(resolved_contact_id, [])) + len(crm_chat_listeners)
     return {
         "status": "success",
-        "lead_id": resolved_lead_id,
+        "contact_id": resolved_contact_id,
+        "lead_id": resolved_contact_id,
+        "tenant_id": resolved_tenant_id,
+        "session_id": resolved_session_id,
         "is_from_me": final_is_from_me,
         "sender": final_sender,
         "messages_received": len(messages_list),
         "notified_sessions": notified_count,
         "active_clients_connected": len(crm_chat_listeners)
     }
+
+@router.post("/crm/update-chat")
+async def update_chat_webhook_post(
+    request: Request,
+    contact_id: Optional[str] = None,
+    lead_id: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    id: Optional[str] = None,
+    jid: Optional[str] = None,
+    phone: Optional[str] = None,
+    is_from_me: Optional[bool] = None,
+    sender: Optional[str] = None
+):
+    return await _process_update_chat(
+        request=request,
+        contact_id=contact_id,
+        lead_id=lead_id,
+        tenant_id=tenant_id,
+        session_id=session_id,
+        id=id,
+        jid=jid,
+        phone=phone,
+        is_from_me=is_from_me,
+        sender=sender
+    )
 
 @router.get("/crm/update-chat")
 async def update_chat_webhook_get(
     request: Request,
+    contact_id: Optional[str] = None,
     lead_id: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    session_id: Optional[str] = None,
     id: Optional[str] = None,
     jid: Optional[str] = None,
     phone: Optional[str] = None,
     is_from_me: Optional[bool] = None,
     sender: Optional[str] = None
 ):
-    messages_list = []
-    try:
-        raw_body = await request.json()
-        if isinstance(raw_body, list):
-            messages_list = raw_body
-        elif isinstance(raw_body, dict):
-            if "messages" in raw_body and isinstance(raw_body["messages"], list):
-                messages_list = raw_body["messages"]
-            elif "mensagens" in raw_body and isinstance(raw_body["mensagens"], list):
-                messages_list = raw_body["mensagens"]
-            else:
-                messages_list = [raw_body]
-    except Exception:
-        pass
-
-    explicit_from_me = is_from_me
-    explicit_sender = sender
-
-    body_jids = []
-    if messages_list:
-        for msg in messages_list:
-            if isinstance(msg, dict):
-                if explicit_from_me is None:
-                    explicit_from_me = msg.get("is_from_me") if msg.get("is_from_me") is not None else msg.get("from_me")
-                if explicit_sender is None:
-                    explicit_sender = msg.get("sender")
-
-                for k in ["contact_jid", "chat_jid", "group_jid", "remoteJid", "lead_id", "jid", "phone", "participant"]:
-                    val = msg.get(k)
-                    if val and isinstance(val, str) and "{{" not in val and "$" not in val:
-                        if val not in body_jids:
-                            body_jids.append(val)
-
-    cleaned_query_lead = lead_id if (lead_id and "{{" not in lead_id and "$" not in lead_id) else None
-    resolved_lead_id = (body_jids[0] if body_jids else None) or cleaned_query_lead or lead_id or id or jid or phone
-
-    if not resolved_lead_id:
-        raise HTTPException(status_code=400, detail="Missing lead_id, jid, or phone parameter")
-        
-    from app.services.n8n_service import n8n_service
-    n8n_service.invalidate_leads_cache()
-
-    final_is_from_me = explicit_from_me if explicit_from_me is not None else False
-    final_sender = explicit_sender or ("user" if final_is_from_me else "lead")
-
-    await notify_lead_listeners(resolved_lead_id, "reload")
-    await notify_crm_chat_listeners(resolved_lead_id, is_from_me=final_is_from_me, sender=final_sender, messages=messages_list)
-    
-    notified_count = len(lead_listeners.get(resolved_lead_id, [])) + len(crm_chat_listeners)
-    return {
-        "status": "success",
-        "lead_id": resolved_lead_id,
-        "is_from_me": final_is_from_me,
-        "sender": final_sender,
-        "messages_received": len(messages_list),
-        "notified_sessions": notified_count,
-        "active_clients_connected": len(crm_chat_listeners)
-    }
+    return await _process_update_chat(
+        request=request,
+        contact_id=contact_id,
+        lead_id=lead_id,
+        tenant_id=tenant_id,
+        session_id=session_id,
+        id=id,
+        jid=jid,
+        phone=phone,
+        is_from_me=is_from_me,
+        sender=sender
+    )
 
 async def notify_listeners(public_token: str):
     # Notify specific project listeners
