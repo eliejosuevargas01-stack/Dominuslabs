@@ -143,12 +143,23 @@ def encrypt_payload(payload_dict: Dict[str, Any], target: str) -> Dict[str, Any]
         raise e
 
 
-def decrypt_payload(encrypted_dict: Dict[str, Any]) -> Dict[str, Any]:
+def decrypt_payload(encrypted_data: Any) -> Any:
     """
     Decrypts a Hybrid Encrypted JSON payload (AES-256-GCM + RSA-OAEP) using Dominus Private Key.
+    Supports both dict envelopes and list of encrypted envelopes.
     """
-    if not encrypted_dict.get("_encrypted"):
-        return encrypted_dict
+    if not encrypted_data:
+        return encrypted_data
+
+    if isinstance(encrypted_data, list):
+        if len(encrypted_data) == 1 and isinstance(encrypted_data[0], dict) and encrypted_data[0].get("_encrypted") is True:
+            return decrypt_payload(encrypted_data[0])
+        elif any(isinstance(item, dict) and item.get("_encrypted") is True for item in encrypted_data):
+            return [decrypt_payload(item) if isinstance(item, dict) and item.get("_encrypted") is True else item for item in encrypted_data]
+        return encrypted_data
+
+    if not isinstance(encrypted_data, dict) or not encrypted_data.get("_encrypted"):
+        return encrypted_data
         
     private_key_pem = clean_pem(settings.DOMINUS_PRIVATE_KEY)
     if not private_key_pem:
@@ -168,10 +179,10 @@ def decrypt_payload(encrypted_dict: Dict[str, Any]) -> Dict[str, Any]:
                 raise pem_err
 
         # 1. Extract values and decode from Base64
-        encrypted_key = base64.b64decode(encrypted_dict["encryptedKey"])
-        iv = base64.b64decode(encrypted_dict["iv"])
-        auth_tag = base64.b64decode(encrypted_dict["authTag"])
-        ciphertext = base64.b64decode(encrypted_dict["payload"])
+        encrypted_key = base64.b64decode(encrypted_data["encryptedKey"])
+        iv = base64.b64decode(encrypted_data["iv"])
+        auth_tag = base64.b64decode(encrypted_data["authTag"])
+        ciphertext = base64.b64decode(encrypted_data["payload"])
 
         # 2. Decrypt the AES-256 key using RSA-OAEP
         aes_key = private_key.decrypt(

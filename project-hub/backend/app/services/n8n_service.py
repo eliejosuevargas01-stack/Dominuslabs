@@ -1144,8 +1144,7 @@ class N8NService:
                     logger.warning(f"[N8N-STEALTH] POST request to {url} returned status {response.status_code}. Ensure the n8n Webhook node HTTP Method is set to POST.")
                 response.raise_for_status()
                 data = response.json()
-                if isinstance(data, dict) and data.get("_encrypted") is True:
-                    data = decrypt_payload(data)
+                data = decrypt_payload(data)
 
                 if isinstance(data, list):
                     raw_leads = data
@@ -1204,8 +1203,7 @@ class N8NService:
                     logger.warning(f"[N8N-STEALTH] POST request to {url} returned status {response.status_code}. Ensure the n8n Webhook node HTTP Method is set to POST.")
                 response.raise_for_status()
                 data = response.json()
-                if isinstance(data, dict) and data.get("_encrypted") is True:
-                    data = decrypt_payload(data)
+                data = decrypt_payload(data)
 
                 raw_convs = []
                 if isinstance(data, list):
@@ -1574,8 +1572,7 @@ class N8NService:
                 raw_msgs = []
                 if body:
                     data = response.json()
-                    if isinstance(data, dict) and data.get("_encrypted") is True:
-                        data = decrypt_payload(data)
+                    data = decrypt_payload(data)
 
                     if isinstance(data, list):
                         for d in data:
