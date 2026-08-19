@@ -94,6 +94,12 @@ async def make_whatsapp_api_request(
         if "Authorization" not in req_headers and token:
             req_headers["Authorization"] = f"Bearer {token}"
 
+    # Always include the Master API Key if configured (read from settings, never hardcoded)
+    if "X-Master-API-Key" not in req_headers:
+        master_secret = getattr(settings, "WHATSAPP_MASTER_SECRET", None)
+        if master_secret and master_secret != "default_master_secret":
+            req_headers["X-Master-API-Key"] = master_secret
+
     async with get_mtls_async_client(timeout=timeout, service_name="whatsapp") as client:
         try:
             response = await client.request(

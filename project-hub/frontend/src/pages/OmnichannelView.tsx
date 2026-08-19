@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   MessageSquare, Send, Paperclip, Smile, Search, 
-  RefreshCw, CheckCheck, Radio, ChevronLeft,
+  RefreshCw, CheckCheck, Check, Clock, Radio, ChevronLeft,
   X, Users, MessageCircle, Maximize2, ExternalLink,
   Download, FileText, Image as ImageIcon, Video, Mic, Trash2,
   Play, Pause
@@ -214,43 +214,26 @@ function getAvatarSrc(url?: string, session_id?: string, jid?: string): string |
 function formatTimestamp(isoString?: string): string {
   if (!isoString) return '';
   try {
-    let hours = '';
-    let minutes = '';
-
-    // Extract exact HH:mm directly from string if ISO format to avoid JS subtracting 3h timezone offset
-    if (typeof isoString === 'string' && isoString.includes('T')) {
-      const timePart = isoString.split('T')[1];
-      if (timePart && timePart.includes(':')) {
-        const timePieces = timePart.split(':');
-        hours = timePieces[0].padStart(2, '0');
-        minutes = timePieces[1].padStart(2, '0');
-      }
-    }
-
     const date = new Date(isoString);
-    if (!hours || !minutes) {
-      if (isNaN(date.getTime())) return '';
-      hours = String(date.getHours()).padStart(2, '0');
-      minutes = String(date.getMinutes()).padStart(2, '0');
-    }
+    if (isNaN(date.getTime())) return '';
+
+    // Let JS Date handle UTC→local conversion automatically (timestamps come with Z suffix = UTC)
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
 
     const now = new Date();
-    const isToday = !isNaN(date.getTime()) ? date.toDateString() === now.toDateString() : true;
     
-    if (isToday) {
+    if (date.toDateString() === now.toDateString()) {
       return `${hours}:${minutes}`;
     }
     
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
-    if (!isNaN(date.getTime()) && date.toDateString() === yesterday.toDateString()) {
+    if (date.toDateString() === yesterday.toDateString()) {
       return 'Ontem';
     }
     
-    if (!isNaN(date.getTime())) {
-      return `${date.getDate()}/${date.getMonth() + 1}`;
-    }
-    return `${hours}:${minutes}`;
+    return `${date.getDate()}/${date.getMonth() + 1}`;
   } catch {
     return '';
   }
@@ -1879,9 +1862,35 @@ function playIncomingSound() {
                           {/* Message Footer (Timestamp & Checkmarks) */}
                           <div className="flex items-center justify-end gap-1 mt-1 -mb-1 float-right text-[10px] text-slate-400 select-none">
                             <span>{timeStr}</span>
-                            {isMe && (
-                              <CheckCheck className="w-3.5 h-3.5 text-sky-500 font-bold" />
-                            )}
+                            {isMe && (() => {
+                              const st = (msg.status || '').toString().toLowerCase().trim();
+                              if (st === 'played' || st === 'read') {
+                                return (
+                                  <span title="Lida / Reproduzida (played)">
+                                    <CheckCheck className="w-3.5 h-3.5 text-sky-500 font-bold" />
+                                  </span>
+                                );
+                              }
+                              if (st === 'received' || st === 'delivered') {
+                                return (
+                                  <span title="Entregue (received)">
+                                    <CheckCheck className="w-3.5 h-3.5 text-slate-400 font-bold" />
+                                  </span>
+                                );
+                              }
+                              if (st === 'sending') {
+                                return (
+                                  <span title="Enviando...">
+                                    <Clock className="w-3 h-3 text-slate-400 animate-pulse" />
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span title="Enviada (sent)">
+                                  <Check className="w-3.5 h-3.5 text-slate-400 font-bold" />
+                                </span>
+                              );
+                            })()}
                           </div>
 
                           {/* Attached Reactions Badge */}
