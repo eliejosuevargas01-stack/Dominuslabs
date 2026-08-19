@@ -4,7 +4,7 @@ import {
   RefreshCw, CheckCheck, Check, Clock, Radio, ChevronLeft,
   X, Users, MessageCircle, Maximize2, ExternalLink,
   Download, FileText, Image as ImageIcon, Video, Mic, Trash2,
-  Play, Pause
+  Play, Pause, AlertTriangle
 } from 'lucide-react';
 import { 
   fetchConversations, 
@@ -15,6 +15,7 @@ import {
   fetchWhatsappSessions,
   API_BASE
 } from '../services/api';
+import { useNavigate } from 'react-router-dom';
 
 // ============================================================================
 // KNOWN CONTACT DICTIONARY (FOR NAME RESOLUTION)
@@ -546,6 +547,7 @@ function renderMessageMedia(msg: any, defaultSessionId?: string, onOpenLightbox?
 }
 
 export default function OmnichannelView() {
+  const navigate = useNavigate();
   // Navigation / Tabs state
   const [activeTab, setActiveTab] = useState<'conversations' | 'contacts'>('conversations');
   const [selectedSession, setSelectedSession] = useState<string>('all');
@@ -580,6 +582,7 @@ export default function OmnichannelView() {
   const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
   const [micVolumeBars, setMicVolumeBars] = useState<number[]>([20, 35, 50, 30, 65, 45, 80, 55, 35, 60, 40, 25]);
   
+  const [disconnectedSessionInfo, setDisconnectedSessionInfo] = useState<{session_id: string, message: string} | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
@@ -967,6 +970,14 @@ function playIncomingSound() {
 
             if (parsed.is_from_me === true || parsed.from_me === true || parsed.sender === 'user' || parsed.sender === 'me') {
               isFromMe = true;
+            }
+
+            if (parsed.action === 'session_disconnected') {
+              setDisconnectedSessionInfo({
+                session_id: parsed.session_id,
+                message: parsed.message || `A sessão '${parsed.session_id}' foi desconectada.`
+              });
+              return; // No need to process further for message events
             }
           }
 
@@ -2160,6 +2171,48 @@ function playIncomingSound() {
               alt="Mídia Ampliada"
               className="max-h-[85vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl border border-white/10"
             />
+          </div>
+        </div>
+      )}
+      {/* Disconnected Session Warning Modal */}
+      {disconnectedSessionInfo && (
+        <div className="fixed inset-0 z-[99999] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 transition-all duration-300 animate-fadeIn">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all border border-slate-100 flex flex-col items-center p-8 text-center relative">
+            <button 
+              onClick={() => setDisconnectedSessionInfo(null)}
+              className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center mb-6 border-8 border-rose-100/50">
+              <AlertTriangle className="w-8 h-8 text-rose-500 animate-pulse" />
+            </div>
+            
+            <h2 className="text-xl font-bold text-slate-800 mb-2">Conexão Interrompida</h2>
+            
+            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+              Detectamos que a sessão do WhatsApp <strong className="text-slate-800">'{disconnectedSessionInfo.session_id}'</strong> foi desconectada.
+              As mensagens não poderão ser enviadas ou recebidas até que você reconecte.
+            </p>
+
+            <div className="flex flex-col w-full gap-3">
+              <button 
+                onClick={() => {
+                  setDisconnectedSessionInfo(null);
+                  navigate('/connections');
+                }}
+                className="w-full py-3 px-4 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white rounded-xl font-bold text-sm shadow-md shadow-rose-500/20 transition-all active:scale-[0.98] cursor-pointer"
+              >
+                Reconectar Agora
+              </button>
+              <button 
+                onClick={() => setDisconnectedSessionInfo(null)}
+                className="w-full py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-sm transition-all active:scale-[0.98] cursor-pointer"
+              >
+                Lidar com isso depois
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -683,3 +683,33 @@ async def instagram_inbound_webhook(request: Request):
     await notify_crm_chat_listeners(lead_id)
             
     return {"status": "success", "message": new_msg}
+@router.post("/waha/session-status")
+async def waha_session_status_webhook(request: Request):
+    """
+    Endpoint to receive session status updates from WAHA.
+    If a session drops or fails, we notify the frontend via SSE.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        return {"status": "ignored", "reason": "invalid json"}
+        
+    session_id = payload.get("session")
+    event_type = payload.get("event")
+    
+    # WAHA usually sends event="session.status" and payload.status
+    inner_payload = payload.get("payload", {})
+    status = inner_payload.get("status", "").upper() if isinstance(inner_payload, dict) else ""
+    
+    if event_type == "session.status" and status in ["STOPPED", "FAILED", "DISCONNECTED", "UNPAIRED", "TIMEOUT"]:
+        # Broadcast to all CRM chat listeners that a session has disconnected
+        msg = json.dumps({
+            "action": "session_disconnected",
+            "session_id": session_id,
+            "status": status,
+            "message": f"A sessão '{session_id}' foi desconectada."
+        })
+        for user_email, queue in list(crm_chat_listeners):
+            await queue.put(msg)
+            
+    return {"status": "success"}
