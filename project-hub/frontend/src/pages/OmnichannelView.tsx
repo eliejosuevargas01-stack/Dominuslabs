@@ -587,9 +587,17 @@ export default function OmnichannelView() {
 
   useEffect(() => {
     if (selectedChat) {
-      setActiveSendSession(selectedChat.session_id || 'default');
+      if (selectedChat.session_id && selectedChat.session_id !== 'default') {
+        setActiveSendSession(selectedChat.session_id);
+      } else if (availableSessions.length > 0) {
+        // Find a WORKING session, or fallback to the first available
+        const workingSession = availableSessions.find(s => s.status === 'WORKING') || availableSessions[0];
+        setActiveSendSession(workingSession.id || 'default');
+      } else {
+        setActiveSendSession('default');
+      }
     }
-  }, [selectedChat]);
+  }, [selectedChat, availableSessions]);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
