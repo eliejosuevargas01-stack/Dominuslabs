@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Search, Users, Folder, LogOut, Menu, X, PanelLeftClose, PanelLeftOpen, Briefcase, Radio, MessageSquare, Building2, BarChart2, Cpu, Workflow, Megaphone } from 'lucide-react';
+import { Users, Folder, LogOut, Menu, X, PanelLeftClose, PanelLeftOpen, Briefcase, Radio, MessageSquare, Building2, BarChart2, Cpu, Workflow, Megaphone } from 'lucide-react';
 import { useState } from 'react';
 
 interface SidebarProps {
@@ -20,7 +20,6 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
     { name: 'Automações & Regras', path: '/automacoes', icon: Workflow },
     { name: 'Campanhas Ativas', path: '/campanhas-wizard', icon: Megaphone },
     { name: 'Conexões & APIs', path: '/connections', icon: Radio },
-    { name: 'Scrapper & Leads', path: '/scrapper', icon: Search },
     { name: 'Governança & Empresa', path: '/settings', icon: Building2 },
     { name: 'Cases & Portfólio', path: '/cases-dashboard', icon: Briefcase },
     { name: 'Project Hub', path: '/project-hub', icon: Folder },

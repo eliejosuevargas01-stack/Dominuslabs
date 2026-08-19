@@ -6,7 +6,6 @@ import PublicProjectView from './pages/PublicProjectView';
 import Login from './pages/Login';
 import Showcase from './pages/Showcase';
 import Sidebar from './components/Sidebar';
-import ScrapperView from './pages/ScrapperView';
 import CrmView from './pages/CrmView';
 import LeadDetailView from './pages/LeadDetailView';
 import ConnectionsView from './pages/ConnectionsView';
@@ -214,16 +213,6 @@ function App() {
               <ProtectedRoute>
                 <DashboardLayout>
                   <OmnichannelView />
-                </DashboardLayout>
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/scrapper" 
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <ScrapperView />
                 </DashboardLayout>
               </ProtectedRoute>
             } 
