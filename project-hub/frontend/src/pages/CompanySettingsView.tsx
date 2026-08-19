@@ -20,7 +20,7 @@ import {
   Award
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchCompanySettings, updateCompanySettings, type CompanySettings, type MenuItem } from '../services/api';
+import { fetchCompanySettings, updateCompanySettings, uploadProductMedia, type CompanySettings, type MenuItem } from '../services/api';
 
 const TONE_OPTIONS = [
   { id: 'Formal', label: 'Corporativo & Institucional', desc: 'Comunicação executiva, altamente formal, fundamentada em diretrizes corporativas e conformidade.' },
@@ -153,6 +153,31 @@ export default function CompanySettingsView() {
     setNewItem(item);
     setEditingIndex(index);
     setIsMenuModalOpen(true);
+  };
+
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const handleProductMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Use an existing item ID or create a temp one for uploading
+    const productId = editingIndex !== null ? settings.menu_catalog![editingIndex].id || `item-${Date.now()}` : `item-${Date.now()}`;
+    
+    // Ensure the newItem has the ID so it matches the upload
+    if (editingIndex === null && !newItem.id) {
+      setNewItem(prev => ({ ...prev, id: productId }));
+    }
+
+    setUploadingMedia(true);
+    try {
+      const result = await uploadProductMedia(file, productId);
+      setNewItem(prev => ({ ...prev, image_url: result.media_url }));
+      toast.success('Mídia enviada com sucesso!');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao enviar mídia.');
+    } finally {
+      setUploadingMedia(false);
+    }
   };
 
   // Promotion Modal State
@@ -612,7 +637,12 @@ export default function CompanySettingsView() {
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2 mb-1">
-                        <span className="font-bold text-slate-900 text-base">{item.name}</span>
+                        <div className="flex items-center gap-3">
+                          {item.image_url && (
+                            <img src={item.image_url} alt={item.name} className="w-10 h-10 rounded-md object-cover border border-slate-200" />
+                          )}
+                          <span className="font-bold text-slate-900 text-base">{item.name}</span>
+                        </div>
                         <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 text-xs whitespace-nowrap">
                           R$ {Number(item.price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
@@ -835,19 +865,42 @@ export default function CompanySettingsView() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Valor Unitário (R$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={newItem.price || 0}
-                    onChange={(e) => setNewItem({ ...newItem, price: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-purple-500"
-                  />
-                </div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Valor Unitário (R$)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newItem.price || 0}
+                  onChange={(e) => setNewItem({ ...newItem, price: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-purple-500"
+                />
               </div>
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Descrição / Escopo Técnico</label>
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1">Imagem / Mídia do Produto</label>
+              <div className="flex items-center gap-3">
+                {newItem.image_url && (
+                  <img src={newItem.image_url} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-slate-200" />
+                )}
+                <label className="flex-1 px-3.5 py-2 rounded-lg border border-slate-200 text-sm flex items-center justify-center cursor-pointer hover:bg-slate-50 transition-colors">
+                  {uploadingMedia ? (
+                    <span className="flex items-center gap-2 text-slate-500"><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</span>
+                  ) : (
+                    <span className="text-slate-600 font-medium">Selecionar Arquivo (Imagem/Vídeo)</span>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    className="hidden"
+                    onChange={handleProductMediaUpload}
+                    disabled={uploadingMedia}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1">Descrição / Escopo Técnico</label>
                 <textarea
                   rows={3}
                   value={newItem.description || ''}

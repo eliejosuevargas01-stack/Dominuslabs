@@ -330,6 +330,31 @@ export interface CompanySettings {
   preparation_time_minutes?: number;
 }
 
+export async function uploadProductMedia(file: File, productId: string, tenantId: string = "default") {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("product_id", productId);
+  formData.append("tenant_id", tenantId);
+
+  const token = localStorage.getItem("admin_token");
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}/product-media/`, {
+    method: "POST",
+    headers, // Do NOT set Content-Type for FormData
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Falha ao enviar mídia do produto.");
+  }
+  return res.json();
+}
+
 export async function fetchCompanySettings(tenantId: string = "default"): Promise<CompanySettings> {
   const res = await fetchWithAuth(`${API_BASE}/company-settings/?tenant_id=${tenantId}`);
   if (!res.ok) throw new Error("Falha ao carregar configurações da empresa.");
