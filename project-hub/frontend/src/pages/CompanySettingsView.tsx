@@ -40,7 +40,7 @@ const PAYMENT_METHODS = [
 ];
 
 export default function CompanySettingsView() {
-  const [activeTab, setActiveTab] = useState<'general' | 'tone' | 'policies' | 'menu' | 'payments' | 'delivery'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'tone' | 'policies' | 'menu' | 'promotions' | 'payments' | 'delivery'>('general');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -65,7 +65,8 @@ export default function CompanySettingsView() {
     delivery_fee_value: 0,
     delivery_radius_km: 0,
     minimum_order_value: 0,
-    preparation_time_minutes: 0
+    preparation_time_minutes: 0,
+    promotions: []
   });
 
   // Modal State for Adding/Editing Menu/Catalog Item
@@ -154,6 +155,50 @@ export default function CompanySettingsView() {
     setIsMenuModalOpen(true);
   };
 
+  // Promotion Modal State
+  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
+  const [editingPromoIndex, setEditingPromoIndex] = useState<number | null>(null);
+  const [newPromo, setNewPromo] = useState<any>({
+    name: '',
+    discount_type: 'percentage',
+    discount_value: 0,
+    valid_until: '',
+    description: '',
+    active: true
+  });
+
+  const handleSavePromo = () => {
+    if (!newPromo.name.trim()) {
+      toast.error('Informe o nome da promoção.');
+      return;
+    }
+    const currentPromos = [...(settings.promotions || [])];
+    if (editingPromoIndex !== null) {
+      currentPromos[editingPromoIndex] = newPromo;
+    } else {
+      currentPromos.push({ ...newPromo, id: `promo-${Date.now()}` });
+    }
+    setSettings({ ...settings, promotions: currentPromos });
+    setIsPromoModalOpen(false);
+    setNewPromo({ name: '', discount_type: 'percentage', discount_value: 0, valid_until: '', description: '', active: true });
+    setEditingPromoIndex(null);
+    toast.success('Promoção salva com sucesso!');
+  };
+
+  const handleDeletePromo = (index: number) => {
+    const currentPromos = [...(settings.promotions || [])];
+    currentPromos.splice(index, 1);
+    setSettings({ ...settings, promotions: currentPromos });
+    toast.info('Promoção removida.');
+  };
+
+  const openEditPromo = (index: number) => {
+    const item = settings.promotions![index];
+    setNewPromo(item);
+    setEditingPromoIndex(index);
+    setIsPromoModalOpen(true);
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
@@ -195,6 +240,7 @@ export default function CompanySettingsView() {
           { id: 'policies', label: 'Políticas, SLAs & Compliance', icon: ShieldAlert },
           { id: 'delivery', label: 'Logística & Operações', icon: MapPin },
           { id: 'menu', label: 'Portfólio & Catálogo', icon: UtensilsCrossed },
+          { id: 'promotions', label: 'Promoções & Ofertas', icon: Award },
           { id: 'payments', label: 'Diretrizes Financeiras & Pagamento', icon: CreditCard },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -617,6 +663,93 @@ export default function CompanySettingsView() {
           </div>
         )}
 
+        {/* Tab Promoções */}
+        {activeTab === 'promotions' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <Award className="w-5 h-5 text-purple-600" />
+                  Campanhas & Promoções Ativas
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Cadastre descontos e ofertas para o bot usar durante o atendimento.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setNewPromo({ name: '', discount_type: 'percentage', discount_value: 0, valid_until: '', description: '', active: true });
+                  setEditingPromoIndex(null);
+                  setIsPromoModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold text-xs px-3.5 py-2 rounded-xl transition-all cursor-pointer self-start sm:self-auto"
+              >
+                <Plus className="w-4 h-4" />
+                Nova Promoção
+              </button>
+            </div>
+
+            {settings.promotions && settings.promotions.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {settings.promotions.map((promo, index) => (
+                  <div
+                    key={index}
+                    className={`p-4 rounded-xl border ${promo.active ? 'border-purple-200 bg-purple-50/30' : 'border-slate-200 bg-slate-50 opacity-60'} flex flex-col justify-between gap-3 transition-all`}
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <span className="font-bold text-slate-900 text-base">{promo.name}</span>
+                        <span className="font-bold text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-md border border-purple-200 text-xs whitespace-nowrap">
+                          {promo.discount_type === 'percentage' ? `${promo.discount_value}% OFF` : `R$ ${promo.discount_value} OFF`}
+                        </span>
+                      </div>
+                      {promo.valid_until && (
+                        <p className="text-xs text-slate-500 mb-2 font-medium">Válido até: {promo.valid_until}</p>
+                      )}
+                      {promo.description && (
+                        <p className="text-xs text-slate-600 line-clamp-2">{promo.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-2 pt-3 border-t border-slate-200/60">
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-2 h-2 rounded-full ${promo.active ? 'bg-emerald-500' : 'bg-slate-400'}`}></div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          {promo.active ? 'Ativa' : 'Inativa'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openEditPromo(index)}
+                          className="text-xs font-semibold text-purple-600 hover:text-purple-800 transition-colors cursor-pointer"
+                        >
+                          Editar
+                        </button>
+                        <span className="text-slate-300">|</span>
+                        <button
+                          onClick={() => handleDeletePromo(index)}
+                          className="text-xs font-semibold text-rose-500 hover:text-rose-700 transition-colors cursor-pointer"
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 px-4 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                <div className="bg-white w-12 h-12 rounded-full shadow-sm flex items-center justify-center mx-auto mb-3">
+                  <Award className="w-5 h-5 text-slate-400" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-700 mb-1">Nenhuma promoção ativa</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Crie promoções e cupons para que sua IA possa oferecer benefícios aos clientes e aumentar conversões.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Tab 5: Formas de Pagamento Aceitas */}
         {activeTab === 'payments' && (
           <div className="space-y-6">
@@ -747,6 +880,99 @@ export default function CompanySettingsView() {
                 className="px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-sm cursor-pointer"
               >
                 Homologar Solução
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Promoções */}
+      {isPromoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+            <h3 className="text-base font-bold text-slate-900">
+              {editingPromoIndex !== null ? 'Editar Promoção' : 'Nova Promoção'}
+            </h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Nome da Campanha / Cupom *</label>
+                <input
+                  type="text"
+                  value={newPromo.name}
+                  onChange={(e) => setNewPromo({ ...newPromo, name: e.target.value })}
+                  placeholder="Ex: BLACKFRIDAY20"
+                  className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Tipo de Desconto</label>
+                  <select
+                    value={newPromo.discount_type}
+                    onChange={(e) => setNewPromo({ ...newPromo, discount_type: e.target.value as 'percentage' | 'fixed' })}
+                    className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-purple-500 bg-white"
+                  >
+                    <option value="percentage">Porcentagem (%)</option>
+                    <option value="fixed">Valor Fixo (R$)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Valor do Desconto</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newPromo.discount_value || 0}
+                    onChange={(e) => setNewPromo({ ...newPromo, discount_value: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Válido até (Opcional)</label>
+                <input
+                  type="date"
+                  value={newPromo.valid_until || ''}
+                  onChange={(e) => setNewPromo({ ...newPromo, valid_until: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Regras / Descrição</label>
+                <textarea
+                  rows={2}
+                  value={newPromo.description || ''}
+                  onChange={(e) => setNewPromo({ ...newPromo, description: e.target.value })}
+                  placeholder="Ex: Válido apenas para primeira compra acima de R$50..."
+                  className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={newPromo.active}
+                  onChange={(e) => setNewPromo({ ...newPromo, active: e.target.checked })}
+                  className="rounded text-purple-600 focus:ring-purple-500"
+                />
+                Promoção Ativa
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setIsPromoModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSavePromo}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-sm cursor-pointer"
+              >
+                Salvar Promoção
               </button>
             </div>
           </div>

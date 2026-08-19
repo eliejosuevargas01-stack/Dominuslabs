@@ -291,6 +291,16 @@ export interface MenuItem {
   image_url?: string;
 }
 
+export interface Promotion {
+  id?: string;
+  name: string;
+  discount_type: 'percentage' | 'fixed';
+  discount_value: number;
+  valid_until?: string;
+  description?: string;
+  active: boolean;
+}
+
 export interface CompanySettings {
   id?: number;
   tenant_id?: string;
@@ -306,6 +316,7 @@ export interface CompanySettings {
   delivery_policy?: string;
   terms_of_service?: string;
   menu_catalog?: MenuItem[];
+  promotions?: Promotion[];
   accepted_payment_types?: string[];
   payment_notes?: string;
   values_mission?: string;

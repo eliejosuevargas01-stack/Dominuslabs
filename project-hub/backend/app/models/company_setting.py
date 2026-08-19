@@ -44,5 +44,8 @@ class CompanySetting(Base):
     minimum_order_value = Column(Float, nullable=True)
     preparation_time_minutes = Column(Integer, nullable=True)
 
+    # Promoções e Ofertas
+    promotions = Column(JSON, default=list, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

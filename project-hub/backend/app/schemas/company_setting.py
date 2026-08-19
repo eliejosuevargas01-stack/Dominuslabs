@@ -38,6 +38,8 @@ class CompanySettingBase(BaseModel):
     delivery_radius_km: Optional[float] = None
     minimum_order_value: Optional[float] = None
     preparation_time_minutes: Optional[int] = None
+    
+    promotions: Optional[List[Dict[str, Any]]] = []
 
 class CompanySettingCreate(CompanySettingBase):
     tenant_id: Optional[str] = "default"

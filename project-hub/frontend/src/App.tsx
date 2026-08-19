@@ -270,10 +270,10 @@ function App() {
           />
 
           {/* Default fallback redirects */}
-          <Route path="/admin/*" element={<Navigate to="/project-hub" replace />} />
-          <Route path="/admin" element={<Navigate to="/project-hub" replace />} />
-          <Route path="/" element={<Navigate to="/project-hub" replace />} />
-          <Route path="*" element={<Navigate to="/project-hub" replace />} />
+          <Route path="/admin/*" element={<Navigate to="/dashboard-operacional" replace />} />
+          <Route path="/admin" element={<Navigate to="/dashboard-operacional" replace />} />
+          <Route path="/" element={<Navigate to="/dashboard-operacional" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard-operacional" replace />} />
         </Routes>
       </div>
     </Router>
