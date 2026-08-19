@@ -46,6 +46,7 @@ export default function CompanySettingsView() {
 
   const [settings, setSettings] = useState<CompanySettings>({
     company_name: '',
+    niche: '',
     cnpj_cpf: '',
     phone: '',
     email: '',
@@ -308,6 +309,19 @@ export default function CompanySettingsView() {
                   value={settings.company_name || ''}
                   onChange={(e) => setSettings({ ...settings, company_name: e.target.value })}
                   placeholder="Ex: Dominus Labs Tecnologia e Inovação S/A"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400" /> Nicho / Segmento de Atuação
+                </label>
+                <input
+                  type="text"
+                  value={settings.niche || ''}
+                  onChange={(e) => setSettings({ ...settings, niche: e.target.value })}
+                  placeholder="Ex: SaaS, E-commerce, Restaurante, Advocacia"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
                 />
               </div>

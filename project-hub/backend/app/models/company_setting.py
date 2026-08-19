@@ -10,6 +10,7 @@ class CompanySetting(Base):
 
     # Informações Gerais
     company_name = Column(String, nullable=True)
+    niche = Column(String, nullable=True)
     cnpj_cpf = Column(String, nullable=True)
     phone = Column(String, nullable=True)
     email = Column(String, nullable=True)

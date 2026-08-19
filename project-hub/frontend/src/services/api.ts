@@ -305,6 +305,7 @@ export interface CompanySettings {
   id?: number;
   tenant_id?: string;
   company_name?: string;
+  niche?: string;
   cnpj_cpf?: string;
   phone?: string;
   email?: string;

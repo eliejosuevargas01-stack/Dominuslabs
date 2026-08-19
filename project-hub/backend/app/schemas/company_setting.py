@@ -13,6 +13,7 @@ class MenuItemSchema(BaseModel):
 
 class CompanySettingBase(BaseModel):
     company_name: Optional[str] = None
+    niche: Optional[str] = None
     cnpj_cpf: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None

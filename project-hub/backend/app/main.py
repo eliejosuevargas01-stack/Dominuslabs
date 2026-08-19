@@ -38,6 +38,11 @@ try:
     conn = db.get_bind().raw_connection()
     c = conn.cursor()
     
+    # 0. Add general fields
+    try:
+        c.execute('ALTER TABLE company_settings ADD COLUMN niche VARCHAR;')
+    except Exception: pass
+
     # 1. Add delivery fields
     try:
         c.execute('ALTER TABLE company_settings ADD COLUMN delivery_fee_type VARCHAR DEFAULT "Fixo";')
