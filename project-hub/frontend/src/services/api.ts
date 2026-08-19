@@ -466,6 +466,20 @@ export async function fetchShowcaseData() {
   return res.json();
 }
 
+
+export function getUserTenant(): string {
+  const token = localStorage.getItem("admin_token");
+  if (!token) return "default";
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return "default";
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.tenant_id || "default";
+  } catch (e) {
+    return "default";
+  }
+}
+
 export function getUserRole(): string {
   const token = localStorage.getItem("admin_token");
   if (!token) return "";

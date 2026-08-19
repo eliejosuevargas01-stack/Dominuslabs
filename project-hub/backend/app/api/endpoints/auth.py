@@ -144,6 +144,7 @@ def _build_token_data(user: User) -> dict:
         "can_edit_projects": getattr(user, "can_edit_projects", None) if getattr(user, "can_edit_projects", None) is not None else (is_admin or "write" in perms),
         "can_manage_crm": getattr(user, "can_manage_crm", None) if getattr(user, "can_manage_crm", None) is not None else True,
         "can_use_scrapper": getattr(user, "can_use_scrapper", None) if getattr(user, "can_use_scrapper", None) is not None else True,
+        "tenant_id": user.tenant_id or "default",
     }
 
 

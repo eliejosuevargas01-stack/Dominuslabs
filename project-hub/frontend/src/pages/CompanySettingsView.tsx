@@ -20,7 +20,7 @@ import {
   Award
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchCompanySettings, updateCompanySettings, uploadProductMedia, type CompanySettings, type MenuItem } from '../services/api';
+import { fetchCompanySettings, updateCompanySettings, uploadProductMedia, getUserTenant, type CompanySettings, type MenuItem } from '../services/api';
 
 const TONE_OPTIONS = [
   { id: 'Formal', label: 'Corporativo & Institucional', desc: 'Comunicação executiva, altamente formal, fundamentada em diretrizes corporativas e conformidade.' },
@@ -87,7 +87,7 @@ export default function CompanySettingsView() {
   const loadSettings = async () => {
     setLoading(true);
     try {
-      const data = await fetchCompanySettings("default");
+      const data = await fetchCompanySettings(getUserTenant());
       setSettings({
         ...data,
         menu_catalog: data.menu_catalog || [],
@@ -103,7 +103,7 @@ export default function CompanySettingsView() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const updated = await updateCompanySettings(settings, "default");
+      const updated = await updateCompanySettings(settings, getUserTenant());
       setSettings(updated);
       toast.success('Diretrizes e parâmetros corporativos salvos com sucesso!');
     } catch (err: any) {
