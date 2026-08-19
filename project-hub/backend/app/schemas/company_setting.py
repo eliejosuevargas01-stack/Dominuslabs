@@ -18,6 +18,11 @@ class CompanySettingBase(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     address: Optional[str] = None
+    address_number: Optional[str] = None
+    address_neighborhood: Optional[str] = None
+    address_city: Optional[str] = None
+    address_state: Optional[str] = None
+    address_zip: Optional[str] = None
     business_hours: Optional[str] = None
 
     tone_of_voice: Optional[str] = None

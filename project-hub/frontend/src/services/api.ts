@@ -294,7 +294,7 @@ export interface MenuItem {
 export interface Promotion {
   id?: string;
   name: string;
-  discount_type: 'percentage' | 'fixed';
+  discount_type: 'percentage' | 'fixed' | 'free_shipping';
   discount_value: number;
   valid_until?: string;
   description?: string;
@@ -310,6 +310,11 @@ export interface CompanySettings {
   phone?: string;
   email?: string;
   address?: string;
+  address_number?: string;
+  address_neighborhood?: string;
+  address_city?: string;
+  address_state?: string;
+  address_zip?: string;
   business_hours?: string;
   tone_of_voice?: string;
   custom_instructions?: string;

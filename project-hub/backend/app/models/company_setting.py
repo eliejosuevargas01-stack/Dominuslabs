@@ -14,7 +14,12 @@ class CompanySetting(Base):
     cnpj_cpf = Column(String, nullable=True)
     phone = Column(String, nullable=True)
     email = Column(String, nullable=True)
-    address = Column(Text, nullable=True)
+    address = Column(Text, nullable=True) # Used as Street/Logradouro
+    address_number = Column(String, nullable=True)
+    address_neighborhood = Column(String, nullable=True)
+    address_city = Column(String, nullable=True)
+    address_state = Column(String, nullable=True)
+    address_zip = Column(String, nullable=True)
     business_hours = Column(Text, nullable=True)
 
     # Tom de Voz e Atendimento (IA / Chatbot)

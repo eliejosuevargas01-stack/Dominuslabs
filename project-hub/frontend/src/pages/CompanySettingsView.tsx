@@ -17,7 +17,8 @@ import {
   MapPin,
   Phone,
   Mail,
-  Award
+  Award,
+  UploadCloud
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchCompanySettings, updateCompanySettings, uploadProductMedia, getUserTenant, type CompanySettings, type MenuItem } from '../services/api';
@@ -51,6 +52,11 @@ export default function CompanySettingsView() {
     phone: '',
     email: '',
     address: '',
+    address_number: '',
+    address_neighborhood: '',
+    address_city: '',
+    address_state: '',
+    address_zip: '',
     business_hours: '',
     tone_of_voice: 'Consultivo',
     custom_instructions: '',
@@ -158,6 +164,29 @@ export default function CompanySettingsView() {
   };
 
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  
+  const handleDrop = async (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    
+    const productId = editingIndex !== null ? settings.menu_catalog![editingIndex].id || `item-${Date.now()}` : `item-${Date.now()}`;
+    if (editingIndex === null && !newItem.id) setNewItem(prev => ({ ...prev, id: productId }));
+
+    setUploadingMedia(true);
+    try {
+      const result = await uploadProductMedia(file, productId);
+      setNewItem(prev => ({ ...prev, image_url: result.media_url }));
+      toast.success('Mídia enviada com sucesso!');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao enviar mídia.');
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
   const handleProductMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -367,13 +396,78 @@ export default function CompanySettingsView() {
 
               <div className="md:col-span-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400" /> Endereço da Sede Corporativa
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" /> Endereço Principal (Rua / Avenida)
                 </label>
                 <input
                   type="text"
                   value={settings.address || ''}
                   onChange={(e) => setSettings({ ...settings, address: e.target.value })}
-                  placeholder="Ex: Av. das Nações Unidas, 12901 - Torre Leste, 18º andar - Brooklin, São Paulo/SP"
+                  placeholder="Ex: Av. das Nações Unidas"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  Número
+                </label>
+                <input
+                  type="text"
+                  value={settings.address_number || ''}
+                  onChange={(e) => setSettings({ ...settings, address_number: e.target.value })}
+                  placeholder="Ex: 12901"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  Bairro
+                </label>
+                <input
+                  type="text"
+                  value={settings.address_neighborhood || ''}
+                  onChange={(e) => setSettings({ ...settings, address_neighborhood: e.target.value })}
+                  placeholder="Ex: Brooklin"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  Cidade
+                </label>
+                <input
+                  type="text"
+                  value={settings.address_city || ''}
+                  onChange={(e) => setSettings({ ...settings, address_city: e.target.value })}
+                  placeholder="Ex: São Paulo"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  Estado (UF)
+                </label>
+                <input
+                  type="text"
+                  value={settings.address_state || ''}
+                  onChange={(e) => setSettings({ ...settings, address_state: e.target.value })}
+                  placeholder="Ex: SP"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  CEP
+                </label>
+                <input
+                  type="text"
+                  value={settings.address_zip || ''}
+                  onChange={(e) => setSettings({ ...settings, address_zip: e.target.value })}
+                  placeholder="Ex: 04578-000"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
                 />
               </div>
@@ -798,7 +892,7 @@ export default function CompanySettingsView() {
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <span className="font-bold text-slate-900 text-base">{promo.name}</span>
                         <span className="font-bold text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-md border border-purple-200 text-xs whitespace-nowrap">
-                          {promo.discount_type === 'percentage' ? `${promo.discount_value}% OFF` : `R$ ${promo.discount_value} OFF`}
+                          {promo.discount_type === 'free_shipping' ? 'Frete Grátis' : promo.discount_type === 'percentage' ? `${promo.discount_value}% OFF` : `R$ ${promo.discount_value} OFF`}
                         </span>
                       </div>
                       {promo.valid_until && (
@@ -945,16 +1039,23 @@ export default function CompanySettingsView() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">Imagem / Mídia do Produto</label>
-              <div className="flex items-center gap-3">
-                {newItem.image_url && (
-                  <img src={newItem.image_url} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-slate-200" />
-                )}
-                <label className="flex-1 px-3.5 py-2 rounded-lg border border-slate-200 text-sm flex items-center justify-center cursor-pointer hover:bg-slate-50 transition-colors">
+                <label className="block text-xs font-bold text-slate-600 mb-1">Imagem / Mídia do Produto</label>
+                <label 
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={handleDrop}
+                  className={`flex flex-col items-center justify-center w-full px-4 py-8 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${isDragging ? 'border-purple-500 bg-purple-50' : 'border-slate-300 hover:border-purple-400 hover:bg-slate-50'}`}
+                >
                   {uploadingMedia ? (
-                    <span className="flex items-center gap-2 text-slate-500"><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</span>
+                    <span className="flex items-center gap-2 text-slate-500"><Loader2 className="w-5 h-5 animate-spin" /> Processando...</span>
                   ) : (
-                    <span className="text-slate-600 font-medium">Selecionar Arquivo (Imagem/Vídeo)</span>
+                    <>
+                      <div className="bg-white p-3 rounded-full shadow-sm mb-3">
+                        <UploadCloud className="w-6 h-6 text-purple-600" />
+                      </div>
+                      <span className="text-slate-700 font-bold mb-1 text-sm">Clique ou arraste um arquivo</span>
+                      <span className="text-slate-400 text-xs">Suporta JPG, PNG e MP4 (máx. 10MB)</span>
+                    </>
                   )}
                   <input
                     type="file"
@@ -965,7 +1066,6 @@ export default function CompanySettingsView() {
                   />
                 </label>
               </div>
-            </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-600 mb-1">Descrição / Escopo Técnico</label>
@@ -1027,27 +1127,30 @@ export default function CompanySettingsView() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <div className={newPromo.discount_type === 'free_shipping' ? "col-span-2" : ""}>
                   <label className="block text-xs font-bold text-slate-600 mb-1">Tipo de Desconto</label>
                   <select
                     value={newPromo.discount_type}
-                    onChange={(e) => setNewPromo({ ...newPromo, discount_type: e.target.value as 'percentage' | 'fixed' })}
+                    onChange={(e) => setNewPromo({ ...newPromo, discount_type: e.target.value as 'percentage' | 'fixed' | 'free_shipping' })}
                     className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-purple-500 bg-white"
                   >
                     <option value="percentage">Porcentagem (%)</option>
                     <option value="fixed">Valor Fixo (R$)</option>
+                    <option value="free_shipping">Frete Grátis</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Valor do Desconto</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={newPromo.discount_value || 0}
-                    onChange={(e) => setNewPromo({ ...newPromo, discount_value: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-purple-500"
-                  />
-                </div>
+                {newPromo.discount_type !== 'free_shipping' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Valor do Desconto</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={newPromo.discount_value || 0}
+                      onChange={(e) => setNewPromo({ ...newPromo, discount_value: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-purple-500"
+                    />
+                  </div>
+                )}
               </div>
 
               <div>
