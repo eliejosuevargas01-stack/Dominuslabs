@@ -30,61 +30,61 @@ os.makedirs(os.path.join(settings.UPLOAD_DIR, "documents"), exist_ok=True)
 
 Base.metadata.create_all(bind=engine)
 
-# Auto-migration for SQLite
+# Auto-migration
 try:
-    from app.core.database import SessionLocal
-    import sqlite3
+    from app.core.database import SessionLocal, engine
+    from sqlalchemy import text
     db = SessionLocal()
-    conn = db.get_bind().raw_connection()
-    c = conn.cursor()
     
-    # 0. Add general fields
+    is_postgres = engine.name == "postgresql"
+    json_default = "'[]'::jsonb" if is_postgres else "'[]'"
+    
+    statements = [
+        'ALTER TABLE company_settings ADD COLUMN niche VARCHAR;',
+        "ALTER TABLE company_settings ADD COLUMN delivery_fee_type VARCHAR DEFAULT 'Fixo';",
+        'ALTER TABLE company_settings ADD COLUMN delivery_fee_value FLOAT DEFAULT 0;',
+        'ALTER TABLE company_settings ADD COLUMN delivery_radius_km FLOAT DEFAULT 0;',
+        'ALTER TABLE company_settings ADD COLUMN delivery_max_coverage_km FLOAT DEFAULT 20.0;',
+        'ALTER TABLE company_settings ADD COLUMN minimum_order_value FLOAT DEFAULT 0;',
+        'ALTER TABLE company_settings ADD COLUMN preparation_time_minutes INTEGER DEFAULT 0;',
+        f'ALTER TABLE company_settings ADD COLUMN promotions JSON DEFAULT {json_default};',
+    ]
+    
+    for stmt in statements:
+        try:
+            db.execute(text(stmt))
+            db.commit()
+        except Exception:
+            db.rollback()
+            
+    # Add product_media table
+    create_table = '''
+    CREATE TABLE IF NOT EXISTS product_media (
+        id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR NOT NULL DEFAULT 'default',
+        product_id VARCHAR NOT NULL,
+        media_type VARCHAR NOT NULL,
+        media_url VARCHAR NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    ''' if is_postgres else '''
+    CREATE TABLE IF NOT EXISTS product_media (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id VARCHAR NOT NULL DEFAULT 'default',
+        product_id VARCHAR NOT NULL,
+        media_type VARCHAR NOT NULL,
+        media_url VARCHAR NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    '''
     try:
-        c.execute('ALTER TABLE company_settings ADD COLUMN niche VARCHAR;')
-    except Exception: pass
+        db.execute(text(create_table))
+        db.execute(text('CREATE INDEX IF NOT EXISTS ix_product_media_tenant_id ON product_media(tenant_id);'))
+        db.execute(text('CREATE INDEX IF NOT EXISTS ix_product_media_product_id ON product_media(product_id);'))
+        db.commit()
+    except Exception:
+        db.rollback()
 
-    # 1. Add delivery fields
-    try:
-        c.execute('ALTER TABLE company_settings ADD COLUMN delivery_fee_type VARCHAR DEFAULT "Fixo";')
-    except Exception: pass
-    try:
-        c.execute('ALTER TABLE company_settings ADD COLUMN delivery_fee_value FLOAT DEFAULT 0;')
-    except Exception: pass
-    try:
-        c.execute('ALTER TABLE company_settings ADD COLUMN delivery_radius_km FLOAT DEFAULT 0;')
-    except Exception: pass
-    try:
-        c.execute('ALTER TABLE company_settings ADD COLUMN delivery_max_coverage_km FLOAT DEFAULT 20.0;')
-    except Exception: pass
-    try:
-        c.execute('ALTER TABLE company_settings ADD COLUMN minimum_order_value FLOAT DEFAULT 0;')
-    except Exception: pass
-    try:
-        c.execute('ALTER TABLE company_settings ADD COLUMN preparation_time_minutes INTEGER DEFAULT 0;')
-    except Exception: pass
-        
-    # 2. Add promotions field
-    try:
-        c.execute('ALTER TABLE company_settings ADD COLUMN promotions JSON DEFAULT "[]";')
-    except Exception: pass
-
-    # 3. Add product_media table
-    try:
-        c.execute('''
-        CREATE TABLE IF NOT EXISTS product_media (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tenant_id VARCHAR NOT NULL DEFAULT 'default',
-            product_id VARCHAR NOT NULL,
-            media_type VARCHAR NOT NULL,
-            media_url VARCHAR NOT NULL,
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
-        c.execute('CREATE INDEX IF NOT EXISTS ix_product_media_tenant_id ON product_media(tenant_id);')
-        c.execute('CREATE INDEX IF NOT EXISTS ix_product_media_product_id ON product_media(product_id);')
-    except Exception: pass
-
-    conn.commit()
     db.close()
 except Exception as e:
     print(f"Auto-migration failed: {e}")
