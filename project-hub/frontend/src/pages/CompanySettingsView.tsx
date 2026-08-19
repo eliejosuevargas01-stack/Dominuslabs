@@ -65,7 +65,7 @@ export default function CompanySettingsView() {
     delivery_fee_type: 'Fixo',
     delivery_fee_value: 0,
     delivery_radius_km: 0,
-    delivery_max_coverage_km: 20.0,
+    delivery_tiers: [],
     minimum_order_value: 0,
     preparation_time_minutes: 0,
     promotions: []
@@ -581,20 +581,55 @@ export default function CompanySettingsView() {
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-                  Raio Coberto / Distância Máx. p/ Cálculo (KM)
+                  Taxas por Raio de Distância
                 </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">Km</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={settings.delivery_max_coverage_km ?? 20}
-                    onChange={(e) => setSettings({ ...settings, delivery_max_coverage_km: parseFloat(e.target.value) || 0 })}
-                    placeholder="Ex: 20"
-                    className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
-                  />
-                </div>
+                {settings.delivery_fee_type === 'Por Raio' ? (
+                  <div className="space-y-3">
+                    {(settings.delivery_tiers || []).map((tier, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="text-sm text-slate-600">Até</span>
+                        <input
+                          type="number" min="0" step="0.1"
+                          value={tier.up_to_km}
+                          onChange={(e) => {
+                            const newTiers = [...(settings.delivery_tiers || [])];
+                            newTiers[idx].up_to_km = parseFloat(e.target.value) || 0;
+                            setSettings({...settings, delivery_tiers: newTiers});
+                          }}
+                          className="w-20 px-2 py-1.5 rounded-lg border border-slate-200 outline-none text-sm"
+                        />
+                        <span className="text-sm text-slate-600">km: R$</span>
+                        <input
+                          type="number" min="0" step="0.01"
+                          value={tier.price}
+                          onChange={(e) => {
+                            const newTiers = [...(settings.delivery_tiers || [])];
+                            newTiers[idx].price = parseFloat(e.target.value) || 0;
+                            setSettings({...settings, delivery_tiers: newTiers});
+                          }}
+                          className="w-24 px-2 py-1.5 rounded-lg border border-slate-200 outline-none text-sm"
+                        />
+                        <button type="button" onClick={() => {
+                          const newTiers = [...(settings.delivery_tiers || [])];
+                          newTiers.splice(idx, 1);
+                          setSettings({...settings, delivery_tiers: newTiers});
+                        }} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg">
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => {
+                       const newTiers = [...(settings.delivery_tiers || []), { up_to_km: 0, price: 0 }];
+                       setSettings({...settings, delivery_tiers: newTiers});
+                    }} className="text-sm text-purple-600 font-medium flex items-center gap-1 hover:text-purple-700">
+                      + Adicionar Faixa de Distância
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-sm text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    Selecione "Por Raio" no modelo acima para configurar.
+                  </div>
+                )}
               </div>
 
               <div>

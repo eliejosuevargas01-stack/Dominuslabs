@@ -38,6 +38,7 @@ class CompanySettingBase(BaseModel):
     delivery_fee_value: Optional[float] = None
     delivery_radius_km: Optional[float] = None
     delivery_max_coverage_km: Optional[float] = 20.0
+    delivery_tiers: Optional[List[Dict[str, Any]]] = []
     minimum_order_value: Optional[float] = None
     preparation_time_minutes: Optional[int] = None
     
