@@ -29,9 +29,9 @@ export default function CrmView() {
       if (!leadsRes.ok) throw new Error('Falha ao buscar contatos');
       const leadsData = await leadsRes.json();
       
-      // Auto-advance leads with chat history from Prospectado → Abordagem Enviada
+      // Auto-advance leads with chat history from Em Atendimento → Aguardando Cliente
       const leadsToAdvance = leadsData.filter(
-        (l: any) => l.mensagem_enviada === true && l.status === 'Prospectado'
+        (l: any) => l.mensagem_enviada === true && l.status === 'Em Atendimento'
       );
 
       if (leadsToAdvance.length > 0) {
@@ -39,14 +39,14 @@ export default function CrmView() {
           leadsToAdvance.map((l: any) =>
             fetchWithAuth(`${API_BASE}/crm/leads/${l.id}`, {
               method: 'PUT',
-              body: JSON.stringify({ ...l, status: 'Abordagem Enviada' })
+              body: JSON.stringify({ ...l, status: 'Aguardando Cliente' })
             })
           )
         );
 
         leadsData.forEach((l: any) => {
-          if (l.mensagem_enviada === true && l.status === 'Prospectado') {
-            l.status = 'Abordagem Enviada';
+          if (l.mensagem_enviada === true && l.status === 'Em Atendimento') {
+            l.status = 'Aguardando Cliente';
           }
         });
       }
@@ -94,11 +94,11 @@ export default function CrmView() {
       // Card-specific KPI filters
       let matchesKpi = true;
       if (kpiFilter === 'conversas') {
-        matchesKpi = lead.mensagem_enviada === true || lead.status === 'Abordagem Enviada';
+        matchesKpi = lead.mensagem_enviada === true || lead.status === 'Aguardando Cliente';
       } else if (kpiFilter === 'negociacoes') {
-        matchesKpi = lead.status === 'Negociando/Objeção';
+        matchesKpi = lead.status === 'Em Preparo / Entrega';
       } else if (kpiFilter === 'fechados') {
-        matchesKpi = lead.status === 'Fechado (Win)';
+        matchesKpi = lead.status === 'Finalizado';
       } else if (kpiFilter === 'pendentes') {
         matchesKpi = lead.status === 'RESPONDED' || (lead.has_messages === true && lead.mensagem_enviada === false);
       }
@@ -130,13 +130,13 @@ export default function CrmView() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Prospectado': return 'bg-slate-100 text-slate-700 border-slate-200';
-      case 'Abordagem Enviada': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'Em Qualificação': return 'bg-amber-100 text-amber-800 border-amber-200';
-      case 'Diagnóstico/Proposta': return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'Negociando/Objeção': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
-      case 'Fechado (Win)': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-      case 'Perdido (Loss)': return 'bg-rose-100 text-rose-800 border-rose-200';
+      case 'Em Atendimento': return 'bg-slate-100 text-slate-700 border-slate-200';
+      case 'Aguardando Cliente': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'Montando Pedido': return 'bg-amber-100 text-amber-800 border-amber-200';
+      case 'Aguardando Pagamento': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'Em Preparo / Entrega': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+      case 'Finalizado': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      case 'Cancelado': return 'bg-rose-100 text-rose-800 border-rose-200';
       default: return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
@@ -158,10 +158,10 @@ export default function CrmView() {
         <div>
           <h1 className="text-3xl font-display font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
             <Sparkles className="w-6 h-6 text-violet-600 animate-pulse" />
-            Gerenciamento de Contatos
+            Gestão de Clientes e Pedidos
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Centralize e acompanhe todos os seus contatos e históricos de conversas.
+            Centralize seus clientes, acompanhe o status de pedidos e histórico de atendimento via WhatsApp.
           </p>
         </div>
       </div>
@@ -194,7 +194,7 @@ export default function CrmView() {
                 <Users className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Contatos</p>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Clientes</p>
                 <p className="text-2xl font-display font-extrabold text-slate-800">{metrics.total_leads}</p>
               </div>
             </div>
@@ -209,7 +209,7 @@ export default function CrmView() {
                 <MessageCircle className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Conversas Iniciadas</p>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Em Atendimento</p>
                 <p className="text-2xl font-display font-extrabold text-slate-800">{metrics.conversas_iniciadas}</p>
               </div>
             </div>
@@ -224,7 +224,7 @@ export default function CrmView() {
                 <UserCheck className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Negociações</p>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Pedidos em Aberto</p>
                 <p className="text-2xl font-display font-extrabold text-slate-800">{metrics.negociacoes}</p>
               </div>
             </div>
@@ -239,7 +239,7 @@ export default function CrmView() {
                 <Check className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Clientes Fechados</p>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Pedidos Finalizados</p>
                 <p className="text-2xl font-display font-extrabold text-slate-800">{metrics.clientes_fechados}</p>
               </div>
             </div>
@@ -273,7 +273,7 @@ export default function CrmView() {
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Buscar por nome ou telefone..."
+                placeholder="Buscar cliente, telefone ou pedido..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9 pr-4 py-2 w-64 md:w-80 rounded-xl border border-violet-100 bg-white/50 text-xs outline-none focus:border-purple-400 transition-all font-semibold"
