@@ -37,7 +37,8 @@ const PAYMENT_METHODS = [
   'Cartão de Débito',
   'Transferência Bancária (TED/DOC)',
   'Boleto Bancário Registrado',
-  'Faturamento Faturado / Link de Pagamento'
+  'Faturamento Faturado / Link de Pagamento',
+  'Dinheiro (Pagamento na Entrega)'
 ];
 
 export default function CompanySettingsView() {
