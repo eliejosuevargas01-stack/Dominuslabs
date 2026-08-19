@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Float
 from datetime import datetime
 from app.core.database import Base
 
@@ -36,6 +36,13 @@ class CompanySetting(Base):
     # Missão, Visão, Valores e Notas
     values_mission = Column(Text, nullable=True)
     additional_notes = Column(Text, nullable=True)
+
+    # Configurações Específicas de Delivery
+    delivery_fee_type = Column(String, nullable=True)  # ex: "Fixo", "Por KM", "Por Raio"
+    delivery_fee_value = Column(Float, nullable=True)
+    delivery_radius_km = Column(Float, nullable=True)
+    minimum_order_value = Column(Float, nullable=True)
+    preparation_time_minutes = Column(Integer, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

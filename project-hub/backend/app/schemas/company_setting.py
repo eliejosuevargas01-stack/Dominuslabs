@@ -33,6 +33,12 @@ class CompanySettingBase(BaseModel):
     values_mission: Optional[str] = None
     additional_notes: Optional[str] = None
 
+    delivery_fee_type: Optional[str] = None
+    delivery_fee_value: Optional[float] = None
+    delivery_radius_km: Optional[float] = None
+    minimum_order_value: Optional[float] = None
+    preparation_time_minutes: Optional[int] = None
+
 class CompanySettingCreate(CompanySettingBase):
     tenant_id: Optional[str] = "default"
 

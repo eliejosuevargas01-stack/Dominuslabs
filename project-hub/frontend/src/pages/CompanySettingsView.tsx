@@ -40,7 +40,7 @@ const PAYMENT_METHODS = [
 ];
 
 export default function CompanySettingsView() {
-  const [activeTab, setActiveTab] = useState<'general' | 'tone' | 'policies' | 'menu' | 'payments'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'tone' | 'policies' | 'menu' | 'payments' | 'delivery'>('general');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -60,7 +60,12 @@ export default function CompanySettingsView() {
     accepted_payment_types: ['Pix Instantâneo (Bacen)', 'Cartão de Crédito Corporate'],
     payment_notes: '',
     values_mission: '',
-    additional_notes: ''
+    additional_notes: '',
+    delivery_fee_type: 'Fixo',
+    delivery_fee_value: 0,
+    delivery_radius_km: 0,
+    minimum_order_value: 0,
+    preparation_time_minutes: 0
   });
 
   // Modal State for Adding/Editing Menu/Catalog Item
@@ -188,6 +193,7 @@ export default function CompanySettingsView() {
           { id: 'general', label: 'Dados Institucionais & Cultura', icon: Building2 },
           { id: 'tone', label: 'Persona, Tom de Voz & IA', icon: Bot },
           { id: 'policies', label: 'Políticas, SLAs & Compliance', icon: ShieldAlert },
+          { id: 'delivery', label: 'Logística & Operações', icon: MapPin },
           { id: 'menu', label: 'Portfólio & Catálogo', icon: UtensilsCrossed },
           { id: 'payments', label: 'Diretrizes Financeiras & Pagamento', icon: CreditCard },
         ].map((tab) => {
@@ -420,7 +426,111 @@ export default function CompanySettingsView() {
           </div>
         )}
 
-        {/* Tab 4: Cardápio / Catálogo */}
+        {/* Tab Delivery */}
+        {activeTab === 'delivery' && (
+          <div className="space-y-6">
+            <div className="border-b border-slate-100 pb-3">
+              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-purple-600" />
+                Regras de Logística e Delivery
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Configure os parâmetros de entrega, área de atuação e valores mínimos. Especialmente importante para restaurantes, lanchonetes e e-commerces locais.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  Modelo de Cobrança de Entrega
+                </label>
+                <select
+                  value={settings.delivery_fee_type || 'Fixo'}
+                  onChange={(e) => setSettings({ ...settings, delivery_fee_type: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm bg-white"
+                >
+                  <option value="Fixo">Valor Fixo</option>
+                  <option value="Por KM">Por KM (Distância)</option>
+                  <option value="Por Raio">Por Raio</option>
+                  <option value="Grátis">Entrega Grátis</option>
+                  <option value="Não se aplica">Não se aplica (Retirada/Serviço)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  Valor Base / Taxa (R$)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">R$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={settings.delivery_fee_value || 0}
+                    onChange={(e) => setSettings({ ...settings, delivery_fee_value: parseFloat(e.target.value) || 0 })}
+                    placeholder="0.00"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  Raio Máximo de Entrega (KM)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">Km</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={settings.delivery_radius_km || 0}
+                    onChange={(e) => setSettings({ ...settings, delivery_radius_km: parseFloat(e.target.value) || 0 })}
+                    placeholder="Ex: 5"
+                    className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  Valor Mínimo do Pedido (R$)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">R$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={settings.minimum_order_value || 0}
+                    onChange={(e) => setSettings({ ...settings, minimum_order_value: parseFloat(e.target.value) || 0 })}
+                    placeholder="Ex: 30.00"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  Tempo Médio de Preparo / Envio (Minutos)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold"><Clock className="w-4 h-4"/></span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={settings.preparation_time_minutes || 0}
+                    onChange={(e) => setSettings({ ...settings, preparation_time_minutes: parseInt(e.target.value) || 0 })}
+                    placeholder="Ex: 45"
+                    className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {activeTab === 'menu' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
