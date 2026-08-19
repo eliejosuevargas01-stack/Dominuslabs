@@ -64,6 +64,7 @@ export default function CompanySettingsView() {
     delivery_fee_type: 'Fixo',
     delivery_fee_value: 0,
     delivery_radius_km: 0,
+    delivery_max_coverage_km: 20.0,
     minimum_order_value: 0,
     preparation_time_minutes: 0,
     promotions: []
@@ -559,6 +560,24 @@ export default function CompanySettingsView() {
                     value={settings.delivery_radius_km || 0}
                     onChange={(e) => setSettings({ ...settings, delivery_radius_km: parseFloat(e.target.value) || 0 })}
                     placeholder="Ex: 5"
+                    className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  Raio Coberto / Distância Máx. p/ Cálculo (KM)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">Km</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={settings.delivery_max_coverage_km ?? 20}
+                    onChange={(e) => setSettings({ ...settings, delivery_max_coverage_km: parseFloat(e.target.value) || 0 })}
+                    placeholder="Ex: 20"
                     className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none text-sm transition-all"
                   />
                 </div>

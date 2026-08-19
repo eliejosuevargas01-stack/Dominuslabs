@@ -41,6 +41,7 @@ class CompanySetting(Base):
     delivery_fee_type = Column(String, nullable=True)  # ex: "Fixo", "Por KM", "Por Raio"
     delivery_fee_value = Column(Float, nullable=True)
     delivery_radius_km = Column(Float, nullable=True)
+    delivery_max_coverage_km = Column(Float, default=20.0, nullable=True)
     minimum_order_value = Column(Float, nullable=True)
     preparation_time_minutes = Column(Integer, nullable=True)
 

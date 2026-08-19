@@ -326,6 +326,7 @@ export interface CompanySettings {
   delivery_fee_type?: string;
   delivery_fee_value?: number;
   delivery_radius_km?: number;
+  delivery_max_coverage_km?: number;
   minimum_order_value?: number;
   preparation_time_minutes?: number;
 }
