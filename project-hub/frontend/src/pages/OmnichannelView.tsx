@@ -582,7 +582,15 @@ export default function OmnichannelView() {
   const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
   const [micVolumeBars, setMicVolumeBars] = useState<number[]>([20, 35, 50, 30, 65, 45, 80, 55, 35, 60, 40, 25]);
   
+  const [activeSendSession, setActiveSendSession] = useState<string>('');
   const [disconnectedSessionInfo, setDisconnectedSessionInfo] = useState<{session_id: string, message: string} | null>(null);
+
+  useEffect(() => {
+    if (selectedChat) {
+      setActiveSendSession(selectedChat.session_id || 'default');
+    }
+  }, [selectedChat]);
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
@@ -752,9 +760,10 @@ export default function OmnichannelView() {
       try {
         const base64Data = await blobToBase64(audioBlob);
 
+        const targetSession = activeSendSession || selectedChat.session_id || 'default';
         await sendOmnichannelMedia({
           contact_jid: selectedChat.contact_jid,
-          session_id: selectedChat.session_id,
+          session_id: targetSession,
           media: {
             kind: 'audio',
             mimeType: 'audio/ogg; codecs=opus',
@@ -838,9 +847,10 @@ export default function OmnichannelView() {
     try {
       const base64Data = await blobToBase64(file);
 
+      const targetSession = activeSendSession || selectedChat.session_id || 'default';
       await sendOmnichannelMedia({
         contact_jid: selectedChat.contact_jid,
-        session_id: selectedChat.session_id,
+        session_id: targetSession,
         text: messageInput.trim() || undefined,
         media: {
           kind: selectedMediaType,
@@ -1243,10 +1253,12 @@ function playIncomingSound() {
     setMessageInput('');
     setSending(true);
 
+    const targetSession = activeSendSession || selectedChat.session_id || 'default';
+
     const tempMessage = {
       message_id: `temp_${Date.now()}`,
       contact_jid: selectedChat.contact_jid,
-      session_id: selectedChat.session_id,
+      session_id: targetSession,
       is_from_me: true,
       content: textToSend,
       status: 'sending',
@@ -1270,7 +1282,7 @@ function playIncomingSound() {
     try {
       await sendOmnichannelMessage({
         contact_jid: selectedChat.contact_jid,
-        session_id: selectedChat.session_id,
+        session_id: targetSession,
         message: textToSend,
         phone: selectedChat.display_phone
       });
@@ -1703,11 +1715,25 @@ function playIncomingSound() {
                 </div>
 
                 {/* Session tag */}
+                {/* Session tag dropdown */}
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-extrabold px-3 py-1 rounded-full bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    Sessão: {selectedChat.session_id || 'default'}
-                  </span>
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                    <span className="text-[11px] font-extrabold whitespace-nowrap">Sessão:</span>
+                    <select
+                      value={activeSendSession}
+                      onChange={(e) => setActiveSendSession(e.target.value)}
+                      className="bg-transparent text-[11px] font-extrabold text-purple-800 outline-none cursor-pointer pr-1 w-full max-w-[120px] truncate"
+                      title="Escolha a sessão pela qual a mensagem será enviada"
+                    >
+                      {!sessionsList.includes(activeSendSession) && (
+                        <option value={activeSendSession}>{activeSendSession}</option>
+                      )}
+                      {sessionsList.map(session => (
+                        <option key={session} value={session}>{session}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
