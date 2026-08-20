@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
+import re
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, check_crm_permission
@@ -12,6 +13,9 @@ from app.services.whatsapp_service import get_tenant_id_for_user
 
 router = APIRouter()
 
+def generate_slug(name: str) -> str:
+    return re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+
 @router.get("", response_model=List[ProductResponse])
 async def get_products(
     db: Session = Depends(get_db),
@@ -21,7 +25,6 @@ async def get_products(
     tenant_id = await get_tenant_id_for_user(user, db)
     db_products = db.query(Product).filter(Product.tenant_id == tenant_id).all()
     
-    # Map from db model to frontend response
     results = []
     for p in db_products:
         results.append({
@@ -33,6 +36,7 @@ async def get_products(
             "description": p.descricao,
             "available": p.disponivel,
             "image_url": p.imagem_url,
+            "stock": getattr(p, 'estoque', 0),
             "created_at": p.created_at
         })
     return results
@@ -50,6 +54,7 @@ async def create_product(
         id=str(uuid.uuid4()),
         tenant_id=tenant_id,
         nome=product_in.name,
+        codigo_slug=generate_slug(product_in.name),
         categoria=product_in.category,
         preco=product_in.price,
         descricao=product_in.description,
@@ -69,6 +74,7 @@ async def create_product(
         "description": new_product.descricao,
         "available": new_product.disponivel,
         "image_url": new_product.imagem_url,
+        "stock": getattr(new_product, 'estoque', 0),
         "created_at": new_product.created_at
     }
 
@@ -86,7 +92,9 @@ async def update_product(
     if not product:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
         
-    if product_in.name is not None: product.nome = product_in.name
+    if product_in.name is not None: 
+        product.nome = product_in.name
+        product.codigo_slug = generate_slug(product_in.name)
     if product_in.category is not None: product.categoria = product_in.category
     if product_in.price is not None: product.preco = product_in.price
     if product_in.description is not None: product.descricao = product_in.description
@@ -105,6 +113,7 @@ async def update_product(
         "description": product.descricao,
         "available": product.disponivel,
         "image_url": product.imagem_url,
+        "stock": getattr(product, 'estoque', 0),
         "created_at": product.created_at
     }
 

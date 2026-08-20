@@ -10,7 +10,7 @@ class Product(Base):
     # Use UUID for postgres compatibility
     id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
     tenant_id = Column(String, index=True, default="default", nullable=False)
-    codigo_slug = Column(String, nullable=True)
+    codigo_slug = Column(String, nullable=False)
     nome = Column(String, nullable=False)
     descricao = Column(String, nullable=True)
     categoria = Column(String, nullable=True)
