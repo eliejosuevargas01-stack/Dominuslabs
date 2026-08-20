@@ -9,6 +9,7 @@ class ProductBase(BaseModel):
     description: Optional[str] = None
     available: Optional[bool] = True
     image_url: Optional[str] = None
+    stock: Optional[int] = 0
 
 class ProductCreate(ProductBase):
     pass
@@ -20,6 +21,7 @@ class ProductUpdate(BaseModel):
     description: Optional[str] = None
     available: Optional[bool] = None
     image_url: Optional[str] = None
+    stock: Optional[int] = None
 
 class ProductResponse(ProductBase):
     id: str

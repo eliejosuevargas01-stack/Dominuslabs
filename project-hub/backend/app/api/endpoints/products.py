@@ -25,7 +25,7 @@ async def get_products(
     results = []
     for p in db_products:
         results.append({
-            "id": p.id,
+            "id": str(p.id),
             "tenant_id": p.tenant_id,
             "name": p.nome,
             "category": p.categoria,
@@ -47,20 +47,21 @@ async def create_product(
     tenant_id = await get_tenant_id_for_user(user, db)
     
     new_product = Product(
-        id=f"item-{uuid.uuid4().hex[:8]}",
+        id=str(uuid.uuid4()),
         tenant_id=tenant_id,
         nome=product_in.name,
         categoria=product_in.category,
         preco=product_in.price,
         descricao=product_in.description,
         disponivel=product_in.available,
-        imagem_url=product_in.image_url
+        imagem_url=product_in.image_url,
+        estoque=getattr(product_in, 'stock', 0)
     )
     db.add(new_product)
     db.commit()
     db.refresh(new_product)
     return {
-        "id": new_product.id,
+        "id": str(new_product.id),
         "tenant_id": new_product.tenant_id,
         "name": new_product.nome,
         "category": new_product.categoria,
@@ -91,11 +92,12 @@ async def update_product(
     if product_in.description is not None: product.descricao = product_in.description
     if product_in.available is not None: product.disponivel = product_in.available
     if product_in.image_url is not None: product.imagem_url = product_in.image_url
+    if hasattr(product_in, 'stock') and product_in.stock is not None: product.estoque = product_in.stock
         
     db.commit()
     db.refresh(product)
     return {
-        "id": product.id,
+        "id": str(product.id),
         "tenant_id": product.tenant_id,
         "name": product.nome,
         "category": product.categoria,

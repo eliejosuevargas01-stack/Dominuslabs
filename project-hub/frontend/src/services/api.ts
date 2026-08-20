@@ -288,6 +288,7 @@ export interface MenuItem {
   price?: number;
   description?: string;
   available?: boolean;
+  stock?: number;
   image_url?: string;
 }
 
