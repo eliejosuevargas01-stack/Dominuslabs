@@ -1,46 +1,54 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.database import get_db
-from app.core.config import settings
-import os
 
 router = APIRouter()
 
-@router.get("/health", status_code=status.HTTP_200_OK)
-async def health_check(db: Session = Depends(get_db)):
-    """
-    Advanced Enterprise Healthcheck (Liveness / Readiness Probe)
-    Checks Database connection and File System write access.
-    """
-    health_status = {
-        "status": "ok",
-        "database": "unknown",
-        "filesystem": "unknown",
-        "version": "1.0.0" # Assuming a static version for now
-    }
+@router.get("/")
+def health_check():
+    return {"status": "ok"}
 
-    # 1. Check Database connection
+@router.get("/migrate-products")
+def migrate_products(db: Session = Depends(get_db)):
+    from app.models.product import Product
+    import uuid
+    import json
+    
+    count = 0
     try:
-        db.execute(text("SELECT 1"))
-        health_status["database"] = "healthy"
+        result = db.execute(text("SELECT tenant_id, menu_catalog FROM company_settings WHERE menu_catalog IS NOT NULL"))
+        for row in result:
+            tenant_id = row[0]
+            menu_catalog = row[1]
+            if isinstance(menu_catalog, str):
+                menu_catalog = json.loads(menu_catalog)
+                
+            if isinstance(menu_catalog, list):
+                for item in menu_catalog:
+                    p = Product(
+                        id=item.get("id", f"item-{uuid.uuid4().hex[:8]}"),
+                        tenant_id=tenant_id,
+                        name=item.get("name", "Sem Nome"),
+                        category=item.get("category"),
+                        price=item.get("price", 0.0),
+                        description=item.get("description"),
+                        available=item.get("available", True),
+                        image_url=item.get("image_url")
+                    )
+                    db.merge(p)  # merge in case ID already exists
+                    count += 1
+        db.commit()
     except Exception as e:
-        health_status["status"] = "degraded"
-        health_status["database"] = f"unhealthy: {str(e)}"
-
-    # 2. Check File System Write Access
+        db.rollback()
+        print("Migration error:", e)
+        return {"error": str(e)}
+        
     try:
-        test_file_path = os.path.join(settings.UPLOAD_DIR, ".healthcheck")
-        with open(test_file_path, "w") as f:
-            f.write("ok")
-        os.remove(test_file_path)
-        health_status["filesystem"] = "healthy"
+        db.execute(text("ALTER TABLE company_settings DROP COLUMN menu_catalog"))
+        db.commit()
     except Exception as e:
-        health_status["status"] = "degraded"
-        health_status["filesystem"] = f"unhealthy: {str(e)}"
-
-    if health_status["status"] != "ok":
-        # Raise 503 so that Load Balancers (ELB) or Kubernetes can take action (Self-Healing)
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=health_status)
-
-    return health_status
+        db.rollback()
+        print("Could not drop column:", e)
+        
+    return {"migrated": count, "message": "Migration completed"}

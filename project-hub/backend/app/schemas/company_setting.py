@@ -32,7 +32,6 @@ class CompanySettingBase(BaseModel):
     delivery_policy: Optional[str] = None
     terms_of_service: Optional[str] = None
 
-    menu_catalog: Optional[List[Dict[str, Any]]] = []
     accepted_payment_types: Optional[List[str]] = []
     payment_notes: Optional[str] = None
 

@@ -21,7 +21,7 @@ import {
   UploadCloud
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchCompanySettings, updateCompanySettings, uploadProductMedia, getUserTenant, type CompanySettings, type MenuItem } from '../services/api';
+import { fetchCompanySettings, updateCompanySettings, fetchProducts, createProduct, updateProduct, deleteProduct, uploadProductMedia, getUserTenant, type CompanySettings, type MenuItem } from '../services/api';
 
 const TONE_OPTIONS = [
   { id: 'Formal', label: 'Corporativo & Institucional', desc: 'Comunicação executiva, altamente formal, fundamentada em diretrizes corporativas e conformidade.' },
@@ -46,6 +46,7 @@ export default function CompanySettingsView() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [products, setProducts] = useState<MenuItem[]>([]);
   const [settings, setSettings] = useState<CompanySettings>({
     company_name: '',
     niche: '',
@@ -64,7 +65,7 @@ export default function CompanySettingsView() {
     exchange_policy: '',
     delivery_policy: '',
     terms_of_service: '',
-    menu_catalog: [],
+    
     accepted_payment_types: ['Pix Instantâneo (Bacen)', 'Cartão de Crédito Corporate'],
     payment_notes: '',
     values_mission: '',
@@ -96,12 +97,15 @@ export default function CompanySettingsView() {
   const loadSettings = async () => {
     setLoading(true);
     try {
-      const data = await fetchCompanySettings(getUserTenant());
+      const [data, prods] = await Promise.all([
+        fetchCompanySettings(getUserTenant()),
+        fetchProducts(getUserTenant())
+      ]);
       setSettings({
         ...data,
-        menu_catalog: data.menu_catalog || [],
         accepted_payment_types: data.accepted_payment_types || ['Pix Instantâneo (Bacen)', 'Cartão de Crédito Corporate']
       });
+      setProducts(prods);
     } catch (err: any) {
       toast.error(err.message || 'Erro ao sincronizar diretrizes corporativas.');
     } finally {
@@ -130,35 +134,49 @@ export default function CompanySettingsView() {
     setSettings({ ...settings, accepted_payment_types: updated });
   };
 
-  const handleSaveMenuItem = () => {
+  const handleSaveMenuItem = async () => {
     if (!newItem.name.trim()) {
       toast.error('Informe a denominação oficial do item/solução.');
       return;
     }
 
-    const currentCatalog = [...(settings.menu_catalog || [])];
-    if (editingIndex !== null) {
-      currentCatalog[editingIndex] = newItem;
-    } else {
-      currentCatalog.push({ ...newItem, id: `item-${Date.now()}` });
+    try {
+      if (editingIndex !== null) {
+        const prodId = products[editingIndex].id!;
+        const updated = await updateProduct(prodId, newItem, getUserTenant());
+        const newProds = [...products];
+        newProds[editingIndex] = updated;
+        setProducts(newProds);
+      } else {
+        const created = await createProduct(newItem, getUserTenant());
+        setProducts([...products, created]);
+      }
+      setIsMenuModalOpen(false);
+      setNewItem({ name: '', category: '', price: 0, description: '', available: true });
+      setEditingIndex(null);
+      toast.success('Item salvo no banco de produtos!');
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao salvar produto');
     }
-
-    setSettings({ ...settings, menu_catalog: currentCatalog });
-    setIsMenuModalOpen(false);
-    setNewItem({ name: '', category: '', price: 0, description: '', available: true });
-    setEditingIndex(null);
-    toast.success('Item homologado e incluído no catálogo corporativo!');
   };
 
-  const handleDeleteMenuItem = (index: number) => {
-    const currentCatalog = [...(settings.menu_catalog || [])];
-    currentCatalog.splice(index, 1);
-    setSettings({ ...settings, menu_catalog: currentCatalog });
-    toast.info('Item descontinuado do catálogo.');
+  const handleDeleteMenuItem = async (index: number) => {
+    try {
+      const prodId = products[index].id;
+      if (prodId) {
+        await deleteProduct(prodId, getUserTenant());
+      }
+      const newProds = [...products];
+      newProds.splice(index, 1);
+      setProducts(newProds);
+      toast.info('Item descontinuado do catálogo.');
+    } catch(e: any) {
+      toast.error('Erro ao deletar produto');
+    }
   };
 
   const openEditMenuItem = (index: number) => {
-    const item = settings.menu_catalog![index];
+    const item = products[index];
     setNewItem(item);
     setEditingIndex(index);
     setIsMenuModalOpen(true);
@@ -173,7 +191,7 @@ export default function CompanySettingsView() {
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
     
-    const productId = editingIndex !== null ? settings.menu_catalog![editingIndex].id || `item-${Date.now()}` : `item-${Date.now()}`;
+    const productId = editingIndex !== null ? products[editingIndex].id || `item-${Date.now()}` : `item-${Date.now()}`;
     if (editingIndex === null && !newItem.id) setNewItem(prev => ({ ...prev, id: productId }));
 
     setUploadingMedia(true);
@@ -193,7 +211,7 @@ export default function CompanySettingsView() {
     if (!file) return;
     
     // Use an existing item ID or create a temp one for uploading
-    const productId = editingIndex !== null ? settings.menu_catalog![editingIndex].id || `item-${Date.now()}` : `item-${Date.now()}`;
+    const productId = editingIndex !== null ? products[editingIndex].id || `item-${Date.now()}` : `item-${Date.now()}`;
     
     // Ensure the newItem has the ID so it matches the upload
     if (editingIndex === null && !newItem.id) {
@@ -791,9 +809,9 @@ export default function CompanySettingsView() {
               </button>
             </div>
 
-            {settings.menu_catalog && settings.menu_catalog.length > 0 ? (
+            {products && products.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {settings.menu_catalog.map((item, index) => (
+                {products.map((item, index) => (
                   <div
                     key={index}
                     className="p-4 rounded-xl border border-slate-200 hover:border-purple-200 bg-slate-50/50 flex flex-col justify-between gap-3 transition-all"

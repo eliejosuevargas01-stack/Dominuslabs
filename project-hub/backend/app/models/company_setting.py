@@ -33,7 +33,6 @@ class CompanySetting(Base):
 
     # Cardápio / Catálogo (Armazenado como lista JSON de produtos/itens)
     # Formato: [{"id": "...", "name": "...", "category": "...", "price": 0.0, "description": "...", "available": True, "image_url": "..."}]
-    menu_catalog = Column(JSON, default=list, nullable=True)
 
     # Pagamentos Aceitos
     accepted_payment_types = Column(JSON, default=list, nullable=True)  # ex: ["Pix", "Cartão de Crédito", "Dinheiro"]

@@ -321,7 +321,7 @@ export interface CompanySettings {
   exchange_policy?: string;
   delivery_policy?: string;
   terms_of_service?: string;
-  menu_catalog?: MenuItem[];
+  
   promotions?: Promotion[];
   accepted_payment_types?: string[];
   payment_notes?: string;
@@ -764,4 +764,53 @@ export async function sendOmnichannelMedia(payload: {
   return res.json();
 }
 
+
+
+// ---------------------------------------------------------------------------
+// Produtos / Cardápio
+// ---------------------------------------------------------------------------
+
+export const fetchProducts = async (tenantId: string = 'default'): Promise<MenuItem[]> => {
+  const headers = getHeaders();
+  headers['x-tenant-id'] = tenantId;
+  const response = await fetch(`${API_BASE}/products`, {
+    headers,
+  });
+  if (!response.ok) throw new Error('Erro ao buscar produtos');
+  return response.json();
+};
+
+export const createProduct = async (product: MenuItem, tenantId: string = 'default'): Promise<MenuItem> => {
+  const headers = getHeaders();
+  headers['x-tenant-id'] = tenantId;
+  const response = await fetch(`${API_BASE}/products`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(product),
+  });
+  if (!response.ok) throw new Error('Erro ao criar produto');
+  return response.json();
+};
+
+export const updateProduct = async (id: string, product: MenuItem, tenantId: string = 'default'): Promise<MenuItem> => {
+  const headers = getHeaders();
+  headers['x-tenant-id'] = tenantId;
+  const response = await fetch(`${API_BASE}/products/${id}`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(product),
+  });
+  if (!response.ok) throw new Error('Erro ao atualizar produto');
+  return response.json();
+};
+
+export const deleteProduct = async (id: string, tenantId: string = 'default'): Promise<void> => {
+  const headers = getHeaders();
+  headers['x-tenant-id'] = tenantId;
+  const response = await fetch(`${API_BASE}/products/${id}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!response.ok) throw new Error('Erro ao deletar produto');
+};
 
