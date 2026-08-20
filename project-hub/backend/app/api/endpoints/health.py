@@ -29,12 +29,12 @@ def migrate_products(db: Session = Depends(get_db)):
                     p = Product(
                         id=item.get("id", f"item-{uuid.uuid4().hex[:8]}"),
                         tenant_id=tenant_id,
-                        name=item.get("name", "Sem Nome"),
-                        category=item.get("category"),
-                        price=item.get("price", 0.0),
-                        description=item.get("description"),
-                        available=item.get("available", True),
-                        image_url=item.get("image_url")
+                        nome=item.get("name", "Sem Nome"),
+                        categoria=item.get("category"),
+                        preco=item.get("price", 0.0),
+                        descricao=item.get("description"),
+                        disponivel=item.get("available", True),
+                        imagem_url=item.get("image_url")
                     )
                     db.merge(p)  # merge in case ID already exists
                     count += 1
