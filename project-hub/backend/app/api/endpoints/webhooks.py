@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException, Header, Body
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -713,3 +713,53 @@ async def waha_session_status_webhook(request: Request):
             await queue.put(msg)
             
     return {"status": "success"}
+
+@router.post("/outbound/whatsapp/send")
+async def n8n_outbound_whatsapp_send(
+    payload: Dict[str, Any] = Body(...),
+    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint para envio de mensagens via N8N ou ferramentas externas.
+    Requer autenticação básica via header X-Master-API-Key.
+    """
+    if not x_master_api_key or x_master_api_key != settings.WHATSAPP_MASTER_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid Master API Key")
+
+    session_id = payload.get("session_id", "default")
+    phone = payload.get("phone") or payload.get("number")
+    message = payload.get("message") or payload.get("text")
+    
+    if not phone:
+        raise HTTPException(status_code=400, detail="Missing phone or number")
+
+    cleaned_phone = "".join(filter(str.isdigit, str(phone)))
+    
+    from app.api.endpoints.whatsapp import make_whatsapp_api_request
+    
+    headers = {
+        "X-Master-API-Key": settings.WHATSAPP_MASTER_SECRET,
+        "x-tenant-id": payload.get("tenant_id", "default")
+    }
+    
+    json_data = {
+        "phone": cleaned_phone,
+        "number": cleaned_phone,
+        "jid": f"{cleaned_phone}@s.whatsapp.net"
+    }
+    
+    if message:
+        json_data["message"] = message
+        json_data["text"] = message
+        
+    for k, v in payload.items():
+        if k not in ["phone", "number", "message", "text", "session_id", "tenant_id", "jid"]:
+            json_data[k] = v
+            
+    return await make_whatsapp_api_request(
+        "POST",
+        f"/api/sessions/{session_id}/messages/send",
+        headers=headers,
+        json_data=json_data
+    )
