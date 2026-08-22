@@ -1969,7 +1969,7 @@ function playOutgoingSound() {
                       }
                     }
 
-                    if (!rawContent && !msg.image_url && !msg.video_url && !msg.audio_url && !msg.document_url && !msg.system_message) {
+                    if (!rawContent && !msg.image_url && !msg.video_url && !msg.audio_url && !msg.document_url && !msg.system_message && !msg.media_url && !msg.url && !msg.file_url) {
                       return null;
                     }
                     return (
