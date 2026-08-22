@@ -983,8 +983,20 @@ function playOutgoingSound() {
             const parsed = JSON.parse(event.data);
             if (Array.isArray(parsed.messages) && parsed.messages.length > 0) {
               newMsgs = parsed.messages;
+            } else if (Array.isArray(parsed.data) && parsed.data.length > 0) {
+              // Map Evolution API messages.update to standard format
+              newMsgs = parsed.data.map((d: any) => {
+                if (d.update && d.key) {
+                   return { ...d, status: d.update.status || d.status, id: d.key.id, message_id: d.key.id, _is_evolution_ack: true };
+                }
+                return d;
+              });
             } else if (parsed.message && typeof parsed.message === 'object') {
               newMsgs = [parsed.message];
+            } else if (parsed.event === 'messages.update' || parsed.update) {
+              newMsgs = [parsed];
+            } else if (parsed.id || parsed.message_id || parsed.key) {
+              newMsgs = [parsed];
             }
 
             if (Array.isArray(parsed.all_jids)) {
@@ -1076,19 +1088,26 @@ function playOutgoingSound() {
               const existingIds = new Set(prevMsgs.map((m: any) => String(m.message_id || m.id || m.key?.id)));
               const msgsToAdd: any[] = [];
 
+              let updatedMsgs = [...prevMsgs];
               for (const m of newMsgs) {
                 if (!m) continue;
                 const id = String(m.message_id || m.id || m.key?.id || '');
-                if (id && !existingIds.has(id)) {
-                  existingIds.add(id);
-                  msgsToAdd.push(m);
-                } else if (!id) {
+                if (id && existingIds.has(id)) {
+                  updatedMsgs = updatedMsgs.map(oldM => {
+                     const oldId = String(oldM.message_id || oldM.id || oldM.key?.id || '');
+                     if (oldId === id) {
+                        return { ...oldM, ...m, status: m.status || oldM.status };
+                     }
+                     return oldM;
+                  });
+                } else {
+                  if (id) existingIds.add(id);
                   msgsToAdd.push(m);
                 }
               }
 
-              if (msgsToAdd.length === 0) return prevMsgs;
-              return [...prevMsgs, ...msgsToAdd];
+              if (msgsToAdd.length === 0) return updatedMsgs;
+              return [...updatedMsgs, ...msgsToAdd];
             });
 
             setTimeout(() => scrollToBottom(), 50);
@@ -1098,7 +1117,7 @@ function playOutgoingSound() {
           if (newMsgs.length > 0) {
             const extractContent = (m: any): string => {
               if (!m) return '';
-              if (m._encrypted === true) return '';
+              if (m._encrypted === true || m._is_evolution_ack) return '';
               if (typeof m.content === 'string' && m.content.trim()) return m.content.trim();
               if (typeof m.message === 'string' && m.message.trim()) return m.message.trim();
               if (typeof m.text === 'string' && m.text.trim()) return m.text.trim();
@@ -1138,7 +1157,9 @@ function playOutgoingSound() {
                     last_message_preview: rawPreview || conv.last_message_preview || 'Nova mensagem',
                     last_message_timestamp: msgTs,
                     unread_count: isCurrentlyOpenChat ? 0 : ((conv.unread_count || 0) + (rawPreview && !isFromMe ? 1 : 0)),
-                    participant_pushname: latestMsg.participant_pushname || conv.participant_pushname
+                    participant_pushname: latestMsg.participant_pushname || conv.participant_pushname,
+                    last_message_is_from_me: rawPreview ? isFromMe : conv.last_message_is_from_me,
+                    last_message_status: (latestMsg.status || (rawPreview ? 'sent' : conv.last_message_status))
                   };
                 }
                 return conv;
@@ -1212,11 +1233,15 @@ function playOutgoingSound() {
           const jid = item.contact_jid || item.jid || item.id || '';
           const resolvedName = resolveContactName(item) || 'Contato';
           let preview = item.last_message_preview || item.ultima_mensagem || item.content || item.message || '';
+          let is_from_me = item.last_message_is_from_me;
+          let status = item.last_message_status || item.status || 'sent';
           if (!preview) {
             const msgs = Array.isArray(item.messages) ? item.messages : (Array.isArray(item.mensagens) ? item.mensagens : []);
             if (msgs.length > 0) {
               const lastM = msgs[msgs.length - 1];
               preview = lastM.content || lastM.message || lastM.text || lastM.body || '';
+              if (is_from_me === undefined) is_from_me = lastM.isFromMe || lastM.is_from_me || lastM.fromMe;
+              if (lastM.status) status = lastM.status;
             }
           }
           return {
@@ -1226,6 +1251,8 @@ function playOutgoingSound() {
             display_phone: item.display_phone || null,
             profile_pic_url: item.profile_pic_url || '',
             last_message_preview: preview,
+            last_message_is_from_me: is_from_me,
+            last_message_status: status,
             last_message_timestamp: item.last_message_timestamp || new Date().toISOString()
           };
         });
@@ -1323,7 +1350,9 @@ function playOutgoingSound() {
         return {
           ...c,
           last_message_preview: textToSend,
-          last_message_timestamp: new Date().toISOString()
+          last_message_timestamp: new Date().toISOString(),
+          last_message_is_from_me: true,
+          last_message_status: 'sending'
         };
       }
       return c;
@@ -1656,6 +1685,22 @@ function playOutgoingSound() {
                                 {(item.participant_pushname || item.participant)}: {' '}
                               </span>
                             ) : null}
+                            {item.last_message_is_from_me && (() => {
+                              const st = (item.last_message_status || '').toString().toLowerCase().trim();
+                              return (
+                                <span className="inline-flex mr-1 align-middle">
+                                  {(st === 'read' || st === 'played') ? (
+                                    <CheckCheck className="w-3.5 h-3.5 text-sky-500" />
+                                  ) : (st === 'received' || st === 'delivered' || st === 'delivery_ack') ? (
+                                    <CheckCheck className="w-3.5 h-3.5 text-slate-400" />
+                                  ) : (st === 'sending') ? (
+                                    <Clock className="w-3 h-3 text-slate-400 animate-pulse" />
+                                  ) : (
+                                    <Check className="w-3.5 h-3.5 text-slate-400" />
+                                  )}
+                                </span>
+                              );
+                            })()}
                             {item.last_message_preview || 'Nova conversa'}
                           </span>
                           
@@ -1969,7 +2014,7 @@ function playOutgoingSound() {
                                   </span>
                                 );
                               }
-                              if (st === 'received' || st === 'delivered') {
+                              if (st === 'received' || st === 'delivered' || st === 'delivery_ack') {
                                 return (
                                   <span title="Entregue (received)">
                                     <CheckCheck className="w-3.5 h-3.5 text-slate-400 font-bold" />
