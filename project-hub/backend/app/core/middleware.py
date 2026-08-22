@@ -22,7 +22,14 @@ class DecryptionMiddleware(BaseHTTPMiddleware):
                     body = await request.body()
                     if body:
                         payload = json.loads(body.decode("utf-8"))
+                        is_encrypted = False
+                        
                         if isinstance(payload, dict) and payload.get("_encrypted") is True:
+                            is_encrypted = True
+                        elif isinstance(payload, list) and len(payload) > 0 and isinstance(payload[0], dict) and payload[0].get("_encrypted") is True:
+                            is_encrypted = True
+                            
+                        if is_encrypted:
                             decrypted_payload = decrypt_payload(payload)
                             
                             # Replace the request body with the decrypted one
@@ -33,7 +40,7 @@ class DecryptionMiddleware(BaseHTTPMiddleware):
                     logger.error(f"Failed to decrypt incoming request: {e}")
                     return JSONResponse(
                         status_code=400,
-                        content={"detail": "Failed to decrypt the payload. Invalid key, format or tampering detected."}
+                        content={"detail": f"Failed to decrypt the payload. {e}"}
                     )
         
         response = await call_next(request)
