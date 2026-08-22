@@ -1378,16 +1378,19 @@ function playOutgoingSound() {
     }));
 
     try {
-      await sendOmnichannelMessage({
+      const res = await sendOmnichannelMessage({
         contact_jid: selectedChat.contact_jid,
         session_id: targetSession,
         message: textToSend,
         phone: selectedChat.display_phone
       });
 
+      const realId = res.id || res.message_id || res.key?.id;
+      if (realId) knownMessageIds.current.add(String(realId));
+
       setChatMessages(prev => prev.map(m => {
         if (m.message_id === tempMessage.message_id) {
-          return { ...m, status: 'sent' };
+          return { ...m, status: 'sent', message_id: realId || m.message_id, id: realId || m.id };
         }
         return m;
       }));
