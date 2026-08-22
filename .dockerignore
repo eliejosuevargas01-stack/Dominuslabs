@@ -1,3 +1,9 @@
 node_modules
 dist
 .git
+**/node_modules
+**/venv
+**/.pytest_cache
+**/.cache
+test-integration
+project-hub/frontend

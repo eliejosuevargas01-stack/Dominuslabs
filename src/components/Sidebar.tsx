@@ -15,7 +15,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
   const menuItems = [
     { name: 'Resumo Operacional', path: '/dashboard-operacional', icon: BarChart2 },
     { name: 'Central Omnichannel', path: '/omnichannel', icon: MessageSquare },
-    { name: 'CRM CRM & Pipeline Pedidos', path: '/crm', icon: Users },
+    { name: 'CRM & Pipeline Pedidos', path: '/crm', icon: Users },
     { name: 'Consumo & IA', path: '/ia-inteligencia', icon: Cpu },
     { name: 'Automações & Regras', path: '/automacoes', icon: Workflow },
     { name: 'Campanhas Ativas', path: '/campanhas-wizard', icon: Megaphone },
