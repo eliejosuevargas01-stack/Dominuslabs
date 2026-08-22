@@ -933,6 +933,31 @@ function playIncomingSound() {
   } catch (e) {}
 }
 
+function playOutgoingSound() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(300, now);
+    osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+    
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.start(now);
+    osc.stop(now + 0.15);
+  } catch (e) {}
+}
+
   const selectedChatRef = useRef<any>(null);
   useEffect(() => {
     selectedChatRef.current = selectedChat;
@@ -999,9 +1024,20 @@ function playIncomingSound() {
             }
           }
 
-          // 1. Play chime ONLY if message is NOT from me
-          if (!isFromMe) {
-            playIncomingSound();
+          // 1. Check if there is actual media/text (ignore empty ACKs for sounds)
+          const hasContent = newMsgs.some(m => {
+            if (m._encrypted) return false;
+            const c = (m.content || m.message || m.text || m.body || '').trim();
+            return c.length > 0 || m.image_url || m.video_url || m.audio_url || m.document_url;
+          });
+
+          // Play chime ONLY if it is an actual message (not just an ACK)
+          if (hasContent) {
+            if (!isFromMe) {
+              playIncomingSound();
+            } else {
+              playOutgoingSound();
+            }
           }
 
           // 2. Helper to match JIDs
