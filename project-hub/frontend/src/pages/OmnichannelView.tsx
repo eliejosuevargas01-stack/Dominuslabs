@@ -1062,16 +1062,22 @@ function playIncomingSound() {
           if (newMsgs.length > 0) {
             const extractContent = (m: any): string => {
               if (!m) return '';
+              if (m._encrypted === true) return '';
               if (typeof m.content === 'string' && m.content.trim()) return m.content.trim();
               if (typeof m.message === 'string' && m.message.trim()) return m.message.trim();
               if (typeof m.text === 'string' && m.text.trim()) return m.text.trim();
               if (typeof m.body === 'string' && m.body.trim()) return m.body.trim();
+              if (m.image_url) return '[imagem]';
+              if (m.video_url) return '[vídeo]';
+              if (m.audio_url) return '[áudio]';
+              if (m.document_url) return '[documento]';
               if (Array.isArray(m.messages) && m.messages.length > 0) return extractContent(m.messages[m.messages.length - 1]);
               if (Array.isArray(m.mensagens) && m.mensagens.length > 0) return extractContent(m.mensagens[m.mensagens.length - 1]);
               return '';
             };
-            const latestMsg = newMsgs[newMsgs.length - 1];
-            const previewText = extractContent(latestMsg) || 'Nova mensagem';
+            const validMsgs = newMsgs.filter(m => extractContent(m) !== '');
+            const latestMsg = validMsgs.length > 0 ? validMsgs[validMsgs.length - 1] : newMsgs[newMsgs.length - 1];
+            const rawPreview = extractContent(latestMsg);
             const msgTs = latestMsg.message_timestamp || latestMsg.created_at || new Date().toISOString();
 
             setConversations((prevConvs) => {
@@ -1093,9 +1099,9 @@ function playIncomingSound() {
                   matched = true;
                   return {
                     ...conv,
-                    last_message_preview: previewText,
+                    last_message_preview: rawPreview || conv.last_message_preview || 'Nova mensagem',
                     last_message_timestamp: msgTs,
-                    unread_count: isCurrentlyOpenChat ? 0 : ((conv.unread_count || 0) + newMsgs.length),
+                    unread_count: isCurrentlyOpenChat ? 0 : ((conv.unread_count || 0) + (rawPreview && !isFromMe ? 1 : 0)),
                     participant_pushname: latestMsg.participant_pushname || conv.participant_pushname
                   };
                 }
