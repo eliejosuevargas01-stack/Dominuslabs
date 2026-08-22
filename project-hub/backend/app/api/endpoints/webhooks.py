@@ -738,9 +738,10 @@ async def n8n_outbound_whatsapp_send(
 ):
     """
     Endpoint para envio de mensagens via N8N ou ferramentas externas.
-    Requer autenticação básica via header X-Master-API-Key.
+    O Dominus é responsável por gerar o JWT do Identity Provider e repassar à WhatsApp API.
     """
-    if not x_master_api_key or x_master_api_key != settings.WHATSAPP_MASTER_SECRET:
+    master_key = x_master_api_key or payload.get("master_api_key") or payload.get("x_master_api_key")
+    if master_key and master_key != settings.WHATSAPP_MASTER_SECRET:
         raise HTTPException(status_code=401, detail="Invalid Master API Key")
 
     session_id = payload.get("session_id", "default")
@@ -753,10 +754,16 @@ async def n8n_outbound_whatsapp_send(
     cleaned_phone = "".join(filter(str.isdigit, str(phone)))
     
     from app.api.endpoints.whatsapp import make_whatsapp_api_request
+    from app.services.identity_service import get_m2m_jwt
+    
+    tenant_id = payload.get("tenant_id") or getattr(settings, "ADMIN_TENANT_ID", "admin") or "admin"
+    jwt_token = await get_m2m_jwt(tenant_id=tenant_id, scope="whatsapp:messages:send")
     
     headers = {
         "X-Master-API-Key": settings.WHATSAPP_MASTER_SECRET,
-        "x-tenant-id": payload.get("tenant_id", "default")
+        "x-tenant-id": tenant_id,
+        "x-session-token": jwt_token,
+        "Authorization": f"Bearer {jwt_token}"
     }
     
     json_data = {
@@ -770,7 +777,7 @@ async def n8n_outbound_whatsapp_send(
         json_data["text"] = message
         
     for k, v in payload.items():
-        if k not in ["phone", "number", "message", "text", "session_id", "tenant_id", "jid"]:
+        if k not in ["phone", "number", "message", "text", "session_id", "tenant_id", "jid", "master_api_key", "x_master_api_key"]:
             json_data[k] = v
             
     return await make_whatsapp_api_request(

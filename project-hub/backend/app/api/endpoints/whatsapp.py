@@ -94,6 +94,25 @@ async def make_whatsapp_api_request(
         if "Authorization" not in req_headers and token:
             req_headers["Authorization"] = f"Bearer {token}"
 
+    if "Authorization" not in req_headers or not req_headers.get("Authorization"):
+        try:
+            from app.services.identity_service import get_m2m_jwt
+            tenant_id = req_headers.get("x-tenant-id") or getattr(settings, "ADMIN_TENANT_ID", "admin") or "admin"
+            if "messages" in clean_path or "send" in clean_path:
+                scope = "whatsapp:messages:send"
+            elif method.upper() in ("POST", "PUT", "DELETE", "PATCH"):
+                scope = "whatsapp:sessions:write"
+            else:
+                scope = "whatsapp:sessions:read"
+            token = await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
+            if token:
+                req_headers["x-session-token"] = token
+                req_headers["Authorization"] = f"Bearer {token}"
+                if "x-tenant-id" not in req_headers:
+                    req_headers["x-tenant-id"] = tenant_id
+        except Exception as e:
+            logger.warning(f"[make_whatsapp_api_request] Não foi possível obter JWT M2M do Identity Provider: {e}")
+
     # Always include the Master API Key if configured (read from settings, never hardcoded)
     if "X-Master-API-Key" not in req_headers:
         master_secret = getattr(settings, "WHATSAPP_MASTER_SECRET", None)
