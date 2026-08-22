@@ -550,7 +550,7 @@ export default function OmnichannelView() {
   const navigate = useNavigate();
   // Navigation / Tabs state
   const [activeTab, setActiveTab] = useState<'conversations' | 'contacts'>('conversations');
-  const [selectedSession, setSelectedSession] = useState<string>('all');
+  const [selectedSession, setSelectedSession] = useState<string>('');
   
   // Data states - 100% Dynamic from Backend/n8n
   const [conversations, setConversations] = useState<any[]>([]);
@@ -1321,13 +1321,19 @@ function playIncomingSound() {
       if (c.session_id) setOfSessions.add(c.session_id);
     });
     availableSessions.forEach(s => setOfSessions.add(s.id));
-    return Array.from(setOfSessions);
+    return Array.from(setOfSessions).sort();
   }, [conversations, availableSessions]);
+
+  useEffect(() => {
+    if ((!selectedSession || selectedSession === 'all') && sessionsList.length > 0) {
+      setSelectedSession(sessionsList[0]);
+    }
+  }, [sessionsList, selectedSession]);
 
   // Filter and sort conversations (Newest last_message_timestamp at the top of the list)
   const filteredConversations = useMemo(() => {
     const list = conversations.filter(item => {
-      const matchSession = selectedSession === 'all' || item.session_id === selectedSession;
+      const matchSession = item.session_id === selectedSession;
       const searchLower = searchTerm.toLowerCase();
       const resolvedName = resolveContactName(item);
       const matchSearch = !searchTerm || (
@@ -1443,7 +1449,7 @@ function playIncomingSound() {
               onChange={(e) => setSelectedSession(e.target.value)}
               className="bg-transparent text-white font-semibold outline-none cursor-pointer text-xs pr-1"
             >
-              <option value="all" className="bg-slate-800 text-white">Todas as Sessões</option>
+              
               {sessionsList.map(s => (
                 <option key={s} value={s} className="bg-slate-800 text-white">
                   📱 {s}
