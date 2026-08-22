@@ -1773,6 +1773,8 @@ function playIncomingSound() {
                   </div>
                 ) : (
                   sortedMessages.map((msg, index) => {
+                    if (msg._encrypted === true) return null; // Ignore encrypted raw webhooks
+
                     const isMe = msg.is_from_me === true || msg.sender === 'user';
                     const timeStr = formatTimestamp(msg.message_timestamp || msg.created_at) || '';
                     const rawContent = (msg.content || msg.message || '').trim();
@@ -1849,6 +1851,9 @@ function playIncomingSound() {
                       }
                     }
 
+                    if (!rawContent && !msg.image_url && !msg.video_url && !msg.audio_url && !msg.document_url && !msg.system_message) {
+                      return null;
+                    }
                     return (
                       <div
                         key={msg.message_id || index}
