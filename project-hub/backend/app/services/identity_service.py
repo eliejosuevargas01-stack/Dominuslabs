@@ -21,17 +21,47 @@ logger = logging.getLogger("identity_service")
 _identity_token_cache: TTLCache = TTLCache(maxsize=512, ttl=300)
 
 
+async def is_token_still_valid(token: str, margin_seconds: int = 30) -> bool:
+    """
+    Verifica se o token M2M/JWT é válido e tem mais de `margin_seconds` de vida útil restante.
+    """
+    if not token or "." not in token:
+        return False
+    try:
+        import base64
+        import json
+        import time
+
+        parts = token.split(".")
+        if len(parts) != 3:
+            return False
+
+        payload_b64 = parts[1]
+        payload_b64 += "=" * (-len(payload_b64) % 4)
+        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+        payload = json.loads(payload_bytes.decode("utf-8"))
+
+        exp = payload.get("exp", 0)
+        return exp > (time.time() + margin_seconds)
+    except Exception:
+        return False
+
+
 async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> str:
     """
     Obtém um JWT M2M estrito para o tenant_id e scope especificados.
-    Tenta primeiro o cache local; se não existir, chama o Identity Worker via mTLS.
+    Tenta primeiro o cache local; se não existir ou estiver próximo de expirar (<30s), chama o Identity Worker via mTLS.
     Sem fallbacks ou bypasses de segurança em caso de falha.
     """
     cache_key = (tenant_id, scope)
     cached_token = _identity_token_cache.get(cache_key)
     if cached_token:
-        logger.debug(f"[IDENTITY-WORKER] Reutilizando JWT M2M do cache para tenant_id={tenant_id}, scope={scope}")
-        return cached_token
+        if await is_token_still_valid(cached_token, margin_seconds=30):
+            logger.debug(f"[IDENTITY-WORKER] Reutilizando JWT M2M do cache para tenant_id={tenant_id}, scope={scope}")
+            return cached_token
+        else:
+            logger.info(f"[IDENTITY-WORKER] Token em cache próximo do vencimento (<30s). Renovando proativamente para tenant_id={tenant_id}, scope={scope}...")
+            _identity_token_cache.pop(cache_key, None)
 
     base_url = settings.IDENTITY_WORKER_URL.rstrip("/")
     url = f"{base_url}/v1/tokens"

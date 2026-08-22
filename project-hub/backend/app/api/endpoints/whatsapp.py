@@ -135,6 +135,34 @@ async def make_whatsapp_api_request(
                 detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
             )
 
+        if response.status_code == 401:
+            logger.warning("[FLOW-STEP 6] WhatsApp API retornou 401. Invalidando cache de JWT e renovando...")
+            try:
+                from app.services.identity_service import invalidate_m2m_token, get_m2m_jwt
+                tenant_id = req_headers.get("x-tenant-id") or getattr(settings, "ADMIN_TENANT_ID", "admin") or "admin"
+                if "messages" in clean_path or "send" in clean_path:
+                    scope = "whatsapp:messages:send"
+                elif method.upper() in ("POST", "PUT", "DELETE", "PATCH"):
+                    scope = "whatsapp:sessions:write"
+                else:
+                    scope = "whatsapp:sessions:read"
+                
+                invalidate_m2m_token(tenant_id=tenant_id, scope=scope)
+                fresh_token = await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
+                if fresh_token:
+                    req_headers["x-session-token"] = fresh_token
+                    req_headers["Authorization"] = f"Bearer {fresh_token}"
+                    req_headers["x-tenant-id"] = tenant_id
+                    
+                    response = await client.request(
+                        method,
+                        url,
+                        headers=req_headers,
+                        json=json_data
+                    )
+            except Exception as retry_err:
+                logger.warning(f"[make_whatsapp_api_request] Falha no retry com token renovado: {retry_err}")
+
         if response.status_code >= 400:
             logger.error(f"[FLOW-STEP 6] ERROR: WhatsApp API authentication with JWT failed (status {response.status_code})")
             print(f"[FLOW-STEP 6] ERROR: WhatsApp API authentication with JWT failed (status {response.status_code})", flush=True)
