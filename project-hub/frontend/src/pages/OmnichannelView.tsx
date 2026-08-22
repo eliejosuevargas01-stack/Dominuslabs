@@ -959,6 +959,7 @@ function playOutgoingSound() {
 }
 
   const selectedChatRef = useRef<any>(null);
+  const knownMessageIds = useRef<Set<string>>(new Set());
   useEffect(() => {
     selectedChatRef.current = selectedChat;
   }, [selectedChat]);
@@ -1036,15 +1037,28 @@ function playOutgoingSound() {
             }
           }
 
-          // 1. Check if there is actual media/text (ignore empty ACKs for sounds)
-          const hasContent = newMsgs.some(m => {
-            if (m._encrypted) return false;
+          // 1. Check if it's a NEW message and has content (ignore duplicate status updates for sounds)
+          let isNewMessageWithContent = false;
+          
+          for (const m of newMsgs) {
+            if (m._encrypted) continue;
+            
+            const msgId = String(m.message_id || m.id || m.key?.id || '');
             const c = (m.content || m.message || m.text || m.body || '').trim();
-            return c.length > 0 || m.image_url || m.video_url || m.audio_url || m.document_url;
-          });
+            const hasMediaOrText = c.length > 0 || m.image_url || m.video_url || m.audio_url || m.document_url;
+            
+            if (hasMediaOrText && msgId) {
+              if (!knownMessageIds.current.has(msgId)) {
+                knownMessageIds.current.add(msgId);
+                isNewMessageWithContent = true;
+              }
+            } else if (hasMediaOrText && !msgId) {
+              isNewMessageWithContent = true;
+            }
+          }
 
-          // Play chime ONLY if it is an actual message (not just an ACK)
-          if (hasContent) {
+          // Play chime ONLY if it is an entirely new message
+          if (isNewMessageWithContent) {
             if (!isFromMe) {
               playIncomingSound();
             } else {
@@ -1296,6 +1310,10 @@ function playOutgoingSound() {
             }
           }
           setChatMessages(msgsList);
+          msgsList.forEach((m: any) => {
+             const id = String(m.message_id || m.id || m.key?.id || '');
+             if (id) knownMessageIds.current.add(id);
+          });
         })
         .catch((err) => {
           console.warn("Error fetching chat history from backend/n8n", err);
