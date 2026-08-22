@@ -967,7 +967,7 @@ function playOutgoingSound() {
 
   // Real-time EventSource (SSE) listener for instant n8n webhook notifications
   useEffect(() => {
-    const token = localStorage.getItem('token') || '';
+    const token = localStorage.getItem('admin_token') || localStorage.getItem('token') || '';
     const sseUrl = `${API_BASE}/webhooks/events/crm-chats${token ? `?token=${encodeURIComponent(token)}` : ''}`;
     let eventSource: EventSource | null = null;
 
@@ -977,47 +977,93 @@ function playOutgoingSound() {
       eventSource.onmessage = (event) => {
         if (!event.data || event.data.startsWith(':')) return;
         try {
+          const trimmed = event.data.trim();
+          if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return;
+
+          let rawEvents: any[] = [];
+          try {
+            const parsedJson = JSON.parse(trimmed);
+            if (Array.isArray(parsedJson)) {
+              rawEvents = parsedJson;
+            } else if (parsedJson && typeof parsedJson === 'object') {
+              rawEvents = [parsedJson];
+            }
+          } catch (e) {
+            return;
+          }
+
           let notifiedJids: string[] = [];
           let isFromMe = false;
           let newMsgs: any[] = [];
 
-          if (event.data.startsWith('{')) {
-            const parsed = JSON.parse(event.data);
+          for (const parsed of rawEvents) {
+            if (!parsed) continue;
+
+            if (parsed.action === 'session_disconnected') {
+              setDisconnectedSessionInfo({
+                session_id: parsed.session_id,
+                message: parsed.message || `A sessão '${parsed.session_id}' foi desconectada.`
+              });
+              continue;
+            }
+
+            let currentItemMsgs: any[] = [];
             if (Array.isArray(parsed.messages) && parsed.messages.length > 0) {
-              newMsgs = parsed.messages;
+              currentItemMsgs = parsed.messages;
             } else if (Array.isArray(parsed.data) && parsed.data.length > 0) {
-              // Map Evolution API messages.update to standard format
-              newMsgs = parsed.data.map((d: any) => {
+              currentItemMsgs = parsed.data.map((d: any) => {
                 if (d.update && d.key) {
-                   return { ...d, status: d.update.status || d.status, id: d.key.id, message_id: d.key.id, _is_evolution_ack: true };
+                  return { ...d, status: d.update.status || d.status, id: d.key.id, message_id: d.key.id, _is_evolution_ack: true };
                 }
                 return d;
               });
             } else if (parsed.message && typeof parsed.message === 'object') {
-              newMsgs = [parsed.message];
+              currentItemMsgs = [parsed.message];
             } else if (parsed.event === 'messages.update' || parsed.update) {
-              newMsgs = [parsed];
-            } else if (parsed.id || parsed.message_id || parsed.key) {
-              newMsgs = [parsed];
+              currentItemMsgs = [parsed];
+            } else if (parsed.id || parsed.message_id || parsed.key || parsed.content || parsed.text) {
+              currentItemMsgs = [parsed];
             }
 
+            for (const rawMsg of currentItemMsgs) {
+              if (!rawMsg) continue;
+              const msgIsFromMe = rawMsg.fromMe ?? rawMsg.from_me ?? rawMsg.is_from_me ?? parsed.fromMe ?? parsed.from_me ?? parsed.is_from_me ?? false;
+              const msgTs = rawMsg.timestamp 
+                ? (typeof rawMsg.timestamp === 'number' && rawMsg.timestamp < 10000000000 ? new Date(rawMsg.timestamp * 1000).toISOString() : new Date(rawMsg.timestamp).toISOString()) 
+                : (rawMsg.message_timestamp || rawMsg.created_at || parsed.emittedAt || new Date().toISOString());
+
+              const normalized = {
+                ...rawMsg,
+                id: rawMsg.id || rawMsg.message_id || rawMsg.key?.id,
+                message_id: rawMsg.message_id || rawMsg.id || rawMsg.key?.id,
+                content: rawMsg.content || rawMsg.text || rawMsg.message || rawMsg.body || '',
+                text: rawMsg.text || rawMsg.content || rawMsg.message || rawMsg.body || '',
+                is_from_me: msgIsFromMe,
+                from_me: msgIsFromMe,
+                fromMe: msgIsFromMe,
+                contact_jid: rawMsg.contact_jid || rawMsg.jid || rawMsg.resolvedJid || rawMsg.lid || rawMsg.key?.remoteJid || parsed.conversation?.jid || parsed.contact_jid,
+                session_id: rawMsg.session_id || parsed.session_id || parsed.session?.id,
+                message_timestamp: msgTs,
+                status: rawMsg.status || 'sent',
+                media_url: rawMsg.media_url || rawMsg.url || rawMsg.file_url || (rawMsg.media?.url),
+                participant_pushname: rawMsg.pushName || rawMsg.participant_pushname || parsed.conversation?.title
+              };
+              newMsgs.push(normalized);
+            }
+
+            if (parsed.conversation?.jid) notifiedJids.push(parsed.conversation.jid);
+            if (parsed.conversation?.displayJid) notifiedJids.push(parsed.conversation.displayJid);
+            if (parsed.contact_jid) notifiedJids.push(parsed.contact_jid);
+            if (parsed.lead_id) notifiedJids.push(parsed.lead_id);
             if (Array.isArray(parsed.all_jids)) {
               for (const j of parsed.all_jids) {
-                if (j && typeof j === 'string' && !j.includes('{{') && !notifiedJids.includes(j)) {
-                  notifiedJids.push(j);
-                }
+                if (j && typeof j === 'string' && !notifiedJids.includes(j)) notifiedJids.push(j);
               }
             }
-            if (parsed.lead_id && typeof parsed.lead_id === 'string' && !parsed.lead_id.includes('{{') && !notifiedJids.includes(parsed.lead_id)) {
-              notifiedJids.push(parsed.lead_id);
-            }
-            if (parsed.contact_jid && typeof parsed.contact_jid === 'string' && !parsed.contact_jid.includes('{{') && !notifiedJids.includes(parsed.contact_jid)) {
-              notifiedJids.push(parsed.contact_jid);
-            }
 
-            for (const msg of newMsgs) {
+            for (const msg of currentItemMsgs) {
               if (!msg) continue;
-              for (const k of ['contact_jid', 'chat_jid', 'group_jid', 'remoteJid', 'lead_id', 'jid', 'phone']) {
+              for (const k of ['contact_jid', 'chat_jid', 'group_jid', 'remoteJid', 'lead_id', 'jid', 'resolvedJid', 'lid', 'phone']) {
                 const val = msg[k];
                 if (val && typeof val === 'string' && !val.includes('{{') && !notifiedJids.includes(val)) {
                   notifiedJids.push(val);
@@ -1025,16 +1071,21 @@ function playOutgoingSound() {
               }
             }
 
-            if (parsed.is_from_me === true || parsed.from_me === true || parsed.sender === 'user' || parsed.sender === 'me') {
+            if (
+              parsed.is_from_me === true ||
+              parsed.from_me === true ||
+              parsed.fromMe === true ||
+              parsed.sender === 'user' ||
+              parsed.sender === 'me'
+            ) {
               isFromMe = true;
             }
+          }
 
-            if (parsed.action === 'session_disconnected') {
-              setDisconnectedSessionInfo({
-                session_id: parsed.session_id,
-                message: parsed.message || `A sessão '${parsed.session_id}' foi desconectada.`
-              });
-              return; // No need to process further for message events
+          for (const m of newMsgs) {
+            if (m.is_from_me === true || m.from_me === true || m.fromMe === true || m.sender === 'user' || m.sender === 'me') {
+              isFromMe = true;
+              break;
             }
           }
 
@@ -1043,18 +1094,22 @@ function playOutgoingSound() {
           
           for (const m of newMsgs) {
             if (m._encrypted) continue;
-            
+            const msgType = String(m.message_type || m.type || '').toLowerCase();
+            if (msgType.includes('reaction') || m.reaction_text) continue;
+
             const msgId = String(m.message_id || m.id || m.key?.id || '');
             const c = (m.content || m.message || m.text || m.body || '').trim();
-            const hasMediaOrText = c.length > 0 || m.image_url || m.video_url || m.audio_url || m.document_url;
+            const hasMediaOrText = c.length > 0 || m.image_url || m.video_url || m.audio_url || m.document_url || m.media_url || m.media;
             
-            if (hasMediaOrText && msgId) {
-              if (!knownMessageIds.current.has(msgId)) {
-                knownMessageIds.current.add(msgId);
+            if (hasMediaOrText) {
+              if (msgId) {
+                if (!knownMessageIds.current.has(msgId)) {
+                  knownMessageIds.current.add(msgId);
+                  isNewMessageWithContent = true;
+                }
+              } else {
                 isNewMessageWithContent = true;
               }
-            } else if (hasMediaOrText && !msgId) {
-              isNewMessageWithContent = true;
             }
           }
 
@@ -1141,6 +1196,7 @@ function playOutgoingSound() {
               if (m.video_url) return '[vídeo]';
               if (m.audio_url) return '[áudio]';
               if (m.document_url) return '[documento]';
+              if (m.media_url || m.url || m.file_url) return '[mídia]';
               if (Array.isArray(m.messages) && m.messages.length > 0) return extractContent(m.messages[m.messages.length - 1]);
               if (Array.isArray(m.mensagens) && m.mensagens.length > 0) return extractContent(m.mensagens[m.mensagens.length - 1]);
               return '';
