@@ -136,6 +136,8 @@ async def _process_update_chat(
 ):
     try:
         raw_body = await request.json()
+        if isinstance(raw_body, dict):
+            raw_body = [raw_body]
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 

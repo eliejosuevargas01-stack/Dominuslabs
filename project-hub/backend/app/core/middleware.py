@@ -33,9 +33,14 @@ class DecryptionMiddleware(BaseHTTPMiddleware):
                             decrypted_payload = decrypt_payload(payload)
                             
                             # Replace the request body with the decrypted one
-                            async def receive():
+                            async def receive_decrypted():
                                 return {"type": "http.request", "body": json.dumps(decrypted_payload).encode("utf-8")}
-                            request._receive = receive
+                            request._receive = receive_decrypted
+                        else:
+                            # Restore the original body
+                            async def receive_original():
+                                return {"type": "http.request", "body": body}
+                            request._receive = receive_original
                 except Exception as e:
                     logger.error(f"Failed to decrypt incoming request: {e}")
                     return JSONResponse(
