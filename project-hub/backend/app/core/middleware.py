@@ -24,18 +24,21 @@ class DecryptionMiddleware(BaseHTTPMiddleware):
                         payload = json.loads(body.decode("utf-8"))
                         is_encrypted = False
                         
-                        if isinstance(payload, dict) and payload.get("_encrypted") is True:
+                        if isinstance(payload, dict) and str(payload.get("_encrypted", "")).lower() == "true":
                             is_encrypted = True
-                        elif isinstance(payload, list) and len(payload) > 0 and isinstance(payload[0], dict) and payload[0].get("_encrypted") is True:
+                        elif isinstance(payload, list) and len(payload) > 0 and isinstance(payload[0], dict) and str(payload[0].get("_encrypted", "")).lower() == "true":
                             is_encrypted = True
                             
                         if is_encrypted:
                             decrypted_payload = decrypt_payload(payload)
                             
                             # Replace the request body with the decrypted one
+                            decrypted_bytes = json.dumps(decrypted_payload).encode("utf-8")
                             async def receive_decrypted():
-                                return {"type": "http.request", "body": json.dumps(decrypted_payload).encode("utf-8")}
+                                return {"type": "http.request", "body": decrypted_bytes}
                             request._receive = receive_decrypted
+                            # Also overwrite the cached body so await request.body() returns the decrypted one
+                            request._body = decrypted_bytes
                         else:
                             # Restore the original body
                             async def receive_original():

@@ -152,13 +152,13 @@ def decrypt_payload(encrypted_data: Any) -> Any:
         return encrypted_data
 
     if isinstance(encrypted_data, list):
-        if len(encrypted_data) == 1 and isinstance(encrypted_data[0], dict) and encrypted_data[0].get("_encrypted") is True:
+        if len(encrypted_data) == 1 and isinstance(encrypted_data[0], dict) and str(encrypted_data[0].get("_encrypted", "")).lower() == "true":
             return decrypt_payload(encrypted_data[0])
-        elif any(isinstance(item, dict) and item.get("_encrypted") is True for item in encrypted_data):
-            return [decrypt_payload(item) if isinstance(item, dict) and item.get("_encrypted") is True else item for item in encrypted_data]
+        elif any(isinstance(item, dict) and str(item.get("_encrypted", "")).lower() == "true" for item in encrypted_data):
+            return [decrypt_payload(item) if isinstance(item, dict) and str(item.get("_encrypted", "")).lower() == "true" else item for item in encrypted_data]
         return encrypted_data
 
-    if not isinstance(encrypted_data, dict) or not encrypted_data.get("_encrypted"):
+    if not isinstance(encrypted_data, dict) or str(encrypted_data.get("_encrypted", "")).lower() != "true":
         return encrypted_data
         
     private_key_pem = clean_pem(settings.DOMINUS_PRIVATE_KEY)
@@ -199,12 +199,15 @@ def decrypt_payload(encrypted_data: Any) -> Any:
         # AESGCM.decrypt expects ciphertext + auth_tag concatenated
         payload_bytes = aesgcm.decrypt(iv, ciphertext + auth_tag, None)
 
-        # 4. Parse the original JSON
-        return json.loads(payload_bytes.decode('utf-8'))
+        try:
+            return json.loads(payload_bytes.decode('utf-8'))
+        except json.JSONDecodeError:
+            # Se não for JSON, retorna a string pura
+            return payload_bytes.decode('utf-8')
 
     except InvalidTag:
         logger.error("Authentication tag verification failed. The payload may have been tampered with.")
         raise ValueError("Invalid authentication tag.")
     except Exception as e:
         logger.error(f"Error decrypting payload: {e}")
-        raise e
+        raise ValueError(f"Decryption failed: {e}")
