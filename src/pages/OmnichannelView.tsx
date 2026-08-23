@@ -1464,7 +1464,7 @@ function playOutgoingSound() {
       console.warn("Send message error", err);
       setChatMessages(prev => prev.map(m => {
         if (m.message_id === tempMessage.message_id) {
-          return { ...m, status: 'sent' };
+          return { ...m, status: 'error' };
         }
         return m;
       }));
