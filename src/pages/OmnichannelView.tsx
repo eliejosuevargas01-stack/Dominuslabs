@@ -1073,7 +1073,7 @@ function playOutgoingSound() {
               if (msg.message && typeof msg.message === 'object' && (msg.message.id || msg.message.text || msg.message.content || msg.message.key)) {
                 msg = { ...msg, ...msg.message };
               }
-              for (const k of ['contact_jid', 'chat_jid', 'group_jid', 'remoteJid', 'lead_id', 'jid', 'resolvedJid', 'lid', 'phone']) {
+              for (const k of ['contact_jid', 'chat_jid', 'group_jid', 'remoteJid', 'lead_id']) {
                 const val = msg[k];
                 if (val && typeof val === 'string' && !val.includes('{{') && !notifiedJids.includes(val)) {
                   notifiedJids.push(val);

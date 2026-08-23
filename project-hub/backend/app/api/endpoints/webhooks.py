@@ -34,7 +34,7 @@ async def notify_crm_chat_listeners(lead_id: str, is_from_me: bool = False, send
     if messages:
         for msg in messages:
             if isinstance(msg, dict):
-                for k in ["contact_jid", "chat_jid", "group_jid", "remoteJid", "lead_id", "jid", "phone", "participant"]:
+                for k in ["contact_jid", "chat_jid", "group_jid", "remoteJid", "lead_id"]:
                     val = msg.get(k)
                     if val and isinstance(val, str) and "{{" not in val and "$" not in val:
                         if val not in all_jids:
