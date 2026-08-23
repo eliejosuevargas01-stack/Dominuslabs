@@ -411,7 +411,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         contact_jid = msg.get("contact_jid")
         push_name = msg.get("push_name")
         display_phone = msg.get("display_phone")
-        parent_is_from_me = msg.get("is_from_me", False)
+        parent_is_from_me = msg.get("is_from_me") if msg.get("is_from_me") is not None else msg.get("from_me") if msg.get("from_me") is not None else msg.get("fromMe", False)
         
         profile_pic_url = msg.get("profile_pic_url") or ""
         if profile_pic_url and profile_pic_url.startswith("/"):
@@ -421,7 +421,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             if not isinstance(m, dict):
                 continue
             msg_id = str(m.get("message_id") or m.get("id") or "")
-            is_from_me = m.get("is_from_me") if "is_from_me" in m else parent_is_from_me
+            is_from_me = m.get("is_from_me") if m.get("is_from_me") is not None else m.get("from_me") if m.get("from_me") is not None else m.get("fromMe", parent_is_from_me)
             sender = "user" if is_from_me else "lead"
             direction = "outgoing" if is_from_me else "incoming"
 
@@ -466,7 +466,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
     # 2. Support direct whats-api / n8n single incoming message object
     if "is_from_me" in msg or "message_id" in msg or "contact_jid" in msg or "push_name" in msg or "session_id" in msg or "content" in msg or "chat_kind" in msg:
         msg_id = str(msg.get("message_id") or msg.get("id") or "")
-        is_from_me = msg.get("is_from_me") if msg.get("is_from_me") is not None else msg.get("from_me", False)
+        is_from_me = msg.get("is_from_me") if msg.get("is_from_me") is not None else msg.get("from_me") if msg.get("from_me") is not None else msg.get("fromMe", False)
         sender = "user" if is_from_me else "lead"
         direction = "outgoing" if is_from_me else "incoming"
         

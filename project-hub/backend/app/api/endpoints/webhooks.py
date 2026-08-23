@@ -148,7 +148,9 @@ async def _process_update_chat(
         if not isinstance(item, dict):
             raise HTTPException(status_code=400, detail="Each item in the payload array must be a JSON object.")
         
-        # Support aliases for strict fields
+        if "is_from_me" not in item:
+            item["is_from_me"] = item.get("fromMe", item.get("from_me", False))
+            
         if "message_id" not in item and "id" in item:
             item["message_id"] = item["id"]
         if "contact_jid" not in item and "contact_id" in item:
