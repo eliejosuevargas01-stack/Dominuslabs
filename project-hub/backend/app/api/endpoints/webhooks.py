@@ -147,14 +147,25 @@ async def _process_update_chat(
     for item in raw_body:
         if not isinstance(item, dict):
             raise HTTPException(status_code=400, detail="Each item in the payload array must be a JSON object.")
+        
+        # Support aliases for strict fields
+        if "message_id" not in item and "id" in item:
+            item["message_id"] = item["id"]
+        if "contact_jid" not in item and "contact_id" in item:
+            item["contact_jid"] = item["contact_id"]
+        if "session_id" not in item and "session" in item:
+            item["session_id"] = item["session"]
+        if "tenant_id" not in item and "tenant" in item:
+            item["tenant_id"] = item["tenant"]
+
         if "message_id" not in item:
-            raise HTTPException(status_code=400, detail="Missing required field: message_id")
+            raise HTTPException(status_code=400, detail=f"Missing required field: message_id. Received keys: {list(item.keys())} - Item: {item}")
         if "contact_jid" not in item:
-            raise HTTPException(status_code=400, detail="Missing required field: contact_jid")
+            raise HTTPException(status_code=400, detail=f"Missing required field: contact_jid. Received keys: {list(item.keys())}")
         if "session_id" not in item:
-            raise HTTPException(status_code=400, detail="Missing required field: session_id")
+            raise HTTPException(status_code=400, detail=f"Missing required field: session_id. Received keys: {list(item.keys())}")
         if "tenant_id" not in item:
-            raise HTTPException(status_code=400, detail="Missing required field: tenant_id")
+            raise HTTPException(status_code=400, detail=f"Missing required field: tenant_id. Received keys: {list(item.keys())}")
 
     messages_list = raw_body
     
