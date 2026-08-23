@@ -1025,8 +1025,14 @@ function playOutgoingSound() {
               currentItemMsgs = [parsed];
             }
 
-            for (const rawMsg of currentItemMsgs) {
+            for (let rawMsg of currentItemMsgs) {
               if (!rawMsg) continue;
+              
+              // Se rawMsg for um wrapper contendo "message" dentro (ex: webhook payload agrupado)
+              if (rawMsg.message && typeof rawMsg.message === 'object' && (rawMsg.message.id || rawMsg.message.text || rawMsg.message.content || rawMsg.message.key)) {
+                rawMsg = { ...rawMsg, ...rawMsg.message };
+              }
+              
               const msgIsFromMe = rawMsg.fromMe ?? rawMsg.from_me ?? rawMsg.is_from_me ?? parsed.fromMe ?? parsed.from_me ?? parsed.is_from_me ?? false;
               const msgTs = rawMsg.timestamp 
                 ? (typeof rawMsg.timestamp === 'number' && rawMsg.timestamp < 10000000000 ? new Date(rawMsg.timestamp * 1000).toISOString() : new Date(rawMsg.timestamp).toISOString()) 
@@ -1036,8 +1042,8 @@ function playOutgoingSound() {
                 ...rawMsg,
                 id: rawMsg.id || rawMsg.message_id || rawMsg.key?.id,
                 message_id: rawMsg.message_id || rawMsg.id || rawMsg.key?.id,
-                content: rawMsg.content || rawMsg.text || rawMsg.message || rawMsg.body || '',
-                text: rawMsg.text || rawMsg.content || rawMsg.message || rawMsg.body || '',
+                content: rawMsg.content || rawMsg.text || (typeof rawMsg.message === 'string' ? rawMsg.message : '') || rawMsg.body || '',
+                text: rawMsg.text || rawMsg.content || (typeof rawMsg.message === 'string' ? rawMsg.message : '') || rawMsg.body || '',
                 is_from_me: msgIsFromMe,
                 from_me: msgIsFromMe,
                 fromMe: msgIsFromMe,
@@ -1061,8 +1067,11 @@ function playOutgoingSound() {
               }
             }
 
-            for (const msg of currentItemMsgs) {
+            for (let msg of currentItemMsgs) {
               if (!msg) continue;
+              if (msg.message && typeof msg.message === 'object' && (msg.message.id || msg.message.text || msg.message.content || msg.message.key)) {
+                msg = { ...msg, ...msg.message };
+              }
               for (const k of ['contact_jid', 'chat_jid', 'group_jid', 'remoteJid', 'lead_id', 'jid', 'resolvedJid', 'lid', 'phone']) {
                 const val = msg[k];
                 if (val && typeof val === 'string' && !val.includes('{{') && !notifiedJids.includes(val)) {
