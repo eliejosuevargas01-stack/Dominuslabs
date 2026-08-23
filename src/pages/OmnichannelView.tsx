@@ -1038,12 +1038,13 @@ function playOutgoingSound() {
                 ? (typeof rawMsg.timestamp === 'number' && rawMsg.timestamp < 10000000000 ? new Date(rawMsg.timestamp * 1000).toISOString() : new Date(rawMsg.timestamp).toISOString()) 
                 : (rawMsg.message_timestamp || rawMsg.created_at || parsed.emittedAt || new Date().toISOString());
 
+              const generatedId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
               const normalized = {
                 ...rawMsg,
-                id: rawMsg.id || rawMsg.message_id || rawMsg.key?.id,
-                message_id: rawMsg.message_id || rawMsg.id || rawMsg.key?.id,
-                content: rawMsg.content || rawMsg.text || (typeof rawMsg.message === 'string' ? rawMsg.message : '') || rawMsg.body || '',
-                text: rawMsg.text || rawMsg.content || (typeof rawMsg.message === 'string' ? rawMsg.message : '') || rawMsg.body || '',
+                id: rawMsg.id || rawMsg.message_id || rawMsg.key?.id || generatedId,
+                message_id: rawMsg.message_id || rawMsg.id || rawMsg.key?.id || generatedId,
+                content: rawMsg.content || rawMsg.text || (typeof rawMsg.message === 'string' ? rawMsg.message : '') || rawMsg.body || rawMsg.output || '',
+                text: rawMsg.text || rawMsg.content || (typeof rawMsg.message === 'string' ? rawMsg.message : '') || rawMsg.body || rawMsg.output || '',
                 is_from_me: msgIsFromMe,
                 from_me: msgIsFromMe,
                 fromMe: msgIsFromMe,
