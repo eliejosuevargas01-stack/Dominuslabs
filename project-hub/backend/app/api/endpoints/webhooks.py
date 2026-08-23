@@ -780,9 +780,60 @@ async def n8n_outbound_whatsapp_send(
         if k not in ["phone", "number", "message", "text", "session_id", "tenant_id", "jid", "master_api_key", "x_master_api_key"]:
             json_data[k] = v
             
-    return await make_whatsapp_api_request(
+    res = await make_whatsapp_api_request(
         "POST",
         f"/api/sessions/{session_id}/messages/send",
         headers=headers,
         json_data=json_data
     )
+    
+    try:
+        from datetime import datetime
+        # Build standard message block
+        msg_obj = {}
+        if isinstance(res, dict):
+            if "message" in res and isinstance(res["message"], dict):
+                msg_obj = res["message"]
+            elif "id" in res:
+                msg_obj = res
+        
+        if isinstance(res, list) and len(res) > 0 and isinstance(res[0], dict):
+            if "message" in res[0]:
+                msg_obj = res[0]["message"]
+            elif "id" in res[0]:
+                msg_obj = res[0]
+
+        now_ts = int(datetime.utcnow().timestamp())
+        msg_id = msg_obj.get("id") or msg_obj.get("message_id") or msg_obj.get("key", {}).get("id") or f"n8n_{now_ts}"
+        
+        event_payload = [{
+            "ok": True,
+            "event": "message.created",
+            "emittedAt": datetime.utcnow().isoformat() + "Z",
+            "tenant_id": tenant_id,
+            "session_id": session_id,
+            "contact_jid": json_data["jid"],
+            "message": {
+                "id": msg_id,
+                "message_id": msg_id,
+                "jid": json_data["jid"],
+                "fromMe": True,
+                "text": message or msg_obj.get("text") or msg_obj.get("content") or msg_obj.get("caption") or "",
+                "content": message or msg_obj.get("text") or msg_obj.get("content") or msg_obj.get("caption") or "",
+                "timestamp": msg_obj.get("timestamp") or msg_obj.get("message_timestamp") or now_ts,
+                "status": "sent",
+                "media_url": msg_obj.get("media_url") or msg_obj.get("url") or payload.get("media_url") or payload.get("url")
+            }
+        }]
+        
+        await notify_crm_chat_listeners(
+            lead_id=json_data["jid"],
+            is_from_me=True,
+            sender="user",
+            messages=event_payload
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Erro ao notificar SSE listeners no /outbound/whatsapp/send: {e}")
+
+    return res
