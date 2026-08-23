@@ -315,7 +315,7 @@ async def send_crm_whatsapp_message(
             detail="Nenhuma sessão WhatsApp selecionada. Escolha uma sessão em Conexões."
         )
 
-    to_phone = payload.phone or payload.jid
+    to_phone = getattr(payload, "contact_jid", None) or getattr(payload, "jid", None) or getattr(payload, "lead_id", None) or payload.phone
     if not to_phone:
         raise HTTPException(
             status_code=400,
