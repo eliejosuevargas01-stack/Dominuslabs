@@ -134,96 +134,37 @@ async def _process_update_chat(
     is_from_me: Optional[bool] = None,
     sender: Optional[str] = None
 ):
-    messages_list = []
-    body_dict = {}
     try:
         raw_body = await request.json()
-        if isinstance(raw_body, list):
-            extracted = []
-            for item in raw_body:
-                if isinstance(item, dict):
-                    if not body_dict:
-                        body_dict = item
-                    if "messages" in item and isinstance(item["messages"], list):
-                        extracted.extend(item["messages"])
-                    elif "mensagens" in item and isinstance(item["mensagens"], list):
-                        extracted.extend(item["mensagens"])
-                    else:
-                        extracted.append(item)
-            messages_list = extracted
-        elif isinstance(raw_body, dict):
-            body_dict = raw_body
-            if "messages" in raw_body and isinstance(raw_body["messages"], list):
-                messages_list = raw_body["messages"]
-            elif "mensagens" in raw_body and isinstance(raw_body["mensagens"], list):
-                messages_list = raw_body["mensagens"]
-            elif "data" in raw_body and isinstance(raw_body["data"], list) and raw_body.get("event") == "messages.update":
-                # Flatten evolution API update events
-                flattened = []
-                for d in raw_body["data"]:
-                    if isinstance(d, dict) and "update" in d and "key" in d:
-                        flattened.append({
-                            "id": d["key"].get("id"),
-                            "status": d["update"].get("status"),
-                            "_is_evolution_ack": True,
-                            "key": d["key"]
-                        })
-                    else:
-                        flattened.append(d)
-                messages_list = flattened
-            elif "data" in raw_body and isinstance(raw_body["data"], list) and raw_body.get("event") == "messages.upsert":
-                messages_list = raw_body["data"]
-            else:
-                messages_list = [raw_body]
     except Exception:
-        pass
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
-    explicit_from_me = is_from_me
-    explicit_sender = sender
+    if not isinstance(raw_body, list):
+        raise HTTPException(status_code=400, detail="Payload must be a JSON array of message objects.")
 
-    body_jids = []
-    body_tenant = None
-    body_session = None
+    for item in raw_body:
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=400, detail="Each item in the payload array must be a JSON object.")
+        if "message_id" not in item:
+            raise HTTPException(status_code=400, detail="Missing required field: message_id")
+        if "contact_jid" not in item:
+            raise HTTPException(status_code=400, detail="Missing required field: contact_jid")
+        if "session_id" not in item:
+            raise HTTPException(status_code=400, detail="Missing required field: session_id")
+        if "tenant_id" not in item:
+            raise HTTPException(status_code=400, detail="Missing required field: tenant_id")
 
-    if body_dict:
-        body_tenant = body_dict.get("tenant_id") or body_dict.get("tenantId") or body_dict.get("tenant")
-        body_session = body_dict.get("session_id") or body_dict.get("sessionId") or body_dict.get("session") or body_dict.get("whatsapp_instance")
+    messages_list = raw_body
+    
+    resolved_contact_id = messages_list[0].get("contact_jid") if messages_list else contact_id
+    resolved_tenant_id = messages_list[0].get("tenant_id") if messages_list else tenant_id
+    resolved_session_id = messages_list[0].get("session_id") if messages_list else session_id
 
-    if messages_list:
-        for msg in messages_list:
-            if isinstance(msg, dict):
-                if explicit_from_me is None:
-                    explicit_from_me = msg.get("is_from_me") if msg.get("is_from_me") is not None else msg.get("from_me")
-                if explicit_sender is None:
-                    explicit_sender = msg.get("sender")
-                if not body_tenant:
-                    body_tenant = msg.get("tenant_id") or msg.get("tenantId") or msg.get("tenant")
-                if not body_session:
-                    body_session = msg.get("session_id") or msg.get("sessionId") or msg.get("session") or msg.get("whatsapp_instance")
-
-                for k in ["contact_id", "contact_jid", "chat_jid", "group_jid", "remoteJid", "lead_id", "jid", "phone", "participant"]:
-                    val = msg.get(k)
-                    if val and isinstance(val, str) and "{{" not in val and "$" not in val:
-                        if val not in body_jids:
-                            body_jids.append(val)
-
-    def clean_param(val: Optional[str]) -> Optional[str]:
-        if val and isinstance(val, str) and "{{" not in val and "$" not in val:
-            return val.strip()
-        return None
-
-    cleaned_contact_id = clean_param(contact_id)
-    cleaned_lead_id = clean_param(lead_id)
-    cleaned_jid = clean_param(jid)
-    cleaned_phone = clean_param(phone)
-    cleaned_id = clean_param(id)
-
-    resolved_contact_id = cleaned_contact_id or (body_jids[0] if body_jids else None) or cleaned_lead_id or cleaned_jid or cleaned_phone or cleaned_id or contact_id or lead_id or jid or phone or id
-    resolved_tenant_id = clean_param(tenant_id) or clean_param(body_tenant) or request.headers.get("x-tenant-id") or getattr(settings, "ADMIN_TENANT_ID", "admin")
-    resolved_session_id = clean_param(session_id) or clean_param(body_session) or request.headers.get("x-session-id") or "default"
-
-    if not resolved_contact_id or "{{" in str(resolved_contact_id) or "$" in str(resolved_contact_id):
+    if not resolved_contact_id:
         raise HTTPException(status_code=400, detail="Missing contact_id or contact_jid parameter")
+
+    explicit_from_me = messages_list[0].get("is_from_me", False) if messages_list else (is_from_me or False)
+    explicit_sender = messages_list[0].get("participant_pushname", "lead") if messages_list else (sender or "lead")
 
     from app.services.n8n_service import n8n_service
     n8n_service.invalidate_leads_cache()
@@ -741,8 +682,8 @@ async def n8n_outbound_whatsapp_send(
     O Dominus é responsável por gerar o JWT do Identity Provider e repassar à WhatsApp API.
     """
     master_key = x_master_api_key or payload.get("master_api_key") or payload.get("x_master_api_key")
-    if master_key and master_key != settings.WHATSAPP_MASTER_SECRET:
-        raise HTTPException(status_code=401, detail="Invalid Master API Key")
+    if not master_key or master_key != settings.WHATSAPP_MASTER_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid or missing Master API Key")
 
     session_id = payload.get("session_id", "default")
     phone = payload.get("phone") or payload.get("number")
@@ -787,53 +728,4 @@ async def n8n_outbound_whatsapp_send(
         json_data=json_data
     )
     
-    try:
-        from datetime import datetime
-        # Build standard message block
-        msg_obj = {}
-        if isinstance(res, dict):
-            if "message" in res and isinstance(res["message"], dict):
-                msg_obj = res["message"]
-            elif "id" in res:
-                msg_obj = res
-        
-        if isinstance(res, list) and len(res) > 0 and isinstance(res[0], dict):
-            if "message" in res[0]:
-                msg_obj = res[0]["message"]
-            elif "id" in res[0]:
-                msg_obj = res[0]
-
-        now_ts = int(datetime.utcnow().timestamp())
-        msg_id = msg_obj.get("id") or msg_obj.get("message_id") or msg_obj.get("key", {}).get("id") or f"n8n_{now_ts}"
-        
-        event_payload = [{
-            "ok": True,
-            "event": "message.created",
-            "emittedAt": datetime.utcnow().isoformat() + "Z",
-            "tenant_id": tenant_id,
-            "session_id": session_id,
-            "contact_jid": json_data["jid"],
-            "message": {
-                "id": msg_id,
-                "message_id": msg_id,
-                "jid": json_data["jid"],
-                "fromMe": True,
-                "text": message or msg_obj.get("text") or msg_obj.get("content") or msg_obj.get("caption") or "",
-                "content": message or msg_obj.get("text") or msg_obj.get("content") or msg_obj.get("caption") or "",
-                "timestamp": msg_obj.get("timestamp") or msg_obj.get("message_timestamp") or now_ts,
-                "status": "sent",
-                "media_url": msg_obj.get("media_url") or msg_obj.get("url") or payload.get("media_url") or payload.get("url")
-            }
-        }]
-        
-        await notify_crm_chat_listeners(
-            lead_id=json_data["jid"],
-            is_from_me=True,
-            sender="user",
-            messages=event_payload
-        )
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Erro ao notificar SSE listeners no /outbound/whatsapp/send: {e}")
-
-    return res
+    return JSONResponse(status_code=200, content=res)
