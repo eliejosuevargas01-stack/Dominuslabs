@@ -28,3 +28,6 @@ certs/
 # Git worktrees / local test clones
 test-integration/
 
+node_modules/
+dist/
+coverage/
