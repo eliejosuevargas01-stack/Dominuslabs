@@ -87,8 +87,8 @@ def read_public_project(public_token: str, db: Session = Depends(get_db)):
 
 # Tasks
 @router.get("/{project_id}/tasks", response_model=List[ProjectTask])
-def read_tasks(project_id: int, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
-    return task_repo.get_by_project(db, project_id)
+def read_tasks(project_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    return task_repo.get_by_project(db, project_id, skip=skip, limit=limit)
 
 @router.post("/{project_id}/tasks", response_model=ProjectTask)
 def create_task(project_id: int, task_in: ProjectTaskCreate, db: Session = Depends(get_db), current_user: str = Depends(check_project_edit_permission)):
@@ -111,16 +111,16 @@ def update_task(task_id: int, task_in: ProjectTaskUpdate, db: Session = Depends(
 
 # Additional reads for logs and assets
 @router.get("/{project_id}/assets", response_model=List[ProjectAsset])
-def read_assets(project_id: int, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
-    return asset_repo.get_by_project(db, project_id)
+def read_assets(project_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    return asset_repo.get_by_project(db, project_id, skip=skip, limit=limit)
 
 @router.get("/{project_id}/commits", response_model=List[CommitLog])
-def read_commits(project_id: int, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
-    return log_repo.get_commits_by_project(db, project_id)
+def read_commits(project_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    return log_repo.get_commits_by_project(db, project_id, skip=skip, limit=limit)
 
 @router.get("/{project_id}/deploys", response_model=List[DeployLog])
-def read_deploys(project_id: int, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
-    return log_repo.get_deploys_by_project(db, project_id)
+def read_deploys(project_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    return log_repo.get_deploys_by_project(db, project_id, skip=skip, limit=limit)
 
 # Public feedback and showcase endpoints
 from app.schemas.feedback import FeedbackCreate

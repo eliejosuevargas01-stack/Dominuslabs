@@ -3,8 +3,8 @@ from app.models.asset import ProjectAsset
 from app.schemas.asset import ProjectAssetCreate
 
 class AssetRepository:
-    def get_by_project(self, db: Session, project_id: int):
-        return db.query(ProjectAsset).filter(ProjectAsset.project_id == project_id).all()
+    def get_by_project(self, db: Session, project_id: int, skip: int = 0, limit: int = 100):
+        return db.query(ProjectAsset).filter(ProjectAsset.project_id == project_id).offset(skip).limit(limit).all()
 
     def create(self, db: Session, obj_in: ProjectAssetCreate):
         db_obj = ProjectAsset(**obj_in.model_dump())

@@ -95,21 +95,23 @@ def create_ssl_context(service_name: str = "default") -> ssl.SSLContext | None:
             or os.getenv("MTLS_KEY_CONTENT", "")
         )
 
-    # Se o certificado e a chave forem fornecidos via variável de ambiente em memória
     if cert_content and key_content:
-        tmp_cert = f"/tmp/dominus_{service_name}_mtls_cert.pem"
-        tmp_key = f"/tmp/dominus_{service_name}_mtls_key.pem"
+        import tempfile
         try:
-            with open(tmp_cert, "w", encoding="utf-8") as f_cert:
-                f_cert.write(cert_content)
-            with open(tmp_key, "w", encoding="utf-8") as f_key:
-                f_key.write(key_content)
+            cert_file = tempfile.NamedTemporaryFile(delete=False, suffix="_mtls_cert.pem", mode="w", encoding="utf-8")
+            cert_file.write(cert_content)
+            cert_file.close()
+            
+            key_file = tempfile.NamedTemporaryFile(delete=False, suffix="_mtls_key.pem", mode="w", encoding="utf-8")
+            key_file.write(key_content)
+            key_file.close()
 
-            cert_path = tmp_cert
-            key_path = tmp_key
-            logger.info(f"[mTLS] Certificados mTLS para '{service_name}' sanitizados e escritos em {tmp_cert}.")
+            cert_path = cert_file.name
+            key_path = key_file.name
+            logger.info(f"[mTLS] Certificados mTLS para '{service_name}' sanitizados e escritos de forma segura.")
         except Exception as e:
             logger.error(f"[mTLS] Falha ao escrever certificados temporários para '{service_name}': {e}")
+
 
     if not cert_path or not key_path or not os.path.exists(cert_path) or not os.path.exists(key_path):
         logger.warning(

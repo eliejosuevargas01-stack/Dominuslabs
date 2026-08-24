@@ -4,8 +4,8 @@ from app.schemas.task import ProjectTaskCreate, ProjectTaskUpdate
 from datetime import datetime
 
 class TaskRepository:
-    def get_by_project(self, db: Session, project_id: int):
-        return db.query(ProjectTask).filter(ProjectTask.project_id == project_id).all()
+    def get_by_project(self, db: Session, project_id: int, skip: int = 0, limit: int = 100):
+        return db.query(ProjectTask).filter(ProjectTask.project_id == project_id).offset(skip).limit(limit).all()
 
     def create(self, db: Session, obj_in: ProjectTaskCreate):
         db_obj = ProjectTask(**obj_in.model_dump())

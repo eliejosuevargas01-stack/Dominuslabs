@@ -7,3 +7,4 @@ dist
 **/.cache
 test-integration
 project-hub/frontend
+.env.example

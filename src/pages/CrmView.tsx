@@ -68,7 +68,7 @@ export default function CrmView() {
       setMetrics(metricsData);
       setLoadingMetrics(false);
     } catch (err: any) {
-      setError(err.message || 'Erro de conexão com a API.');
+      setError('Erro de conexão com a API.');
       setLoadingLeads(false);
       setLoadingMetrics(false);
     }

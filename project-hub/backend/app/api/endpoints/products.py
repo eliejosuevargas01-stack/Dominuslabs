@@ -16,6 +16,20 @@ router = APIRouter()
 def generate_slug(name: str) -> str:
     return re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
 
+def _serialize_product(p: Product) -> dict:
+    return {
+        "id": str(p.id),
+        "tenant_id": p.tenant_id,
+        "name": p.nome,
+        "category": p.categoria,
+        "price": float(p.preco) if p.preco else 0.0,
+        "description": p.descricao,
+        "available": p.disponivel,
+        "image_url": p.imagem_url,
+        "stock": getattr(p, 'estoque', 0),
+        "created_at": p.created_at
+    }
+
 @router.get("", response_model=List[ProductResponse])
 async def get_products(
     db: Session = Depends(get_db),
@@ -24,22 +38,7 @@ async def get_products(
     user = db.query(User).filter(User.email == current_user).first()
     tenant_id = await get_tenant_id_for_user(user, db)
     db_products = db.query(Product).filter(Product.tenant_id == tenant_id).all()
-    
-    results = []
-    for p in db_products:
-        results.append({
-            "id": str(p.id),
-            "tenant_id": p.tenant_id,
-            "name": p.nome,
-            "category": p.categoria,
-            "price": float(p.preco) if p.preco else 0.0,
-            "description": p.descricao,
-            "available": p.disponivel,
-            "image_url": p.imagem_url,
-            "stock": getattr(p, 'estoque', 0),
-            "created_at": p.created_at
-        })
-    return results
+    return [_serialize_product(p) for p in db_products]
 
 @router.post("", response_model=ProductResponse)
 async def create_product(
@@ -65,18 +64,7 @@ async def create_product(
     db.add(new_product)
     db.commit()
     db.refresh(new_product)
-    return {
-        "id": str(new_product.id),
-        "tenant_id": new_product.tenant_id,
-        "name": new_product.nome,
-        "category": new_product.categoria,
-        "price": float(new_product.preco) if new_product.preco else 0.0,
-        "description": new_product.descricao,
-        "available": new_product.disponivel,
-        "image_url": new_product.imagem_url,
-        "stock": getattr(new_product, 'estoque', 0),
-        "created_at": new_product.created_at
-    }
+    return _serialize_product(new_product)
 
 @router.put("/{product_id}", response_model=ProductResponse)
 async def update_product(
@@ -104,18 +92,7 @@ async def update_product(
         
     db.commit()
     db.refresh(product)
-    return {
-        "id": str(product.id),
-        "tenant_id": product.tenant_id,
-        "name": product.nome,
-        "category": product.categoria,
-        "price": float(product.preco) if product.preco else 0.0,
-        "description": product.descricao,
-        "available": product.disponivel,
-        "image_url": product.imagem_url,
-        "stock": getattr(product, 'estoque', 0),
-        "created_at": product.created_at
-    }
+    return _serialize_product(product)
 
 @router.delete("/{product_id}")
 async def delete_product(

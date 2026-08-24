@@ -6,10 +6,17 @@ from app.core.config import settings
 is_sqlite = settings.SQLALCHEMY_DATABASE_URI.startswith("sqlite")
 connect_args = {"check_same_thread": False} if is_sqlite else {}
 
+engine_kwargs = {
+    "connect_args": connect_args,
+    "pool_pre_ping": True,
+}
+if not is_sqlite:
+    engine_kwargs["pool_recycle"] = 1800
+    engine_kwargs["pool_timeout"] = 30
+
 engine = create_engine(
     settings.SQLALCHEMY_DATABASE_URI, 
-    connect_args=connect_args,
-    pool_pre_ping=True
+    **engine_kwargs
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

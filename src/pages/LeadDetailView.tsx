@@ -94,7 +94,7 @@ export default function LeadDetailView() {
       // 2. Fetch messages for the lead
       await fetchLeadMessages(true);
     } catch (err: any) {
-      setError(err.message || 'Erro ao carregar o lead.');
+      setError('Erro ao carregar o lead.');
     } finally {
       setLoading(false);
     }
@@ -213,7 +213,7 @@ export default function LeadDetailView() {
       setUpdateSuccess(true);
       setTimeout(() => setUpdateSuccess(false), 3000);
     } catch (err: any) {
-      alert(err.message || 'Erro ao salvar o lead.');
+      alert('Erro ao salvar o lead.');
     } finally {
       setUpdatingLead(false);
     }
@@ -232,7 +232,7 @@ export default function LeadDetailView() {
       alert('Lead excluído com sucesso!');
       navigate('/crm');
     } catch (err: any) {
-      alert(err.message || 'Erro ao excluir o lead.');
+      alert('Erro ao excluir o lead.');
     } finally {
       setDeletingLead(false);
     }
@@ -278,7 +278,7 @@ export default function LeadDetailView() {
         });
       }
     } catch (err: any) {
-      alert(err.message || 'Erro ao enviar mensagem.');
+      alert('Erro ao enviar mensagem.');
     } finally {
       setSendingMessage(false);
     }

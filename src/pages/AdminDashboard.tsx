@@ -49,7 +49,7 @@ export default function AdminDashboard() {
       loadDashboardData();
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Erro ao excluir o projeto.');
+      setError('Erro ao excluir o projeto.');
     }
   };
   

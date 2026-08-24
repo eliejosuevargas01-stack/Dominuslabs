@@ -79,7 +79,7 @@ export default function ScrapperView() {
       setQueries('');
       // Optional reset
     } catch (err: any) {
-      setError(err.message || 'Erro ao tentar iniciar a busca.');
+      setError('Erro ao tentar iniciar a busca.');
     } finally {
       setLoading(false);
     }

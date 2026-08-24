@@ -70,7 +70,7 @@ export default function PublicProjectView() {
       loadPublicData(true);
     } catch (err: any) {
       console.error(err);
-      setFeedbackError(err.message || 'Erro ao enviar avaliação.');
+      setFeedbackError('Erro ao enviar avaliação.');
     } finally {
       setSubmittingFeedback(false);
     }

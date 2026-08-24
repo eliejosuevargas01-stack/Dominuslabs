@@ -119,20 +119,43 @@ async def make_whatsapp_api_request(
         if master_secret and master_secret != "default_master_secret":
             req_headers["X-Master-API-Key"] = master_secret
 
+    MAX_RETRIES = 3
+    RETRY_DELAY = 1.0
+
     async with get_mtls_async_client(timeout=timeout, service_name="whatsapp") as client:
-        try:
-            response = await client.request(
-                method,
-                url,
-                headers=req_headers,
-                json=json_data
-            )
-        except Exception as e:
-            logger.error(f"[FLOW-STEP 6] ERROR: WhatsApp API authentication with JWT failed ({e})")
-            print(f"[FLOW-STEP 6] ERROR: WhatsApp API authentication with JWT failed ({e})", flush=True)
+        last_exception = None
+        response = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = await client.request(
+                    method,
+                    url,
+                    headers=req_headers,
+                    json=json_data
+                )
+                if response.status_code not in (502, 503, 504, 408):
+                    break
+                else:
+                    logger.warning(f"WhatsApp API returned {response.status_code}. Retrying {attempt+1}/{MAX_RETRIES}...")
+                    import asyncio
+                    await asyncio.sleep(RETRY_DELAY * (2 ** attempt))
+            except Exception as e:
+                last_exception = e
+                logger.warning(f"WhatsApp API request failed: {e}. Retrying {attempt+1}/{MAX_RETRIES}...")
+                import asyncio
+                await asyncio.sleep(RETRY_DELAY * (2 ** attempt))
+        
+        if response is None and last_exception:
+            logger.error(f"[FLOW-STEP 6] ERROR: WhatsApp API request failed ({last_exception})")
+            print(f"[FLOW-STEP 6] ERROR: WhatsApp API request failed ({last_exception})", flush=True)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Não foi possível conectar à API de WhatsApp: {str(e)}"
+                detail=f"Não foi possível conectar à API de WhatsApp: {str(last_exception)}"
+            )
+        elif response is None or response.status_code in (502, 503, 504, 408):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="A API de WhatsApp está indisponível no momento após várias tentativas."
             )
 
         if response.status_code == 401:

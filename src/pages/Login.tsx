@@ -40,7 +40,7 @@ export default function Login() {
       navigate('/project-hub');
       toast.success('Login efetuado com sucesso!');
     } catch (err: unknown) {
-      const errorMessage = (err as Error).message || 'Credenciais inválidas. Tente novamente.';
+      const errorMessage = 'Credenciais inválidas ou erro no servidor. Tente novamente.';
       toast.error(errorMessage);
       setError(errorMessage);
     } finally {

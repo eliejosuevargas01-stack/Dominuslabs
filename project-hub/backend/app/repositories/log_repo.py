@@ -10,8 +10,8 @@ class LogRepository:
         db.refresh(db_obj)
         return db_obj
 
-    def get_commits_by_project(self, db: Session, project_id: int):
-        return db.query(CommitLog).filter(CommitLog.project_id == project_id).order_by(CommitLog.commit_date.desc()).all()
+    def get_commits_by_project(self, db: Session, project_id: int, skip: int = 0, limit: int = 100):
+        return db.query(CommitLog).filter(CommitLog.project_id == project_id).order_by(CommitLog.commit_date.desc()).offset(skip).limit(limit).all()
 
     def create_deploy_log(self, db: Session, obj_in: DeployLogCreate):
         dump = obj_in.model_dump()
@@ -23,7 +23,7 @@ class LogRepository:
         db.refresh(db_obj)
         return db_obj
 
-    def get_deploys_by_project(self, db: Session, project_id: int):
-        return db.query(DeployLog).filter(DeployLog.project_id == project_id).order_by(DeployLog.deploy_date.desc()).all()
+    def get_deploys_by_project(self, db: Session, project_id: int, skip: int = 0, limit: int = 100):
+        return db.query(DeployLog).filter(DeployLog.project_id == project_id).order_by(DeployLog.deploy_date.desc()).offset(skip).limit(limit).all()
 
 log_repo = LogRepository()

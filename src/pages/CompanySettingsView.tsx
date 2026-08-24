@@ -107,7 +107,7 @@ export default function CompanySettingsView() {
       });
       setProducts(prods);
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao sincronizar diretrizes corporativas.');
+      toast.error('Erro ao sincronizar diretrizes corporativas.');
     } finally {
       setLoading(false);
     }
@@ -120,7 +120,7 @@ export default function CompanySettingsView() {
       setSettings(updated);
       toast.success('Diretrizes e parâmetros corporativos salvos com sucesso!');
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao atualizar parâmetros institucionais.');
+      toast.error('Erro ao atualizar parâmetros institucionais.');
     } finally {
       setSaving(false);
     }
@@ -200,7 +200,7 @@ export default function CompanySettingsView() {
       setNewItem(prev => ({ ...prev, image_url: result.media_url }));
       toast.success('Mídia enviada com sucesso!');
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao enviar mídia.');
+      toast.error('Erro ao enviar mídia.');
     } finally {
       setUploadingMedia(false);
     }
@@ -224,7 +224,7 @@ export default function CompanySettingsView() {
       setNewItem(prev => ({ ...prev, image_url: result.media_url }));
       toast.success('Mídia enviada com sucesso!');
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao enviar mídia.');
+      toast.error('Erro ao enviar mídia.');
     } finally {
       setUploadingMedia(false);
     }

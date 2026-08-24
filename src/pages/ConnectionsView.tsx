@@ -99,7 +99,7 @@ export default function ConnectionsView() {
       setSessions(list);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Erro ao carregar conexões.');
+      setError('Erro ao carregar conexões.');
     } finally {
       setLoading(false);
     }
@@ -184,7 +184,7 @@ export default function ConnectionsView() {
         loadSessions();
       }
     } catch (err: any) {
-      setError(err.message || 'Falha ao criar sessão do WhatsApp.');
+      setError('Falha ao criar sessão do WhatsApp.');
     } finally {
       setWaCreating(false);
     }
@@ -209,7 +209,7 @@ export default function ConnectionsView() {
     } catch (err: any) {
       setPollingActive(false);
       setPairingSession(null);
-      setError(err.message || `Erro ao conectar sessão: ${session.name}`);
+      setError(`Erro ao conectar sessão: ${session.name}`);
     }
   };
 
@@ -225,7 +225,7 @@ export default function ConnectionsView() {
       await disconnectWhatsappSession(session.id);
       loadSessions();
     } catch (err: any) {
-      setError(err.message || `Erro ao desconectar dispositivo da sessão: ${session.name}`);
+      setError(`Erro ao desconectar dispositivo da sessão: ${session.name}`);
       setLoading(false);
     }
   };
@@ -242,7 +242,7 @@ export default function ConnectionsView() {
       await deleteWhatsappSession(session.id);
       loadSessions();
     } catch (err: any) {
-      setError(err.message || `Erro ao excluir sessão do servidor: ${session.name}`);
+      setError(`Erro ao excluir sessão do servidor: ${session.name}`);
       setLoading(false);
     }
   };
@@ -264,7 +264,7 @@ export default function ConnectionsView() {
       setIgPassword('');
       loadSessions();
     } catch (err: any) {
-      setError(err.message || 'Falha ao autenticar no Instagram. Verifique as credenciais.');
+      setError('Falha ao autenticar no Instagram. Verifique as credenciais.');
     } finally {
       setIgLoggingIn(false);
     }
@@ -292,7 +292,7 @@ export default function ConnectionsView() {
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Falha ao carregar configurações.');
+      setError('Falha ao carregar configurações.');
       setIsSettingsModalOpen(false);
     } finally {
       setSettingsLoading(false);
@@ -324,7 +324,7 @@ export default function ConnectionsView() {
       setIsSettingsModalOpen(false);
       setSettingsSession(null);
     } catch (err: any) {
-      setError(err.message || 'Falha ao salvar configurações.');
+      setError('Falha ao salvar configurações.');
     } finally {
       setSettingsSaving(false);
     }
@@ -342,7 +342,7 @@ export default function ConnectionsView() {
       await logoutInstagramProxy(session.id);
       loadSessions();
     } catch (err: any) {
-      setError(err.message || `Erro ao desconectar conta do Instagram: @${session.name}`);
+      setError(`Erro ao desconectar conta do Instagram: @${session.name}`);
       setLoading(false);
     }
   };

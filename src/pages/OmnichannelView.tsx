@@ -794,7 +794,7 @@ export default function OmnichannelView() {
         }
         setChatMessages(msgsList);
       } catch (err: any) {
-        alert(err.message || 'Falha ao enviar mensagem de voz.');
+        alert('Falha ao enviar mensagem de voz.');
       } finally {
         setUploadingMedia(false);
         setIsRecording(false);
@@ -885,7 +885,7 @@ export default function OmnichannelView() {
       }
       setChatMessages(msgsList);
     } catch (err: any) {
-      alert(err.message || 'Falha ao enviar arquivo de mídia.');
+      alert('Falha ao enviar arquivo de mídia.');
     } finally {
       setUploadingMedia(false);
       if (fileInputRef.current) {
