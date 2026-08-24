@@ -1,7 +1,15 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+if os.path.exists(".env.example"):
+    load_dotenv(".env.example")
+if os.path.exists(".env"):
+    load_dotenv(".env", override=True)
+
+# Clean empty strings from os.environ so Pydantic defaults apply
+for k, v in list(os.environ.items()):
+    if v in ('""', "''", ""):
+        del os.environ[k]
 
 from pydantic_settings import BaseSettings
 from typing import List, Union

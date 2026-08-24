@@ -35,6 +35,8 @@ class CompanySettingBase(BaseModel):
     accepted_payment_types: Optional[List[str]] = []
     payment_notes: Optional[str] = None
 
+    menu_catalog: Optional[List[Dict[str, Any]]] = []
+
     values_mission: Optional[str] = None
     additional_notes: Optional[str] = None
 
