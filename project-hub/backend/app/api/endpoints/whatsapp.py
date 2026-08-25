@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user, check_crm_permission
 from app.models.user import User
 import logging
-from app.core.mtls_client import get_mtls_async_client
+from app.core.http_client import get_async_client
 
 logger = logging.getLogger("whatsapp")
 router = APIRouter()
@@ -122,7 +122,7 @@ async def make_whatsapp_api_request(
     MAX_RETRIES = 3
     RETRY_DELAY = 1.0
 
-    async with get_mtls_async_client(timeout=timeout, service_name="whatsapp") as client:
+    async with get_async_client(timeout=timeout, service_name="whatsapp") as client:
         last_exception = None
         response = None
         for attempt in range(MAX_RETRIES):
@@ -651,14 +651,13 @@ async def provision_whatsapp(
 
     print(f"\n[M2M-AUTH-FLOW] >>> Solicitado VÍNCULO MANUAL para {user.email}", flush=True)
 
-    from app.core.mtls_client import get_mtls_async_client
     from app.services.whatsapp_service import get_tenant_id_for_user
 
     tenant_id = await get_tenant_id_for_user(user, db)
 
     try:
-        async with get_mtls_async_client(timeout=20.0, service_name="whatsapp") as client:
-            print(f"[M2M-AUTH-FLOW] >>> Enviando solicitação mTLS de provisionamento M2M para WhatsApp API: email={user.email}, tenant_id={tenant_id}", flush=True)
+        async with get_async_client(timeout=20.0, service_name="whatsapp") as client:
+            print(f"[M2M-AUTH-FLOW] >>> Enviando solicitação de provisionamento M2M para WhatsApp API: email={user.email}, tenant_id={tenant_id}", flush=True)
             headers = {"X-Master-API-Key": settings.WHATSAPP_MASTER_SECRET} if getattr(settings, "WHATSAPP_MASTER_SECRET", None) else {}
             resp = await client.post(
                 provision_url,
