@@ -1,3 +1,9 @@
+"""
+Documentação do módulo n8n_service.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o serviço de domínio n8n_service.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o serviço de domínio n8n_service funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 import httpx
 import logging
 import json
@@ -44,11 +50,21 @@ MOCK_CONVERSATIONS = {}
 MOCK_ACTIVITIES = {}
 
 def safe_parse_json(val: Any) -> dict:
+    """
+    Função/Método safe_parse_json.
+
+    O que faz: Processa safe_parse_json recebendo os parâmetros (val) no contexto de o serviço de domínio n8n_service.
+    Impacto na regra de negócio: Assegura que o fluxo da operação safe_parse_json seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
+# Lógica de decisão (if): Avalia 'if isinstance(val, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if isinstance(val, dict):
         return val
+# Lógica de decisão (if): Avalia 'if isinstance(val, str) and va...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if isinstance(val, str) and val.strip():
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
         try:
             parsed = json.loads(val)
+# Lógica de decisão (if): Avalia 'if isinstance(parsed, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if isinstance(parsed, dict):
                 return parsed
         except Exception:
@@ -56,10 +72,17 @@ def safe_parse_json(val: Any) -> dict:
     return {}
 
 def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
+    """
+    Função/Método map_n8n_lead.
+
+    O que faz: Processa map_n8n_lead recebendo os parâmetros (lead, conversations_map) no contexto de o serviço de domínio n8n_service.
+    Impacto na regra de negócio: Assegura que o fluxo da operação map_n8n_lead seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
     raw_id = str(lead.get("id") or lead.get("lead_id") or lead.get("_id") or "")
     c_jid = str(lead.get("contact_jid") or lead.get("jid") or "")
     session_id = lead.get("session_id") or lead.get("whatsapp_instance") or ""
 
+# Lógica de decisão (if): Avalia 'if raw_id and "___" in raw_id:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if raw_id and "___" in raw_id:
         lead_id = raw_id
     elif c_jid and session_id and session_id != "default":
@@ -71,13 +94,16 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     else:
         lead_id = "unknown_lead"
 
+# Lógica de decisão (if): Avalia 'if lead_id and lead_id.lower()...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if lead_id and lead_id.lower() != "none" and lead_id != "":
         RAW_LEADS_CACHE[lead_id] = copy.deepcopy(lead)
+# Lógica de decisão (if): Avalia 'if c_jid and c_jid != lead_id ...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if c_jid and c_jid != lead_id and c_jid not in RAW_LEADS_CACHE:
             RAW_LEADS_CACHE[c_jid] = copy.deepcopy(lead)
 
     raw_payload = lead.get("payload")
     payload_dict = safe_parse_json(raw_payload) if isinstance(raw_payload, str) else (raw_payload or {})
+# Lógica de decisão (if): Avalia 'if not isinstance(payload_dict...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not isinstance(payload_dict, dict):
         payload_dict = {}
 
@@ -85,35 +111,47 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
 
     # 1. Lookup in KNOWN_CONTACT_NAMES first
     c_jid_lookup = str(lead.get("contact_jid") or lead.get("jid") or lead.get("id") or "").strip()
+# Lógica de decisão (if): Avalia 'if c_jid_lookup in KNOWN_CONTA...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if c_jid_lookup in KNOWN_CONTACT_NAMES:
         person_name = KNOWN_CONTACT_NAMES[c_jid_lookup]
     else:
+# Lógica de repetição (for): Itera sobre elementos de 'for k, v in KNOWN_CO...' processando múltiplos dados em lote para as regras de domínio.
         for k, v in KNOWN_CONTACT_NAMES.items():
+# Lógica de decisão (if): Avalia 'if k in c_jid_lookup or c_jid_...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if k in c_jid_lookup or c_jid_lookup in k:
                 person_name = v
                 break
 
     # 2. Check explicitly provided push_name/nome fields if not a raw JID
+# Lógica de decisão (if): Avalia 'if not person_name:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not person_name:
+# Lógica de repetição (for): Itera sobre elementos de 'for name_key in ("pu...' processando múltiplos dados em lote para as regras de domínio.
         for name_key in ("push_name", "nome", "nome_empresa", "empresa_nome", "company_name"):
             val = lead.get(name_key)
+# Lógica de decisão (if): Avalia 'if val and isinstance(val, str...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if val and isinstance(val, str) and val.strip():
                 v_clean = val.strip()
                 v_lower = v_clean.lower()
+# Lógica de decisão (if): Avalia 'if v_lower not in ("desconheci...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if v_lower not in ("desconhecido", "unknown", "null", "none") and "@lid" not in v_lower and "@s.whatsapp.net" not in v_lower and "@g.us" not in v_lower:
                     person_name = v_clean
                     break
 
     # 3. Use display_phone if present
+# Lógica de decisão (if): Avalia 'if not person_name:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not person_name:
         raw_phone = lead.get("display_phone") or lead.get("whatsapp") or lead.get("telefone_contato") or lead.get("phone")
+# Lógica de decisão (if): Avalia 'if raw_phone and isinstance(ra...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if raw_phone and isinstance(raw_phone, str) and raw_phone.strip() and raw_phone.strip().lower() not in ("null", "none") and raw_phone.strip() != "Grupo WhatsApp":
             person_name = raw_phone.strip()
 
     # 4. Fallback formatted name for JID
+# Lógica de decisão (if): Avalia 'if not person_name:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not person_name:
         raw_jid = lead.get("contact_jid") or lead.get("jid") or lead.get("id")
+# Lógica de decisão (if): Avalia 'if raw_jid and isinstance(raw_...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if raw_jid and isinstance(raw_jid, str) and raw_jid.strip() and raw_jid.strip().lower() not in ("null", "none"):
+# Lógica de decisão (if): Avalia 'if "@g.us" in raw_jid:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if "@g.us" in raw_jid:
                 person_name = f"Grupo WhatsApp"
             elif "@lid" in raw_jid or "@s.whatsapp.net" in raw_jid:
@@ -129,29 +167,37 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     raw_tel = lead.get("display_phone") or lead.get("telefone") or lead.get("telefone_contato")
     raw_wa = lead.get("whatsapp") or lead.get("phone")
     whatsapp = ""
+# Lógica de repetição (for): Itera sobre elementos de 'for val in (raw_tel,...' processando múltiplos dados em lote para as regras de domínio.
     for val in (raw_tel, raw_wa):
+# Lógica de decisão (if): Avalia 'if val is not None and str(val...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if val is not None and str(val).strip().lower() not in ("null", ""):
             whatsapp = str(val).strip()
             break
 
     raw_ig = lead.get("instagram")
     instagram = ""
+# Lógica de decisão (if): Avalia 'if raw_ig is not None and str(...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if raw_ig is not None and str(raw_ig).strip().lower() not in ("null", ""):
         instagram = str(raw_ig).strip()
 
+# Lógica de decisão (if): Avalia 'if not instagram:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not instagram:
+# Lógica de repetição (for): Itera sobre elementos de 'for val in (lead.get...' processando múltiplos dados em lote para as regras de domínio.
         for val in (lead.get("link_destibo_botao"), lead.get("url_site"), payload_dict.get("url_site")):
+# Lógica de decisão (if): Avalia 'if val is not None and "instag...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if val is not None and "instagram.com" in str(val).lower():
                 instagram = str(val).strip()
                 break
 
     raw_email = lead.get("email") or lead.get("email_contato") or payload_dict.get("email")
     email = ""
+# Lógica de decisão (if): Avalia 'if raw_email is not None and s...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if raw_email is not None and str(raw_email).strip().lower() not in ("null", ""):
         email = str(raw_email).strip()
 
     status_raw = str(lead.get("status") or "Prospectado").strip()
     status_upper = status_raw.upper()
+# Lógica de decisão (if): Avalia 'if status_upper in ("NOVO", "F...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if status_upper in ("NOVO", "FRIO", "DISCOVERED", "PROSPECTADO"):
         status = "Prospectado"
     elif status_upper in ("CONTATADO", "RESPONDED", "ABORDAGEM ENVIADA", "ABORDADO", "OUTREACH_SENT", "AGUARDANDO_RETORNO", "ABORDAGEM INICIADA"):
@@ -169,6 +215,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     else:
         status = status_raw
 
+# Lógica de decisão (if): Avalia 'if whatsapp:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if whatsapp:
         origin = "WhatsApp"
     elif instagram:
@@ -184,6 +231,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         instagram = re.sub(r'[^a-zA-Z0-9_.]', '', clean_name.replace(" ", "").lower())
 
     has_messages = False
+# Lógica de decisão (if): Avalia 'if lead_id in MOCK_CONVERSATIO...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if lead_id in MOCK_CONVERSATIONS and len(MOCK_CONVERSATIONS[lead_id]) > 0:
         has_messages = True
     elif conversations_map and lead_id in conversations_map and len(conversations_map[lead_id]) > 0:
@@ -192,10 +240,14 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         has_messages = True
 
     mensagem_enviada = False
+# Lógica de decisão (if): Avalia 'if lead_id in MOCK_CONVERSATIO...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if lead_id in MOCK_CONVERSATIONS:
+# Lógica de decisão (if): Avalia 'if any(m.get("sender") == "use...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if any(m.get("sender") == "user" for m in MOCK_CONVERSATIONS[lead_id]):
             mensagem_enviada = True
+# Lógica de decisão (if): Avalia 'if conversations_map and lead_...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if conversations_map and lead_id in conversations_map:
+# Lógica de decisão (if): Avalia 'if any(...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if any(
             m.get("tipo") == "mensagem_enviada" or
             m.get("sender") == "user" or
@@ -204,25 +256,31 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         ):
             mensagem_enviada = True
     raw_me = lead.get("mensagem_enviada") or lead.get("has_sent_message")
+# Lógica de decisão (if): Avalia 'if raw_me is True or str(raw_m...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if raw_me is True or str(raw_me).strip().lower() == "true":
         mensagem_enviada = True
 
+# Lógica de decisão (if): Avalia 'if status == "Abordagem Enviad...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if status == "Abordagem Enviada":
         mensagem_enviada = True
         has_messages = True
 
+# Lógica de decisão (if): Avalia 'if mensagem_enviada and status...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if mensagem_enviada and status == "Prospectado":
         status = "Abordagem Enviada"
 
     notes = lead.get("notes") or lead.get("falha_identificada") or lead.get("dor_identificada") or ""
+# Lógica de decisão (if): Avalia 'if notes is not None and str(n...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if notes is not None and str(notes).strip().lower() in ("null", ""):
         notes = ""
 
     proposal = lead.get("proposta_pronta") or lead.get("proposal") or lead.get("proposta_inicial") or ""
+# Lógica de decisão (if): Avalia 'if proposal is not None and st...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if proposal is not None and str(proposal).strip().lower() in ("null", ""):
         proposal = ""
 
     responsible = lead.get("responsible") or lead.get("responsavel") or "Eliezer"
+# Lógica de decisão (if): Avalia 'if responsible is not None and...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if responsible is not None and str(responsible).strip().lower() in ("null", ""):
         responsible = "Eliezer"
 
@@ -230,20 +288,26 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     created_at = lead.get("created_at") or lead.get("createdAt") or lead.get("data_coleta")
 
     ultima_mensagem = lead.get("ultima_mensagem") or lead.get("content") or lead.get("message") or ""
+# Lógica de decisão (if): Avalia 'if "mensagens" in lead and isi...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if "mensagens" in lead and isinstance(lead["mensagens"], list) and len(lead["mensagens"]) > 0:
         has_messages = True
+# Lógica de repetição (for): Itera sobre elementos de 'for m in reversed(le...' processando múltiplos dados em lote para as regras de domínio.
         for m in reversed(lead["mensagens"]):
+# Lógica de decisão (if): Avalia 'if isinstance(m, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if isinstance(m, dict):
                 m_txt = m.get("content") or m.get("message") or ""
+# Lógica de decisão (if): Avalia 'if m_txt:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if m_txt:
                     ultima_mensagem = m_txt
                     ts_last = m.get("message_timestamp") or m.get("created_at")
+# Lógica de decisão (if): Avalia 'if ts_last and (not last_inter...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                     if ts_last and (not last_interaction or ts_last > str(last_interaction)):
                         last_interaction = ts_last
                     break
 
     raw_falha = lead.get("falha_identificada")
     falha_identificada = ""
+# Lógica de decisão (if): Avalia 'if raw_falha is not None and s...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if raw_falha is not None and str(raw_falha).strip().lower() not in ("null", ""):
         falha_identificada = str(raw_falha).strip()
     elif notes:
@@ -251,24 +315,30 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
 
     raw_segmento = lead.get("segmento") or lead.get("nicho")
     segmento = ""
+# Lógica de decisão (if): Avalia 'if raw_segmento is not None an...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if raw_segmento is not None and str(raw_segmento).strip().lower() not in ("null", ""):
         segmento = str(raw_segmento).strip()
 
     raw_solucao = lead.get("solucao_recomendada") or lead.get("servico_ofertado")
     solucao_recomendada = ""
+# Lógica de decisão (if): Avalia 'if raw_solucao is not None and...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if raw_solucao is not None and str(raw_solucao).strip().lower() not in ("null", ""):
         solucao_recomendada = str(raw_solucao).strip()
 
     profile_pic = lead.get("profile_pic_url") or lead.get("avatar") or ""
     session_id = lead.get("session_id") or lead.get("whatsapp_instance") or ""
+# Lógica de decisão (if): Avalia 'if not session_id and profile_...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not session_id and profile_pic and "/api/sessions/" in profile_pic:
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
         try:
             session_id = profile_pic.split("/api/sessions/")[1].split("/")[0]
         except Exception:
             pass
+# Lógica de decisão (if): Avalia 'if not session_id:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not session_id:
         session_id = "default"
 
+# Lógica de decisão (if): Avalia 'if profile_pic and profile_pic...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if profile_pic and profile_pic.startswith("/"):
         profile_pic = f"https://dominuslabs.online{profile_pic}"
 
@@ -306,7 +376,9 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     }
 
     origem_plataforma = lead.get("origem") or lead.get("origin") or ""
+# Lógica de decisão (if): Avalia 'if origin_lower := str(origem_...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if origin_lower := str(origem_plataforma).strip().lower():
+# Lógica de decisão (if): Avalia 'if origin_lower in ("whatsapp"...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if origin_lower in ("whatsapp", "instagram", "e-mail", "email", "telefone", "outro"):
             origem_plataforma = ""
     mapped_lead["origem"] = origem_plataforma
@@ -317,10 +389,13 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         or payload_dict.get("id_anuncio_meta")
         or (lead.get("payload") or {}).get("id_anuncio_meta") if isinstance(lead.get("payload"), dict) else None
     )
+# Lógica de decisão (if): Avalia 'if id_anuncio_meta:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if id_anuncio_meta:
         mapped_lead["id_anuncio_meta"] = str(id_anuncio_meta).strip()
 
+# Lógica de repetição (for): Itera sobre elementos de 'for k, v in payload_...' processando múltiplos dados em lote para as regras de domínio.
     for k, v in payload_dict.items():
+# Lógica de decisão (if): Avalia 'if k not in mapped_lead or map...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if k not in mapped_lead or mapped_lead[k] is None or mapped_lead[k] == "":
             mapped_lead[k] = v
 
@@ -349,14 +424,24 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         "email_contato", "origin", "nicho", "data_coleta", "updated_at", "updatedAt",
         "createdAt", "presenca_digital", "reputacao_google", "oportunidades_identificadas"
     ]
+# Lógica de repetição (for): Itera sobre elementos de 'for k in keys_to_rem...' processando múltiplos dados em lote para as regras de domínio.
     for k in keys_to_remove:
+# Lógica de decisão (if): Avalia 'if k in mapped_lead:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if k in mapped_lead:
             del mapped_lead[k]
 
     return mapped_lead
 
 def clean_n8n_response(res_data: Any) -> Any:
+    """
+    Função/Método clean_n8n_response.
+
+    O que faz: Processa clean_n8n_response recebendo os parâmetros (res_data) no contexto de o serviço de domínio n8n_service.
+    Impacto na regra de negócio: Assegura que o fluxo da operação clean_n8n_response seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
+# Lógica de decisão (if): Avalia 'if isinstance(res_data, list):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if isinstance(res_data, list):
+# Lógica de decisão (if): Avalia 'if len(res_data) > 0:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if len(res_data) > 0:
             return res_data[0]
         return {}
@@ -367,10 +452,12 @@ def parse_embedded_timestamp(text: str) -> tuple[str, str | None]:
     Searches for [DD/MM/YYYY HH:MM:SS] at the end of the text.
     Returns (cleaned_text, iso_timestamp_str).
     """
+# Lógica de decisão (if): Avalia 'if not text:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not text:
         return text, None
     pattern = r'\s*\[(\d{2})/(\d{2})/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})\]\s*$'
     match = re.search(pattern, text)
+# Lógica de decisão (if): Avalia 'if match:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if match:
         day, month, year, hour, minute, second = match.groups()
         cleaned_text = re.sub(pattern, '', text).strip()
@@ -380,32 +467,53 @@ def parse_embedded_timestamp(text: str) -> tuple[str, str | None]:
     return text, None
 
 def extract_text_content(m: dict) -> str:
+    """
+    Função/Método extract_text_content.
+
+    O que faz: Processa extract_text_content recebendo os parâmetros (m) no contexto de o serviço de domínio n8n_service.
+    Impacto na regra de negócio: Assegura que o fluxo da operação extract_text_content seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
+# Lógica de decisão (if): Avalia 'if not isinstance(m, dict):...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not isinstance(m, dict):
         return ""
 
+# Lógica de repetição (for): Itera sobre elementos de 'for field in ["conte...' processando múltiplos dados em lote para as regras de domínio.
     for field in ["content", "message", "text", "body", "caption", "conversation"]:
         val = m.get(field)
+# Lógica de decisão (if): Avalia 'if isinstance(val, str) and va...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if isinstance(val, str) and val.strip():
             return val.strip()
 
+# Lógica de repetição (for): Itera sobre elementos de 'for field in ["messa...' processando múltiplos dados em lote para as regras de domínio.
     for field in ["message", "content", "extendedTextMessage"]:
         val = m.get(field)
+# Lógica de decisão (if): Avalia 'if isinstance(val, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if isinstance(val, dict):
             sub_text = extract_text_content(val)
+# Lógica de decisão (if): Avalia 'if sub_text:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if sub_text:
                 return sub_text
 
+# Lógica de decisão (if): Avalia 'if "extendedTextMessage" in m ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if "extendedTextMessage" in m and isinstance(m["extendedTextMessage"], dict):
         text_val = m["extendedTextMessage"].get("text") or m["extendedTextMessage"].get("caption")
+# Lógica de decisão (if): Avalia 'if isinstance(text_val, str) a...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if isinstance(text_val, str) and text_val.strip():
             return text_val.strip()
 
     return ""
 
 def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
+    """
+    Função/Método map_n8n_message.
+
+    O que faz: Processa map_n8n_message recebendo os parâmetros (msg, lead_channel) no contexto de o serviço de domínio n8n_service.
+    Impacto na regra de negócio: Assegura que o fluxo da operação map_n8n_message seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
     mapped = []
 
     # 1. Support nested "mensagens" array format from n8n chat history payload
+# Lógica de decisão (if): Avalia 'if "mensagens" in msg and isin...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if "mensagens" in msg and isinstance(msg["mensagens"], list):
         session_id = msg.get("session_id")
         contact_jid = msg.get("contact_jid")
@@ -414,10 +522,13 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         parent_is_from_me = msg.get("is_from_me") if msg.get("is_from_me") is not None else msg.get("from_me") if msg.get("from_me") is not None else msg.get("fromMe", False)
         
         profile_pic_url = msg.get("profile_pic_url") or ""
+# Lógica de decisão (if): Avalia 'if profile_pic_url and profile...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if profile_pic_url and profile_pic_url.startswith("/"):
             profile_pic_url = f"https://dominuslabs.online{profile_pic_url}"
 
+# Lógica de repetição (for): Itera sobre elementos de 'for m in msg["mensag...' processando múltiplos dados em lote para as regras de domínio.
         for m in msg["mensagens"]:
+# Lógica de decisão (if): Avalia 'if not isinstance(m, dict):...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if not isinstance(m, dict):
                 continue
             msg_id = str(m.get("message_id") or m.get("id") or "")
@@ -464,6 +575,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         return mapped
 
     # 2. Support direct whats-api / n8n single incoming message object
+# Lógica de decisão (if): Avalia 'if "is_from_me" in msg or "mes...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if "is_from_me" in msg or "message_id" in msg or "contact_jid" in msg or "push_name" in msg or "session_id" in msg or "content" in msg or "chat_kind" in msg:
         msg_id = str(msg.get("message_id") or msg.get("id") or "")
         is_from_me = msg.get("is_from_me") if msg.get("is_from_me") is not None else msg.get("from_me") if msg.get("from_me") is not None else msg.get("fromMe", False)
@@ -474,6 +586,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         raw_media = msg.get("media_url") or msg.get("image_url") or msg.get("url") or msg.get("file_url") or msg.get("image") or None
         profile_pic_url = msg.get("profile_pic_url") or ""
 
+# Lógica de decisão (if): Avalia 'if profile_pic_url and profile...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if profile_pic_url and profile_pic_url.startswith("/"):
             profile_pic_url = f"https://dominuslabs.online{profile_pic_url}"
 
@@ -521,6 +634,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
     updated_at = msg.get("updatedAt") or msg.get("data") or msg.get("updated_at")
 
     user_text = msg.get("mensagem_enviada")
+# Lógica de decisão (if): Avalia 'if user_text is not None and s...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if user_text is not None and str(user_text).strip().lower() not in ("null", ""):
         cleaned_text, embedded_ts = parse_embedded_timestamp(str(user_text).strip())
         mapped.append({
@@ -546,6 +660,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
         })
 
     lead_text = msg.get("resposta")
+# Lógica de decisão (if): Avalia 'if lead_text is not None and s...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if lead_text is not None and str(lead_text).strip().lower() not in ("null", ""):
         cleaned_text, embedded_ts = parse_embedded_timestamp(str(lead_text).strip())
         mapped.append({
@@ -571,7 +686,15 @@ def update_raw_lead(raw_lead: dict, payload: dict) -> dict:
 
     # Helper function to check and update keys at a given dict level
     def update_keys(d: dict, mappings: dict):
+        """
+        Função/Método update_keys.
+
+        O que faz: Atualização e modificação de informações para update_keys recebendo os parâmetros (d, mappings) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação update_keys seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
+# Lógica de repetição (for): Itera sobre elementos de 'for target_key, val ...' processando múltiplos dados em lote para as regras de domínio.
         for target_key, val in mappings.items():
+# Lógica de decisão (if): Avalia 'if target_key in d:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if target_key in d:
                 d[target_key] = val
 
@@ -580,6 +703,7 @@ def update_raw_lead(raw_lead: dict, payload: dict) -> dict:
     
     # Name mappings
     name_val = payload.get("company_name")
+# Lógica de decisão (if): Avalia 'if name_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if name_val is not None:
         top_mappings["empresa_nome"] = name_val
         top_mappings["nome_empresa"] = name_val
@@ -587,6 +711,7 @@ def update_raw_lead(raw_lead: dict, payload: dict) -> dict:
 
     # Phone mappings
     phone_val = payload.get("whatsapp")
+# Lógica de decisão (if): Avalia 'if phone_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if phone_val is not None:
         top_mappings["telefone_contato"] = phone_val
         top_mappings["telefone"] = phone_val
@@ -594,50 +719,60 @@ def update_raw_lead(raw_lead: dict, payload: dict) -> dict:
 
     # Email mappings
     email_val = payload.get("email")
+# Lógica de decisão (if): Avalia 'if email_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if email_val is not None:
         top_mappings["email_contato"] = email_val
         top_mappings["email"] = email_val
 
     # Status
     status_val = payload.get("status")
+# Lógica de decisão (if): Avalia 'if status_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if status_val is not None:
         top_mappings["status"] = status_val
 
     # Origin
     origem_val = payload.get("origem") or payload.get("origin")
+# Lógica de decisão (if): Avalia 'if origem_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if origem_val is not None:
         top_mappings["origem"] = origem_val
         top_mappings["origin"] = origem_val
 
     # Nicho/Segmento
     segmento_val = payload.get("segmento") or payload.get("nicho")
+# Lógica de decisão (if): Avalia 'if segmento_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if segmento_val is not None:
         top_mappings["nicho"] = segmento_val
         top_mappings["segmento"] = segmento_val
 
     # Proposal
     proposal_val = payload.get("proposal") or payload.get("proposta_inicial")
+# Lógica de decisão (if): Avalia 'if proposal_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if proposal_val is not None:
         top_mappings["proposta_inicial"] = proposal_val
         top_mappings["proposta_pronta"] = proposal_val
         top_mappings["proposal"] = proposal_val
 
     # Localizacao, score, temperatura, lid
+# Lógica de repetição (for): Itera sobre elementos de 'for k in ["localizac...' processando múltiplos dados em lote para as regras de domínio.
     for k in ["localizacao", "score", "temperatura", "lid"]:
+# Lógica de decisão (if): Avalia 'if k in payload:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if k in payload:
             top_mappings[k] = payload[k]
 
     # Notes / falha / dor
     notes_val = payload.get("notes")
+# Lógica de decisão (if): Avalia 'if notes_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if notes_val is not None:
         top_mappings["notes"] = notes_val
         top_mappings["falha_identificada"] = notes_val
         top_mappings["dor_identificada"] = notes_val
+# Lógica de decisão (if): Avalia 'if "falha_identificada" in pay...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if "falha_identificada" in payload:
         top_mappings["falha_identificada"] = payload["falha_identificada"]
 
     # Responsible
     resp_val = payload.get("responsible")
+# Lógica de decisão (if): Avalia 'if resp_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if resp_val is not None:
         top_mappings["responsible"] = resp_val
         top_mappings["responsavel"] = resp_val
@@ -649,45 +784,58 @@ def update_raw_lead(raw_lead: dict, payload: dict) -> dict:
     update_keys(res, top_mappings)
 
     # 2. Nested payload mappings
+# Lógica de decisão (if): Avalia 'if "payload" in res:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if "payload" in res:
         raw_payload = res["payload"]
         is_str = isinstance(raw_payload, str)
         payload_dict = safe_parse_json(raw_payload) if is_str else (raw_payload or {})
+# Lógica de decisão (if): Avalia 'if not isinstance(payload_dict...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not isinstance(payload_dict, dict):
             payload_dict = {}
 
         # Merge any updated keys from the incoming payload dict
+# Lógica de decisão (if): Avalia 'if "payload" in payload and is...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "payload" in payload and isinstance(payload["payload"], dict):
             payload_dict.update(payload["payload"])
 
         p_mappings = {}
+# Lógica de decisão (if): Avalia 'if "email" in payload:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "email" in payload:
             p_mappings["email"] = payload["email"]
         elif "email_contato" in payload:
             p_mappings["email"] = payload["email_contato"]
 
         # CTA, site, formulario, anuncio
+# Lógica de decisão (if): Avalia 'if "presenca_digital_tem_cta" ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "presenca_digital_tem_cta" in payload:
             p_mappings["tem_cta"] = payload["presenca_digital_tem_cta"]
+# Lógica de decisão (if): Avalia 'if "tem_cta" in payload:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "tem_cta" in payload:
             p_mappings["tem_cta"] = payload["tem_cta"]
             
+# Lógica de decisão (if): Avalia 'if "presenca_digital_url_site"...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "presenca_digital_url_site" in payload:
             p_mappings["url_site"] = payload["presenca_digital_url_site"]
+# Lógica de decisão (if): Avalia 'if "url_site" in payload:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "url_site" in payload:
             p_mappings["url_site"] = payload["url_site"]
 
+# Lógica de decisão (if): Avalia 'if "presenca_digital_formulari...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "presenca_digital_formulario_captacao" in payload:
             p_mappings["tem_formulario"] = payload["presenca_digital_formulario_captacao"]
+# Lógica de decisão (if): Avalia 'if "tem_formulario" in payload...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "tem_formulario" in payload:
             p_mappings["tem_formulario"] = payload["tem_formulario"]
 
+# Lógica de decisão (if): Avalia 'if "id_anuncio_meta" in payloa...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "id_anuncio_meta" in payload:
             p_mappings["id_anuncio_meta"] = payload["id_anuncio_meta"]
 
+# Lógica de decisão (if): Avalia 'if "tem_site_proprio" in paylo...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "tem_site_proprio" in payload:
             p_mappings["tem_site_proprio"] = payload["tem_site_proprio"]
 
+# Lógica de decisão (if): Avalia 'if "erros_identificados_site" ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "erros_identificados_site" in payload:
             p_mappings["erros_identificados_site"] = payload["erros_identificados_site"]
 
@@ -695,55 +843,67 @@ def update_raw_lead(raw_lead: dict, payload: dict) -> dict:
         res["payload"] = json.dumps(payload_dict) if is_str else payload_dict
 
     # 3. Nested presenca_digital mappings
+# Lógica de decisão (if): Avalia 'if "presenca_digital" in res:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if "presenca_digital" in res:
         raw_presenca = res["presenca_digital"]
         is_str = isinstance(raw_presenca, str)
         presenca_dict = safe_parse_json(raw_presenca) if is_str else (raw_presenca or {})
+# Lógica de decisão (if): Avalia 'if not isinstance(presenca_dic...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not isinstance(presenca_dict, dict):
             presenca_dict = {}
 
         pr_mappings = {}
+# Lógica de decisão (if): Avalia 'if "presenca_digital_url_site"...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "presenca_digital_url_site" in payload:
             pr_mappings["url_site"] = payload["presenca_digital_url_site"]
         elif "url_site" in payload:
             pr_mappings["url_site"] = payload["url_site"]
 
+# Lógica de decisão (if): Avalia 'if "presenca_digital_status_si...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "presenca_digital_status_site" in payload:
             pr_mappings["status_site"] = payload["presenca_digital_status_site"]
 
+# Lógica de decisão (if): Avalia 'if "tem_site_proprio" in paylo...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "tem_site_proprio" in payload:
             pr_mappings["tem_site_proprio"] = payload["tem_site_proprio"]
 
+# Lógica de decisão (if): Avalia 'if "erros_identificados_site" ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "erros_identificados_site" in payload:
             pr_mappings["erros_identificados_site"] = payload["erros_identificados_site"]
 
         update_keys(presenca_dict, pr_mappings)
 
         # diagnostico_site within presenca_digital
+# Lógica de decisão (if): Avalia 'if "diagnostico_site" in prese...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "diagnostico_site" in presenca_dict:
             raw_diag = presenca_dict["diagnostico_site"]
             diag_is_str = isinstance(raw_diag, str)
             diag_dict = safe_parse_json(raw_diag) if diag_is_str else (raw_diag or {})
+# Lógica de decisão (if): Avalia 'if not isinstance(diag_dict, d...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if not isinstance(diag_dict, dict):
                 diag_dict = {}
 
             diag_mappings = {}
             cta_val = payload.get("presenca_digital_tem_cta")
+# Lógica de decisão (if): Avalia 'if cta_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if cta_val is not None:
                 diag_mappings["tem cta"] = cta_val
                 diag_mappings["tem_cta"] = cta_val
 
             url_abre_val = payload.get("presenca_digital_url_abre")
+# Lógica de decisão (if): Avalia 'if url_abre_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if url_abre_val is not None:
                 diag_mappings["url abre"] = url_abre_val
                 diag_mappings["url_abre"] = url_abre_val
 
             demora_val = payload.get("presenca_digital_demora_abrir")
+# Lógica de decisão (if): Avalia 'if demora_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if demora_val is not None:
                 diag_mappings["demora pra abrir?"] = demora_val
                 diag_mappings["demora_abrir"] = demora_val
 
             form_val = payload.get("presenca_digital_formulario_captacao")
+# Lógica de decisão (if): Avalia 'if form_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if form_val is not None:
                 diag_mappings["tem formulario de captação?"] = form_val
                 diag_mappings["formulario_captacao"] = form_val
@@ -754,23 +914,29 @@ def update_raw_lead(raw_lead: dict, payload: dict) -> dict:
         res["presenca_digital"] = json.dumps(presenca_dict) if is_str else presenca_dict
 
     # 4. Nested reputacao_google mappings
+# Lógica de decisão (if): Avalia 'if "reputacao_google" in res:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if "reputacao_google" in res:
         raw_rep = res["reputacao_google"]
         is_str = isinstance(raw_rep, str)
         rep_dict = safe_parse_json(raw_rep) if is_str else (raw_rep or {})
+# Lógica de decisão (if): Avalia 'if not isinstance(rep_dict, di...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not isinstance(rep_dict, dict):
             rep_dict = {}
 
         rep_mappings = {}
+# Lógica de decisão (if): Avalia 'if "reputacao_google_nota_medi...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "reputacao_google_nota_media" in payload:
             val = payload["reputacao_google_nota_media"]
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 rep_mappings["nota_media"] = float(val) if val is not None else None
             except ValueError:
                 rep_mappings["nota_media"] = val
 
+# Lógica de decisão (if): Avalia 'if "reputacao_google_total_ava...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "reputacao_google_total_avaliacoes" in payload:
             val = payload["reputacao_google_total_avaliacoes"]
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 rep_mappings["total_avaliacoes"] = int(val) if val is not None else None
             except ValueError:
@@ -780,28 +946,34 @@ def update_raw_lead(raw_lead: dict, payload: dict) -> dict:
         res["reputacao_google"] = json.dumps(rep_dict) if is_str else rep_dict
 
     # 5. Nested oportunidades_identificadas mappings
+# Lógica de decisão (if): Avalia 'if "oportunidades_identificada...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if "oportunidades_identificadas" in res:
         raw_op = res["oportunidades_identificadas"]
         is_str = isinstance(raw_op, str)
         op_dict = safe_parse_json(raw_op) if is_str else (raw_op or {})
+# Lógica de decisão (if): Avalia 'if not isinstance(op_dict, dic...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not isinstance(op_dict, dict):
             op_dict = {}
 
         op_mappings = {}
+# Lógica de decisão (if): Avalia 'if "oportunidades_identificada...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "oportunidades_identificadas_telefone_fixo" in payload:
             op_mappings["telefone_fixo"] = payload["oportunidades_identificadas_telefone_fixo"]
 
         urg_site_val = payload.get("oportunidades_identificadas_urgencia_site")
+# Lógica de decisão (if): Avalia 'if urg_site_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if urg_site_val is not None:
             op_mappings["urgencia_de_site"] = urg_site_val
             op_mappings["urgencia_site"] = urg_site_val
 
         urg_av_val = payload.get("oportunidades_identificadas_urgencia_avaliacoes")
+# Lógica de decisão (if): Avalia 'if urg_av_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if urg_av_val is not None:
             op_mappings["urgencia_de_avaliacoes"] = urg_av_val
             op_mappings["urgencia_avaliacoes"] = urg_av_val
 
         urg_rep_val = payload.get("oportunidades_identificadas_urgencia_gestao_reputacao")
+# Lógica de decisão (if): Avalia 'if urg_rep_val is not None:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if urg_rep_val is not None:
             op_mappings["urgencia_de_gestao_reputacao"] = urg_rep_val
             op_mappings["urgencia_gestao_reputacao"] = urg_rep_val
@@ -823,15 +995,19 @@ def sanitize_outgoing_payload(payload: dict) -> dict:
     }
     
     sanitized = {}
+# Lógica de repetição (for): Itera sobre elementos de 'for k, v in payload....' processando múltiplos dados em lote para as regras de domínio.
     for k, v in payload.items():
+# Lógica de decisão (if): Avalia 'if k in whitelist:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if k in whitelist:
             sanitized[k] = v
 
     # Sanitize nested payload dict if present
+# Lógica de decisão (if): Avalia 'if "payload" in sanitized:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if "payload" in sanitized:
         raw_p = sanitized["payload"]
         is_str = isinstance(raw_p, str)
         p_dict = safe_parse_json(raw_p) if is_str else (raw_p or {})
+# Lógica de decisão (if): Avalia 'if isinstance(p_dict, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if isinstance(p_dict, dict):
             # Preserve all keys inside the dynamic payload dictionary
             sanitized["payload"] = json.dumps(p_dict) if is_str else p_dict
@@ -839,25 +1015,44 @@ def sanitize_outgoing_payload(payload: dict) -> dict:
     return sanitized
 
 def normalize_session_name(name: str) -> str:
+    """
+    Função/Método normalize_session_name.
+
+    O que faz: Processa normalize_session_name recebendo os parâmetros (name) no contexto de o serviço de domínio n8n_service.
+    Impacto na regra de negócio: Assegura que o fluxo da operação normalize_session_name seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
+# Lógica de decisão (if): Avalia 'if not name:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not name:
         return ""
     return name.lower().replace("-", "").replace("_", "").replace(" ", "")
 
 def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
+    """
+    Função/Método unpack_n8n_raw_leads.
+
+    O que faz: Processa unpack_n8n_raw_leads recebendo os parâmetros (raw_leads) no contexto de o serviço de domínio n8n_service.
+    Impacto na regra de negócio: Assegura que o fluxo da operação unpack_n8n_raw_leads seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
+# Lógica de decisão (if): Avalia 'if not isinstance(raw_leads, l...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not isinstance(raw_leads, list):
         return []
 
     unpacked = []
+# Lógica de repetição (for): Itera sobre elementos de 'for item in raw_lead...' processando múltiplos dados em lote para as regras de domínio.
     for item in raw_leads:
+# Lógica de decisão (if): Avalia 'if not isinstance(item, dict):...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not isinstance(item, dict):
             continue
 
         c_jid = item.get("contact_jid") or item.get("jid") or ""
         s_id = item.get("session_id") or item.get("whatsapp_instance") or ""
 
+# Lógica de decisão (if): Avalia 'if "contacts" in item and isin...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "contacts" in item and isinstance(item["contacts"], list):
             top_session_id = item.get("session_id", "")
+# Lógica de repetição (for): Itera sobre elementos de 'for c in item["conta...' processando múltiplos dados em lote para as regras de domínio.
             for c in item["contacts"]:
+# Lógica de decisão (if): Avalia 'if not isinstance(c, dict):...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if not isinstance(c, dict):
                     continue
                 c_copy = copy.deepcopy(c)
@@ -866,6 +1061,7 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
                 c_copy["session_id"] = c_session_id
                 c_copy["whatsapp_instance"] = c_session_id
 
+# Lógica de decisão (if): Avalia 'if c_jid_inner and c_session_i...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if c_jid_inner and c_session_id and c_session_id != "default":
                     group_key = f"{c_jid_inner}___{c_session_id}"
                 else:
@@ -875,15 +1071,19 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
                 c_copy["lead_id"] = group_key
 
                 pic = c_copy.get("profile_pic_url")
+# Lógica de decisão (if): Avalia 'if pic and pic.startswith("/")...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if pic and pic.startswith("/"):
                     c_copy["profile_pic_url"] = f"https://dominuslabs.online{pic}"
 
                 unpacked.append(c_copy)
             continue
 
+# Lógica de decisão (if): Avalia 'if "conversations" in item and...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "conversations" in item and isinstance(item["conversations"], list):
             top_session_id = item.get("session_id", "")
+# Lógica de repetição (for): Itera sobre elementos de 'for conv in item["co...' processando múltiplos dados em lote para as regras de domínio.
             for conv in item["conversations"]:
+# Lógica de decisão (if): Avalia 'if not isinstance(conv, dict):...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if not isinstance(conv, dict):
                     continue
                 c_copy = copy.deepcopy(conv)
@@ -892,6 +1092,7 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
                 c_copy["session_id"] = c_session_id
                 c_copy["whatsapp_instance"] = c_session_id
 
+# Lógica de decisão (if): Avalia 'if c_jid_inner and c_session_i...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if c_jid_inner and c_session_id and c_session_id != "default":
                     group_key = f"{c_jid_inner}___{c_session_id}"
                 else:
@@ -901,28 +1102,35 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
                 c_copy["lead_id"] = group_key
 
                 pic = c_copy.get("profile_pic_url")
+# Lógica de decisão (if): Avalia 'if pic and pic.startswith("/")...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if pic and pic.startswith("/"):
                     c_copy["profile_pic_url"] = f"https://dominuslabs.online{pic}"
 
                 unpacked.append(c_copy)
             continue
 
+# Lógica de decisão (if): Avalia 'if "mensagens" in item and isi...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if "mensagens" in item and isinstance(item["mensagens"], list) and len(item["mensagens"]) > 0 and not c_jid:
             top_session_id = item.get("session_id", "")
             contacts_map = {}
+# Lógica de repetição (for): Itera sobre elementos de 'for m in item["mensa...' processando múltiplos dados em lote para as regras de domínio.
             for m in item["mensagens"]:
+# Lógica de decisão (if): Avalia 'if not isinstance(m, dict):...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if not isinstance(m, dict):
                     continue
 
                 m_c_jid = m.get("contact_jid") or m.get("jid") or ""
+# Lógica de decisão (if): Avalia 'if not m_c_jid:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if not m_c_jid:
                     m_c_jid = m.get("push_name") or m.get("display_phone") or "unknown_contact"
 
                 m_session_id = m.get("session_id") or top_session_id or ""
                 group_key = f"{m_c_jid}___{m_session_id}" if m_session_id else m_c_jid
 
+# Lógica de decisão (if): Avalia 'if group_key not in contacts_m...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if group_key not in contacts_map:
                     profile_pic = m.get("profile_pic_url") or item.get("profile_pic_url") or ""
+# Lógica de decisão (if): Avalia 'if profile_pic and profile_pic...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                     if profile_pic and profile_pic.startswith("/"):
                         profile_pic = f"https://dominuslabs.online{profile_pic}"
 
@@ -939,40 +1147,53 @@ def unpack_n8n_raw_leads(raw_leads: List[dict]) -> List[dict]:
                         "mensagens": []
                     }
 
+# Lógica de decisão (if): Avalia 'if m.get("push_name") and m.ge...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if m.get("push_name") and m.get("push_name") != "Desconhecido":
                     contacts_map[group_key]["push_name"] = m.get("push_name")
+# Lógica de decisão (if): Avalia 'if m.get("display_phone"):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if m.get("display_phone"):
                     contacts_map[group_key]["display_phone"] = m.get("display_phone")
+# Lógica de decisão (if): Avalia 'if m.get("profile_pic_url") an...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if m.get("profile_pic_url") and m.get("profile_pic_url") != "changed":
                     pic = m.get("profile_pic_url")
+# Lógica de decisão (if): Avalia 'if pic and pic.startswith("/")...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                     if pic and pic.startswith("/"):
                         pic = f"https://dominuslabs.online{pic}"
                     contacts_map[group_key]["profile_pic_url"] = pic
 
                 contacts_map[group_key]["mensagens"].append(m)
 
+# Lógica de repetição (for): Itera sobre elementos de 'for c_info in contac...' processando múltiplos dados em lote para as regras de domínio.
             for c_info in contacts_map.values():
                 unpacked.append(c_info)
         else:
             item_copy = copy.deepcopy(item)
             nested_msgs = item.get("messages") if isinstance(item.get("messages"), list) else (item.get("mensagens") if isinstance(item.get("mensagens"), list) else [])
+# Lógica de repetição (for): Itera sobre elementos de 'for m in nested_msgs...' processando múltiplos dados em lote para as regras de domínio.
             for m in nested_msgs:
+# Lógica de decisão (if): Avalia 'if isinstance(m, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if isinstance(m, dict):
                     m_pname = m.get("push_name")
+# Lógica de decisão (if): Avalia 'if m_pname and isinstance(m_pn...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                     if m_pname and isinstance(m_pname, str) and m_pname.strip() and m_pname.strip().lower() not in ("desconhecido", "unknown", "null", "none") and "@lid" not in m_pname.lower() and "@s.whatsapp.net" not in m_pname.lower():
+# Lógica de decisão (if): Avalia 'if not item_copy.get("push_nam...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                         if not item_copy.get("push_name"):
                             item_copy["push_name"] = m_pname.strip()
 
                     m_phone = m.get("display_phone") or m.get("whatsapp")
+# Lógica de decisão (if): Avalia 'if m_phone and not item_copy.g...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                     if m_phone and not item_copy.get("display_phone"):
                         item_copy["display_phone"] = m_phone.strip()
 
                     m_pic = m.get("profile_pic_url") or m.get("avatar")
+# Lógica de decisão (if): Avalia 'if m_pic and m_pic != "changed...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                     if m_pic and m_pic != "changed" and str(m_pic).lower() not in ("null", "none", "") and not item_copy.get("profile_pic_url"):
+# Lógica de decisão (if): Avalia 'if str(m_pic).startswith("/"):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                         if str(m_pic).startswith("/"):
                             m_pic = f"https://dominuslabs.online{m_pic}"
                         item_copy["profile_pic_url"] = str(m_pic)
 
+# Lógica de decisão (if): Avalia 'if c_jid and s_id and s_id != ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if c_jid and s_id and s_id != "default":
                 group_key = f"{c_jid}___{s_id}"
                 item_copy["id"] = group_key
@@ -993,12 +1214,26 @@ class ProgressiveContactCache:
 
     @classmethod
     def get(cls, jid: str) -> Optional[dict]:
+        """
+        Função/Método get.
+
+        O que faz: Recuperação de dados cadastrados para get recebendo os parâmetros (cls, jid) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação get seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
+# Lógica de decisão (if): Avalia 'if not jid:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not jid:
             return None
         return cls._cache.get(jid)
 
     @classmethod
     def set_contact(cls, jid: str, contact_data: dict) -> dict:
+        """
+        Função/Método set_contact.
+
+        O que faz: Processa set_contact recebendo os parâmetros (cls, jid, contact_data) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação set_contact seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
+# Lógica de decisão (if): Avalia 'if not jid:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not jid:
             return contact_data
         existing = cls._cache.get(jid, {})
@@ -1012,7 +1247,9 @@ class ProgressiveContactCache:
             "status": contact_data.get("status") or existing.get("status") or "Prospectado",
             "updated_at": datetime.utcnow().isoformat() + "Z"
         })
+# Lógica de repetição (for): Itera sobre elementos de 'for k in ("session_i...' processando múltiplos dados em lote para as regras de domínio.
         for k in ("session_id", "unread_count", "last_message_preview", "mensagens", "messages"):
+# Lógica de decisão (if): Avalia 'if k in contact_data:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if k in contact_data:
                 existing[k] = contact_data[k]
         cls._cache[jid] = existing
@@ -1020,14 +1257,23 @@ class ProgressiveContactCache:
 
     @classmethod
     def set_conversation(cls, jid: str, conv_data: dict) -> dict:
+        """
+        Função/Método set_conversation.
+
+        O que faz: Processa set_conversation recebendo os parâmetros (cls, jid, conv_data) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação set_conversation seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
+# Lógica de decisão (if): Avalia 'if not jid:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not jid:
             return conv_data
         existing = cls._cache.get(jid, {"contact_jid": jid})
         existing["session_id"] = conv_data.get("session_id") or existing.get("session_id", "default")
         existing["unread_count"] = conv_data.get("unread_count", 0)
         existing["last_message_preview"] = conv_data.get("last_message_preview") or conv_data.get("content", "")
+# Lógica de decisão (if): Avalia 'if conv_data.get("push_name") ...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if conv_data.get("push_name") and conv_data.get("push_name") not in ("Desconhecido", "Contato Sem Nome"):
             existing["push_name"] = conv_data["push_name"]
+# Lógica de decisão (if): Avalia 'if conv_data.get("profile_pic_...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if conv_data.get("profile_pic_url"):
             existing["profile_pic_url"] = conv_data["profile_pic_url"]
         existing["updated_at"] = datetime.utcnow().isoformat() + "Z"
@@ -1036,6 +1282,13 @@ class ProgressiveContactCache:
 
     @classmethod
     def set_messages(cls, jid: str, messages_list: List[dict]) -> dict:
+        """
+        Função/Método set_messages.
+
+        O que faz: Processa set_messages recebendo os parâmetros (cls, jid, messages_list) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação set_messages seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
+# Lógica de decisão (if): Avalia 'if not jid:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not jid:
             return {}
         existing = cls._cache.get(jid, {"contact_jid": jid})
@@ -1048,13 +1301,31 @@ class ProgressiveContactCache:
 
     @classmethod
     def get_assembled_payload(cls, jid: str) -> dict:
+        """
+        Função/Método get_assembled_payload.
+
+        O que faz: Recuperação de dados cadastrados para get_assembled_payload recebendo os parâmetros (cls, jid) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação get_assembled_payload seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
         return cls._cache.get(jid, {"contact_jid": jid, "mensagens": []})
 
     @classmethod
     def clear(cls):
+        """
+        Função/Método clear.
+
+        O que faz: Processa clear recebendo os parâmetros (cls) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação clear seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
         cls._cache.clear()
 
 class N8NService:
+    """
+    Classe N8NService.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade N8NService em o serviço de domínio n8n_service.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade N8NService, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     # Leads cache state
     _leads_cache = None
     _leads_cache_time = 0.0
@@ -1063,6 +1334,12 @@ class N8NService:
 
     @staticmethod
     def _enrich_payload(base_payload: dict, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> dict:
+        """
+        Função/Método _enrich_payload.
+
+        O que faz: Processa _enrich_payload recebendo os parâmetros (base_payload, user_id, tenant_id) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação _enrich_payload seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
         p = dict(base_payload)
         resolved_tenant = tenant_id or getattr(settings, "ADMIN_TENANT_ID", os.getenv("ADMIN_TENANT_ID", "admin"))
         resolved_user = user_id or p.get("user_id") or p.get("alterado_por") or p.get("updated_by") or "system"
@@ -1074,6 +1351,12 @@ class N8NService:
 
     @staticmethod
     def invalidate_leads_cache():
+        """
+        Função/Método invalidate_leads_cache.
+
+        O que faz: Processa invalidate_leads_cache sem parâmetros específicos no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação invalidate_leads_cache seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
         N8NService._leads_cache = None
         N8NService._leads_cache_time = 0.0
         N8NService._leads_cache_url = None
@@ -1081,8 +1364,15 @@ class N8NService:
 
     @staticmethod
     async def run_scrapper(payload: dict, platform: str = "meta_ads", user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> dict:
+        """
+        Função/Método run_scrapper.
+
+        O que faz: Processa run_scrapper recebendo os parâmetros (payload, platform, user_id, tenant_id) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação run_scrapper seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
         fallback_url = settings.SCRAPPER_META_WEBHOOK_URL if platform == "meta_ads" else settings.SCRAPPER_MAPS_WEBHOOK_URL
         url = payload.get("webhook_url") or fallback_url
+# Lógica de decisão (if): Avalia 'if not url:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not url:
             logger.info("SCRAPPER Webhook URL not configured. Returning mock success.")
             return {"status": "success", "message": "Scrapper triggered (MOCK Mode)", "data": payload}
@@ -1093,12 +1383,16 @@ class N8NService:
             "min_results": payload.get("min_results", 10),
             "max_results": payload.get("max_results", 20),
         }
+# Lógica de decisão (if): Avalia 'if "target_platform" in payloa...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "target_platform" in payload and payload["target_platform"]:
             outgoing_payload["target_platform"] = payload["target_platform"]
+# Lógica de decisão (if): Avalia 'if payload["target_platform"] ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if payload["target_platform"] in ("whatsapp", "instagram"):
                 outgoing_payload["contact_channel"] = payload["target_platform"]
+# Lógica de decisão (if): Avalia 'if "contact_channel" in payloa...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "contact_channel" in payload and payload["contact_channel"]:
             outgoing_payload["contact_channel"] = payload["contact_channel"]
+# Lógica de decisão (if): Avalia 'if "objective" in payload and ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "objective" in payload and payload["objective"]:
             outgoing_payload["objective"] = payload["objective"]
 
@@ -1106,10 +1400,12 @@ class N8NService:
         encrypted_payload = encrypt_payload(outgoing_payload, "n8n")
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 response = await client.post(url, json=encrypted_payload, timeout=30.0)
                 response.raise_for_status()
                 res_data = response.json()
+# Lógica de decisão (if): Avalia 'if isinstance(res_data, dict) ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if isinstance(res_data, dict) and res_data.get("_encrypted") is True:
                     res_data = decrypt_payload(res_data)
                 return clean_n8n_response(res_data)
@@ -1119,14 +1415,24 @@ class N8NService:
 
     @staticmethod
     async def get_leads(user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> List[dict]:
+        """
+        Função/Método get_leads.
+
+        O que faz: Recuperação de dados cadastrados para get_leads recebendo os parâmetros (user_id, tenant_id) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação get_leads seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
         url = settings.CRM_GET_LEADS_WEBHOOK_URL
         # Check cache
+# Lógica de decisão (if): Avalia 'if N8NService._leads_cache is ...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if N8NService._leads_cache is not None:
+# Lógica de decisão (if): Avalia 'if time.time() - N8NService._l...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if time.time() - N8NService._leads_cache_time < N8NService.CACHE_TTL:
+# Lógica de decisão (if): Avalia 'if N8NService._leads_cache_url...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if N8NService._leads_cache_url == url:
                     logger.info("Returning CRM Leads from in-memory cache.")
                     return N8NService._leads_cache
 
+# Lógica de decisão (if): Avalia 'if not url:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not url:
             logger.info("CRM_GET_LEADS_WEBHOOK_URL not configured. Returning mock leads.")
             mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
@@ -1141,14 +1447,17 @@ class N8NService:
         encrypted_body = encrypt_payload(outgoing_body, "n8n")
         raw_leads = None
         async with httpx.AsyncClient(follow_redirects=True) as client:
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 response = await client.post(url, json=encrypted_body, timeout=30.0)
+# Lógica de decisão (if): Avalia 'if response.status_code >= 400...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if response.status_code >= 400:
                     logger.warning(f"[N8N-STEALTH] POST request to {url} returned status {response.status_code}. Ensure the n8n Webhook node HTTP Method is set to POST.")
                 response.raise_for_status()
                 data = response.json()
                 data = decrypt_payload(data)
 
+# Lógica de decisão (if): Avalia 'if isinstance(data, list):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if isinstance(data, list):
                     raw_leads = data
                 elif isinstance(data, dict) and "leads" in data:
@@ -1158,12 +1467,15 @@ class N8NService:
             except Exception as e:
                 logger.error(f"Error calling POST leads webhook: {e}. Falling back to mock data.", exc_info=True)
 
+# Lógica de decisão (if): Avalia 'if not raw_leads:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not raw_leads:
             mapped_mock = [map_n8n_lead(l) for l in MOCK_LEADS]
             mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
             mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
+# Lógica de repetição (for): Itera sobre elementos de 'for m in mapped_mock...' processando múltiplos dados em lote para as regras de domínio.
             for m in mapped_mock:
                 c_jid = m.get("contact_jid") or m.get("jid") or m.get("id")
+# Lógica de decisão (if): Avalia 'if c_jid:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if c_jid:
                     ProgressiveContactCache.set_contact(c_jid, m)
             N8NService._leads_cache = mapped_mock
@@ -1177,8 +1489,10 @@ class N8NService:
         mapped_leads.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
         
         # Step 1: Cache basic info by contact_jid
+# Lógica de repetição (for): Itera sobre elementos de 'for m in mapped_lead...' processando múltiplos dados em lote para as regras de domínio.
         for m in mapped_leads:
             c_jid = m.get("contact_jid") or m.get("jid") or m.get("id")
+# Lógica de decisão (if): Avalia 'if c_jid:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if c_jid:
                 ProgressiveContactCache.set_contact(c_jid, m)
 
@@ -1193,6 +1507,7 @@ class N8NService:
         Obtém a lista de conversas ativas via action=get_conversations no webhook CRM com Zero-Trust.
         """
         url = settings.CRM_GET_MESSAGES_WEBHOOK_URL or settings.CRM_GET_LEADS_WEBHOOK_URL
+# Lógica de decisão (if): Avalia 'if not url:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not url:
             return []
 
@@ -1200,8 +1515,10 @@ class N8NService:
         encrypted_body = encrypt_payload(outgoing_body, "n8n")
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 response = await client.post(url, json=encrypted_body, timeout=30.0)
+# Lógica de decisão (if): Avalia 'if response.status_code >= 400...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if response.status_code >= 400:
                     logger.warning(f"[N8N-STEALTH] POST request to {url} returned status {response.status_code}. Ensure the n8n Webhook node HTTP Method is set to POST.")
                 response.raise_for_status()
@@ -1209,6 +1526,7 @@ class N8NService:
                 data = decrypt_payload(data)
 
                 raw_convs = []
+# Lógica de decisão (if): Avalia 'if isinstance(data, list):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if isinstance(data, list):
                     raw_convs = data
                 elif isinstance(data, dict):
@@ -1218,15 +1536,20 @@ class N8NService:
                 mapped = [map_n8n_lead(l) for l in unpacked if isinstance(l, dict)]
                 
                 # Step 2: Append conversation inbox state to cached contact profile & compute last_message_preview
+# Lógica de repetição (for): Itera sobre elementos de 'for m in mapped:...' processando múltiplos dados em lote para as regras de domínio.
                 for m in mapped:
+# Lógica de decisão (if): Avalia 'if not m.get("last_message_pre...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                     if not m.get("last_message_preview"):
                         msgs = m.get("mensagens") or m.get("messages") or []
+# Lógica de decisão (if): Avalia 'if isinstance(msgs, list) and ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                         if isinstance(msgs, list) and len(msgs) > 0:
                             last_msg = msgs[0] if isinstance(msgs[0], dict) else {}
                             m["last_message_preview"] = extract_text_content(last_msg) or last_msg.get("content") or last_msg.get("message") or ""
+# Lógica de decisão (if): Avalia 'if not m.get("last_message_tim...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                             if not m.get("last_message_timestamp") and last_msg.get("message_timestamp"):
                                 m["last_message_timestamp"] = last_msg["message_timestamp"]
                     c_jid = m.get("contact_jid") or m.get("jid") or m.get("id")
+# Lógica de decisão (if): Avalia 'if c_jid:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                     if c_jid:
                         ProgressiveContactCache.set_conversation(c_jid, m)
 
@@ -1256,13 +1579,16 @@ class N8NService:
         messages = await N8NService.get_messages(lead_id)
         target_jid = lead_id
         target_session = "default"
+# Lógica de decisão (if): Avalia 'if "___" in lead_id:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "___" in lead_id:
             parts = lead_id.split("___", 1)
             target_jid = parts[0]
             target_session = parts[1]
 
         formatted = []
+# Lógica de repetição (for): Itera sobre elementos de 'for m in messages:...' processando múltiplos dados em lote para as regras de domínio.
         for m in messages:
+# Lógica de decisão (if): Avalia 'if not isinstance(m, dict):...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if not isinstance(m, dict):
                 continue
             is_me = m.get("is_from_me") is True or m.get("sender") == "user" or m.get("fromMe") is True
@@ -1307,14 +1633,22 @@ class N8NService:
 
     @staticmethod
     async def update_lead(lead_id: str, payload: dict, current_user: str = None) -> dict:
+        """
+        Função/Método update_lead.
+
+        O que faz: Atualização e modificação de informações para update_lead recebendo os parâmetros (lead_id, payload, current_user) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação update_lead seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
         N8NService.invalidate_leads_cache()
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
 
         # Try to find in cache
         raw_lead = None
+# Lógica de decisão (if): Avalia 'if lead_id in RAW_LEADS_CACHE:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if lead_id in RAW_LEADS_CACHE:
             raw_lead = copy.deepcopy(RAW_LEADS_CACHE[lead_id])
 
+# Lógica de decisão (if): Avalia 'if not raw_lead:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not raw_lead:
             # Fallback template with Portuguese keys if not in cache
             raw_lead = {
@@ -1347,6 +1681,7 @@ class N8NService:
         # Update the raw lead copy
         outgoing_payload = update_raw_lead(raw_lead, payload)
 
+# Lógica de decisão (if): Avalia 'if current_user:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if current_user:
             outgoing_payload["alterado_por"] = current_user
             outgoing_payload["updated_by"] = current_user
@@ -1359,31 +1694,38 @@ class N8NService:
 
         # Also update mock leads for local consistency/fallback
         reconstructed_payload_meta = {}
+# Lógica de decisão (if): Avalia 'if isinstance(outgoing_payload...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if isinstance(outgoing_payload.get("payload"), dict):
             reconstructed_payload_meta = outgoing_payload["payload"]
         elif isinstance(outgoing_payload.get("payload"), str):
             reconstructed_payload_meta = safe_parse_json(outgoing_payload["payload"])
 
         reconstructed_presenca = {}
+# Lógica de decisão (if): Avalia 'if isinstance(outgoing_payload...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if isinstance(outgoing_payload.get("presenca_digital"), dict):
             reconstructed_presenca = outgoing_payload["presenca_digital"]
         elif isinstance(outgoing_payload.get("presenca_digital"), str):
             reconstructed_presenca = safe_parse_json(outgoing_payload["presenca_digital"])
 
         reconstructed_reputacao = {}
+# Lógica de decisão (if): Avalia 'if isinstance(outgoing_payload...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if isinstance(outgoing_payload.get("reputacao_google"), dict):
             reconstructed_reputacao = outgoing_payload["reputacao_google"]
         elif isinstance(outgoing_payload.get("reputacao_google"), str):
             reconstructed_reputacao = safe_parse_json(outgoing_payload["reputacao_google"])
 
         reconstructed_oportunidades = {}
+# Lógica de decisão (if): Avalia 'if isinstance(outgoing_payload...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if isinstance(outgoing_payload.get("oportunidades_identificadas"), dict):
             reconstructed_oportunidades = outgoing_payload["oportunidades_identificadas"]
         elif isinstance(outgoing_payload.get("oportunidades_identificadas"), str):
             reconstructed_oportunidades = safe_parse_json(outgoing_payload["oportunidades_identificadas"])
 
+# Lógica de repetição (for): Itera sobre elementos de 'for i, lead in enume...' processando múltiplos dados em lote para as regras de domínio.
         for i, lead in enumerate(MOCK_LEADS):
+# Lógica de decisão (if): Avalia 'if lead["id"] == lead_id:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if lead["id"] == lead_id:
+# Lógica de repetição (for): Itera sobre elementos de 'for k, v in payload....' processando múltiplos dados em lote para as regras de domínio.
                 for k, v in payload.items():
                     lead[k] = v
                 lead["payload"] = reconstructed_payload_meta
@@ -1391,16 +1733,19 @@ class N8NService:
                 lead["reputacao_google"] = reconstructed_reputacao
                 lead["oportunidades_identificadas"] = reconstructed_oportunidades
                 lead["last_interaction"] = datetime.utcnow().isoformat() + "Z"
+# Lógica de decisão (if): Avalia 'if current_user:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if current_user:
                     lead["alterado_por"] = current_user
                     lead["updated_by"] = current_user
                 MOCK_LEADS[i] = lead
                 break
 
+# Lógica de decisão (if): Avalia 'if not url:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not url:
             logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead updated locally in-memory.")
             updated_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
             mapped = map_n8n_lead(updated_lead) if updated_lead else map_n8n_lead({"id": lead_id, **payload})
+# Lógica de decisão (if): Avalia 'if current_user:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if current_user:
                 mapped["alterado_por"] = current_user
                 mapped["updated_by"] = current_user
@@ -1417,25 +1762,31 @@ class N8NService:
         endpoint_url = f"{url}{sep}action=update_lead&id={lead_id}"
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 # Tenta primeiro POST com payload 100% criptografado sem expor id/action na URL
                 response = await client.post(url, json=encrypted_payload, timeout=30.0)
+# Lógica de decisão (if): Avalia 'if response.status_code >= 400...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if response.status_code >= 400 or not response.text:
                     response = await client.put(endpoint_url, json=outgoing_payload, timeout=30.0)
                 response.raise_for_status()
                 res_data = clean_n8n_response(response.json())
+# Lógica de decisão (if): Avalia 'if isinstance(res_data, dict) ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if isinstance(res_data, dict) and res_data.get("_encrypted") is True:
                     res_data = decrypt_payload(res_data)
 
+# Lógica de decisão (if): Avalia 'if isinstance(res_data, dict) ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if isinstance(res_data, dict) and ("company_name" in res_data or "nome_empresa" in res_data or "empresa_nome" in res_data):
                     mapped = map_n8n_lead(res_data)
                 else:
                     fallback_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
+# Lógica de decisão (if): Avalia 'if fallback_lead:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                     if fallback_lead:
                         mapped = map_n8n_lead(fallback_lead)
                     else:
                         mapped = map_n8n_lead({"id": lead_id, **payload})
                 
+# Lógica de decisão (if): Avalia 'if current_user:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if current_user:
                     mapped["alterado_por"] = current_user
                     mapped["updated_by"] = current_user
@@ -1443,11 +1794,13 @@ class N8NService:
             except Exception as e:
                 logger.error(f"Error calling UPDATE lead webhook: {e}")
                 fallback_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
+# Lógica de decisão (if): Avalia 'if fallback_lead:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if fallback_lead:
                     mapped = map_n8n_lead(fallback_lead)
                 else:
                     mapped = map_n8n_lead({"id": lead_id, **payload})
                     
+# Lógica de decisão (if): Avalia 'if current_user:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if current_user:
                     mapped["alterado_por"] = current_user
                     mapped["updated_by"] = current_user
@@ -1455,27 +1808,42 @@ class N8NService:
 
     @staticmethod
     async def delete_lead(lead_id: str, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> dict:
+        """
+        Função/Método delete_lead.
+
+        O que faz: Remoção segura e exclusão lógica/física para delete_lead recebendo os parâmetros (lead_id, user_id, tenant_id) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação delete_lead seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
         N8NService.invalidate_leads_cache()
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
 
         # Remove from mock lists (MOCK_LEADS, RAW_LEADS_CACHE, MOCK_CONVERSATIONS, MOCK_ACTIVITIES)
+# Lógica de repetição (for): Itera sobre elementos de 'for i, lead in enume...' processando múltiplos dados em lote para as regras de domínio.
         for i, lead in enumerate(MOCK_LEADS):
+# Lógica de decisão (if): Avalia 'if str(lead.get("id")) == str(...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if str(lead.get("id")) == str(lead_id):
                 MOCK_LEADS.pop(i)
                 break
         
+# Lógica de repetição (for): Itera sobre elementos de 'for k in list(RAW_LE...' processando múltiplos dados em lote para as regras de domínio.
         for k in list(RAW_LEADS_CACHE.keys()):
+# Lógica de decisão (if): Avalia 'if str(k) == str(lead_id):...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if str(k) == str(lead_id):
                 del RAW_LEADS_CACHE[k]
 
+# Lógica de repetição (for): Itera sobre elementos de 'for k in list(MOCK_C...' processando múltiplos dados em lote para as regras de domínio.
         for k in list(MOCK_CONVERSATIONS.keys()):
+# Lógica de decisão (if): Avalia 'if str(k) == str(lead_id):...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if str(k) == str(lead_id):
                 del MOCK_CONVERSATIONS[k]
             
+# Lógica de repetição (for): Itera sobre elementos de 'for k in list(MOCK_A...' processando múltiplos dados em lote para as regras de domínio.
         for k in list(MOCK_ACTIVITIES.keys()):
+# Lógica de decisão (if): Avalia 'if str(k) == str(lead_id):...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if str(k) == str(lead_id):
                 del MOCK_ACTIVITIES[k]
 
+# Lógica de decisão (if): Avalia 'if not url:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not url:
             logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead deleted locally in-memory.")
             return {"status": "success", "message": "Lead deleted locally (MOCK Mode)", "id": lead_id}
@@ -1486,15 +1854,20 @@ class N8NService:
         encrypted_payload = encrypt_payload(outgoing_body, "n8n")
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 response = await client.post(url, json=encrypted_payload, timeout=30.0)
+# Lógica de decisão (if): Avalia 'if response.status_code >= 400...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if response.status_code >= 400 or not response.text:
                     response = await client.delete(endpoint_url, timeout=30.0)
                 response.raise_for_status()
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
                 try:
                     res_data = clean_n8n_response(response.json())
+# Lógica de decisão (if): Avalia 'if isinstance(res_data, dict) ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                     if isinstance(res_data, dict) and res_data.get("_encrypted") is True:
                         res_data = decrypt_payload(res_data)
+# Lógica de decisão (if): Avalia 'if isinstance(res_data, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                     if isinstance(res_data, dict):
                         return res_data
                 except Exception:
@@ -1506,51 +1879,68 @@ class N8NService:
 
     @staticmethod
     async def get_messages(lead_id: str, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> List[dict]:
+        """
+        Função/Método get_messages.
+
+        O que faz: Recuperação de dados cadastrados para get_messages recebendo os parâmetros (lead_id, user_id, tenant_id) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação get_messages seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
         all_msgs = list(MOCK_CONVERSATIONS.get(lead_id, []))
         url = settings.CRM_GET_MESSAGES_WEBHOOK_URL
 
         target_id_str = str(lead_id).strip()
         target_jid = target_id_str
         target_session = None
+# Lógica de decisão (if): Avalia 'if "___" in target_id_str:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "___" in target_id_str:
             parts = target_id_str.split("___", 1)
             target_jid = parts[0]
             target_session = parts[1]
 
         cached_lead = RAW_LEADS_CACHE.get(lead_id)
+# Lógica de decisão (if): Avalia 'if not cached_lead:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not cached_lead:
             cached_lead = RAW_LEADS_CACHE.get(target_jid)
+# Lógica de decisão (if): Avalia 'if cached_lead and "mensagens"...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if cached_lead and "mensagens" in cached_lead and isinstance(cached_lead["mensagens"], list):
             embedded_msgs = []
             seen_keys = set()
             lead_channel = cached_lead.get("origin", "whatsapp").lower()
+# Lógica de repetição (for): Itera sobre elementos de 'for m in cached_lead...' processando múltiplos dados em lote para as regras de domínio.
             for m in cached_lead["mensagens"]:
+# Lógica de decisão (if): Avalia 'if not isinstance(m, dict):...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if not isinstance(m, dict):
                     continue
                 mapped_list = map_n8n_message(m, lead_channel)
+# Lógica de repetição (for): Itera sobre elementos de 'for mapped_msg in ma...' processando múltiplos dados em lote para as regras de domínio.
                 for mapped_msg in mapped_list:
                     msg_id = str(mapped_msg.get("id") or mapped_msg.get("message_id") or "")
                     content = str(mapped_msg.get("content") or mapped_msg.get("message") or "").strip()
                     is_from_me = mapped_msg.get("is_from_me", False)
                     ts = str(mapped_msg.get("timestamp") or mapped_msg.get("message_timestamp") or "")
 
+# Lógica de decisão (if): Avalia 'if msg_id and not msg_id.start...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                     if msg_id and not msg_id.startswith("temp_") and msg_id.lower() not in ("none", "null", ""):
                         dedup_key = f"id:{msg_id}"
                     else:
                         dedup_key = f"msg:{content}:{is_from_me}:{ts[:16]}"
 
+# Lógica de decisão (if): Avalia 'if dedup_key not in seen_keys:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                     if dedup_key not in seen_keys:
                         seen_keys.add(dedup_key)
                         embedded_msgs.append(mapped_msg)
 
             embedded_msgs.sort(key=lambda x: x.get("timestamp") or "")
+# Lógica de decisão (if): Avalia 'if len(embedded_msgs) > 0:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if len(embedded_msgs) > 0:
                 MOCK_CONVERSATIONS[lead_id] = embedded_msgs
 
+# Lógica de decisão (if): Avalia 'if not url:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not url:
             return MOCK_CONVERSATIONS.get(lead_id, all_msgs)
 
         lid = None
+# Lógica de decisão (if): Avalia 'if cached_lead:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if cached_lead:
             lid = cached_lead.get("lid") or cached_lead.get("LID") or cached_lead.get("Lid")
 
@@ -1560,29 +1950,38 @@ class N8NService:
             "contact_jid": target_jid,
             "session_id": target_session
         }
+# Lógica de decisão (if): Avalia 'if lid:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if lid:
             outgoing_body["lid"] = lid
         outgoing_body = N8NService._enrich_payload(outgoing_body, user_id=user_id, tenant_id=tenant_id)
         encrypted_body = encrypt_payload(outgoing_body, "n8n")
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 response = await client.post(url, json=encrypted_body, timeout=30.0)
+# Lógica de decisão (if): Avalia 'if response.status_code >= 400...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if response.status_code >= 400:
                     logger.warning(f"[N8N-STEALTH] POST request to {url} returned status {response.status_code}. Ensure the n8n Webhook node HTTP Method is set to POST.")
                 response.raise_for_status()
                 body = response.text.strip()
                 raw_msgs = []
+# Lógica de decisão (if): Avalia 'if body:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if body:
                     data = response.json()
                     data = decrypt_payload(data)
 
+# Lógica de decisão (if): Avalia 'if isinstance(data, list):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                     if isinstance(data, list):
+# Lógica de repetição (for): Itera sobre elementos de 'for d in data:...' processando múltiplos dados em lote para as regras de domínio.
                         for d in data:
+# Lógica de decisão (if): Avalia 'if isinstance(d, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                             if isinstance(d, dict):
                                 d_sess = str(d.get("session_id") or d.get("whatsapp_instance") or "")
+# Lógica de decisão (if): Avalia 'if target_session and d_sess a...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                                 if target_session and d_sess and normalize_session_name(d_sess) != normalize_session_name(target_session):
                                     continue
+# Lógica de decisão (if): Avalia 'if "messages" in d and isinsta...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                                 if "messages" in d and isinstance(d["messages"], list):
                                     raw_msgs.extend(d["messages"])
                                 elif "mensagens" in d and isinstance(d["mensagens"], list):
@@ -1591,22 +1990,29 @@ class N8NService:
                                     raw_msgs.append(d)
                     elif isinstance(data, dict):
                         raw_msgs = data.get("messages") or data.get("conversas") or data.get("historico") or data.get("history") or []
+# Lógica de decisão (if): Avalia 'if not isinstance(raw_msgs, li...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                         if not isinstance(raw_msgs, list):
                             raw_msgs = [data]
 
                 lead_channel = "whatsapp"
+# Lógica de decisão (if): Avalia 'if cached_lead and cached_lead...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if cached_lead and cached_lead.get("origin"):
                     lead_channel = cached_lead["origin"].lower()
 
                 fresh_msgs = []
                 seen_keys = set()
 
+# Lógica de repetição (for): Itera sobre elementos de 'for m in raw_msgs:...' processando múltiplos dados em lote para as regras de domínio.
                 for m in raw_msgs:
+# Lógica de decisão (if): Avalia 'if isinstance(m, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                     if isinstance(m, dict):
                         mapped_list = map_n8n_message(m, lead_channel)
+# Lógica de repetição (for): Itera sobre elementos de 'for mapped_msg in ma...' processando múltiplos dados em lote para as regras de domínio.
                         for mapped_msg in mapped_list:
                             msg_session = str(mapped_msg.get("session_id") or m.get("session_id") or "")
+# Lógica de decisão (if): Avalia 'if target_session and msg_sess...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                             if target_session and msg_session:
+# Lógica de decisão (if): Avalia 'if normalize_session_name(msg_...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                                 if normalize_session_name(msg_session) != normalize_session_name(target_session):
                                     continue
 
@@ -1615,11 +2021,13 @@ class N8NService:
                             is_from_me = mapped_msg.get("is_from_me", False)
                             ts = str(mapped_msg.get("timestamp") or mapped_msg.get("message_timestamp") or "")
 
+# Lógica de decisão (if): Avalia 'if msg_id and not msg_id.start...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                             if msg_id and not msg_id.startswith("temp_") and msg_id.lower() not in ("none", "null", ""):
                                 dedup_key = f"id:{msg_id}"
                             else:
                                 dedup_key = f"msg:{content}:{is_from_me}:{ts[:16]}"
 
+# Lógica de decisão (if): Avalia 'if dedup_key not in seen_keys:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                             if dedup_key not in seen_keys:
                                 seen_keys.add(dedup_key)
                                 fresh_msgs.append(mapped_msg)
@@ -1629,6 +2037,7 @@ class N8NService:
                 # Step 3: Append full chat history to cached contact profile
                 ProgressiveContactCache.set_messages(target_jid, fresh_msgs)
 
+# Lógica de decisão (if): Avalia 'if len(fresh_msgs) > 0:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if len(fresh_msgs) > 0:
                     MOCK_CONVERSATIONS[lead_id] = fresh_msgs
                     return fresh_msgs
@@ -1640,33 +2049,49 @@ class N8NService:
 
     @staticmethod
     def _extract_n8n_error_message(resp_data) -> Optional[str]:
+        """
+        Função/Método _extract_n8n_error_message.
+
+        O que faz: Processa _extract_n8n_error_message recebendo os parâmetros (resp_data) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação _extract_n8n_error_message seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
         import json
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
         try:
+# Lógica de decisão (if): Avalia 'if isinstance(resp_data, list)...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if isinstance(resp_data, list) and len(resp_data) > 0:
                 item = resp_data[0]
             else:
                 item = resp_data
 
+# Lógica de decisão (if): Avalia 'if isinstance(item, dict) and ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if isinstance(item, dict) and "error" in item:
                 err_obj = item["error"]
+# Lógica de decisão (if): Avalia 'if isinstance(err_obj, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if isinstance(err_obj, dict):
                     inner_msg = err_obj.get("message") or err_obj.get("detail") or ""
+# Lógica de decisão (if): Avalia 'if isinstance(inner_msg, str):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                     if isinstance(inner_msg, str):
+# Lógica de decisão (if): Avalia 'if " - " in inner_msg:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                         if " - " in inner_msg:
                             parts = inner_msg.split(" - ", 1)
                             potential_json = parts[1].strip()
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
                             try:
                                 decoded_str = json.loads(potential_json)
+# Lógica de decisão (if): Avalia 'if isinstance(decoded_str, str...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                                 if isinstance(decoded_str, str):
                                     decoded_data = json.loads(decoded_str)
                                 else:
                                     decoded_data = decoded_str
                                     
+# Lógica de decisão (if): Avalia 'if isinstance(decoded_data, di...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                                 if isinstance(decoded_data, dict):
                                     return decoded_data.get("message") or decoded_data.get("error") or inner_msg
                             except Exception:
                                 pass
                         return inner_msg
+# Lógica de decisão (if): Avalia 'if isinstance(resp_data, dict)...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if isinstance(resp_data, dict):
                 return resp_data.get("message") or resp_data.get("error") or str(resp_data)
         except Exception:
@@ -1675,6 +2100,12 @@ class N8NService:
 
     @staticmethod
     async def send_whatsapp_message(payload: dict, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> dict:
+        """
+        Função/Método send_whatsapp_message.
+
+        O que faz: Processa send_whatsapp_message recebendo os parâmetros (payload, user_id, tenant_id) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação send_whatsapp_message seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
         url = settings.CRM_SEND_WHATSAPP_WEBHOOK_URL
         lead_id = payload.get("lead_id")
         message_text = payload.get("message")
@@ -1685,16 +2116,21 @@ class N8NService:
 
         # Resolve lid from cache or lead list if present
         lid = None
+# Lógica de decisão (if): Avalia 'if lead_id in RAW_LEADS_CACHE:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if lead_id in RAW_LEADS_CACHE:
             cached = RAW_LEADS_CACHE[lead_id]
             lid = cached.get("lid") or cached.get("LID") or cached.get("Lid")
         
+# Lógica de decisão (if): Avalia 'if not lid:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not lid:
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 leads = await N8NService.get_leads(user_id=user_id, tenant_id=tenant_id)
                 lead_obj = next((l for l in leads if str(l.get("id")) == str(lead_id)), None)
+# Lógica de decisão (if): Avalia 'if lead_obj:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if lead_obj:
                     lid = lead_obj.get("lid")
+# Lógica de decisão (if): Avalia 'if not lid and lead_id in RAW_...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                     if not lid and lead_id in RAW_LEADS_CACHE:
                         cached = RAW_LEADS_CACHE[lead_id]
                         lid = cached.get("lid") or cached.get("LID") or cached.get("Lid")
@@ -1703,6 +2139,12 @@ class N8NService:
 
         # Helper to update local mock lists upon successful send
         def update_local_mock_state(msg_id: str, text: str, timestamp: str):
+            """
+            Função/Método update_local_mock_state.
+
+            O que faz: Atualização e modificação de informações para update_local_mock_state recebendo os parâmetros (msg_id, text, timestamp) no contexto de o serviço de domínio n8n_service.
+            Impacto na regra de negócio: Assegura que o fluxo da operação update_local_mock_state seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+            """
             N8NService.invalidate_leads_cache()
             msg = {
                 "id": msg_id,
@@ -1711,12 +2153,15 @@ class N8NService:
                 "channel": "whatsapp",
                 "timestamp": timestamp
             }
+# Lógica de decisão (if): Avalia 'if lead_id not in MOCK_CONVERS...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if lead_id not in MOCK_CONVERSATIONS:
                 MOCK_CONVERSATIONS[lead_id] = []
             MOCK_CONVERSATIONS[lead_id].append(msg)
 
             # Update last interaction timestamp on lead
+# Lógica de repetição (for): Itera sobre elementos de 'for lead in MOCK_LEA...' processando múltiplos dados em lote para as regras de domínio.
             for lead in MOCK_LEADS:
+# Lógica de decisão (if): Avalia 'if lead["id"] == lead_id:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if lead["id"] == lead_id:
                     lead["last_interaction"] = timestamp
                     break
@@ -1728,6 +2173,7 @@ class N8NService:
                 "timestamp": timestamp,
                 "metadata": {"message": text, "channel": "whatsapp"}
             }
+# Lógica de decisão (if): Avalia 'if lead_id not in MOCK_ACTIVIT...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if lead_id not in MOCK_ACTIVITIES:
                 MOCK_ACTIVITIES[lead_id] = []
             MOCK_ACTIVITIES[lead_id].append(act)
@@ -1736,6 +2182,7 @@ class N8NService:
         default_id = f"msg_{int(datetime.utcnow().timestamp())}"
         default_ts = datetime.utcnow().isoformat() + "Z"
 
+# Lógica de decisão (if): Avalia 'if not url:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not url:
             logger.info("CRM_SEND_WHATSAPP_WEBHOOK_URL not configured. Message logged locally in-memory.")
             return update_local_mock_state(default_id, message_text, default_ts)
@@ -1751,16 +2198,21 @@ class N8NService:
             "message": message_text,
             "lead_id": lead_id
         }
+# Lógica de decisão (if): Avalia 'if lid:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if lid:
             outgoing_payload["lid"] = lid
+# Lógica de decisão (if): Avalia 'if payload.get("updated_by"):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if payload.get("updated_by"):
             outgoing_payload["updated_by"] = payload["updated_by"]
             outgoing_payload["alterado_por"] = payload["updated_by"]
+# Lógica de decisão (if): Avalia 'if payload.get("whatsapp_token...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if payload.get("whatsapp_token"):
             outgoing_payload["whatsapp_token"] = payload["whatsapp_token"]
+# Lógica de decisão (if): Avalia 'if payload.get("session_id"):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if payload.get("session_id"):
             outgoing_payload["session_id"] = payload["session_id"]
             public_url = getattr(settings, "WHATSAPP_PUBLIC_URL", "https://dominuslabs.online").rstrip("/")
+# Lógica de decisão (if): Avalia 'if not public_url or public_ur...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if not public_url or public_url in ("http://localhost:3000", "https://localhost:3000"):
                 public_url = "https://dominuslabs.online"
             outgoing_payload["whatsapp_api_url"] = public_url
@@ -1770,31 +2222,39 @@ class N8NService:
         encrypted_payload = encrypt_payload(outgoing_payload, "n8n")
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 response = await client.post(url, json=encrypted_payload, timeout=30.0)
                 
                 # Check for the specific authentication error format returned by n8n
                 is_auth_error = False
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
                 try:
+# Lógica de decisão (if): Avalia 'if response.status_code == 401...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                     if response.status_code == 401:
                         is_auth_error = True
                     else:
                         resp_text = response.text
+# Lógica de decisão (if): Avalia 'if any(kw in resp_text.lower()...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                         if any(kw in resp_text.lower() for kw in ["401", "unauthorized", "invalid_token", "token verification failed", "missing token"]):
                             is_auth_error = True
                 except Exception:
                     pass
 
+# Lógica de decisão (if): Avalia 'if is_auth_error:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if is_auth_error:
                     print("[M2M-AUTH-FLOW] >>> Detectado erro de autenticação n8n no corpo da resposta.", flush=True)
                     raise ValueError("AUTH_ERROR_N8N_BAD_REQUEST")
 
+# Lógica de decisão (if): Avalia 'if response.status_code >= 400...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if response.status_code >= 400:
                     # Try to extract detailed error message from response body
                     error_msg = f"HTTP {response.status_code}"
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
                     try:
                         resp_data = response.json()
                         extracted_msg = N8NService._extract_n8n_error_message(resp_data)
+# Lógica de decisão (if): Avalia 'if extracted_msg:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                         if extracted_msg:
                             error_msg = extracted_msg
                         elif isinstance(resp_data, dict):
@@ -1809,14 +2269,18 @@ class N8NService:
                 msg_text = message_text
                 msg_ts = default_ts
                 
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
                 try:
                     res_json = clean_n8n_response(response.json())
                     msg_data = res_json.get("message") if isinstance(res_json, dict) else None
+# Lógica de decisão (if): Avalia 'if isinstance(msg_data, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                     if isinstance(msg_data, dict):
                         msg_id = msg_data.get("id") or msg_id
                         msg_text = msg_data.get("text") or msg_data.get("message") or msg_text
                         ts_val = msg_data.get("timestamp")
+# Lógica de decisão (if): Avalia 'if ts_val:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                         if ts_val:
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
                             try:
                                 msg_ts = datetime.fromtimestamp(float(ts_val)).isoformat() + "Z"
                             except Exception:
@@ -1833,12 +2297,19 @@ class N8NService:
 
     @staticmethod
     async def create_activity(lead_id: str, event_type: str, metadata: dict) -> dict:
+        """
+        Função/Método create_activity.
+
+        O que faz: Criação de novos registros e processamento para create_activity recebendo os parâmetros (lead_id, event_type, metadata) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação create_activity seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
         new_activity = {
             "lead_id": lead_id,
             "event_type": event_type,
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "metadata": metadata
         }
+# Lógica de decisão (if): Avalia 'if lead_id not in MOCK_ACTIVIT...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if lead_id not in MOCK_ACTIVITIES:
             MOCK_ACTIVITIES[lead_id] = []
         MOCK_ACTIVITIES[lead_id].append(new_activity)
@@ -1846,6 +2317,12 @@ class N8NService:
 
     @staticmethod
     async def get_activities(lead_id: str) -> List[dict]:
+        """
+        Função/Método get_activities.
+
+        O que faz: Recuperação de dados cadastrados para get_activities recebendo os parâmetros (lead_id) no contexto de o serviço de domínio n8n_service.
+        Impacto na regra de negócio: Assegura que o fluxo da operação get_activities seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
         return MOCK_ACTIVITIES.get(lead_id, [])
 
 n8n_service = N8NService()

@@ -1,3 +1,9 @@
+"""
+Documentação do módulo product_media.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o endpoint de API para product_media.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para product_media funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 import os
 import shutil
 import uuid
@@ -19,8 +25,15 @@ def upload_product_media(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
+    """
+    Função/Método upload_product_media.
+
+    O que faz: Processa upload_product_media recebendo os parâmetros (product_id, tenant_id, file, db) no contexto de o endpoint de API para product_media.
+    Impacto na regra de negócio: Assegura que o fluxo da operação upload_product_media seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
     file_type = file.content_type or "application/octet-stream"
     
+# Lógica de decisão (if): Avalia 'if file_type.startswith("image...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if file_type.startswith("image/"):
         media_type = "image"
     elif file_type.startswith("video/"):
@@ -39,6 +52,7 @@ def upload_product_media(
     # URL that the frontend will use to fetch the file via the static or get_uploaded_file endpoint
     relative_url = f"/api/uploads/products/{filename}"
 
+# Gerenciador de contexto (with): Garante o gerenciamento seguro de recursos (ex: sessões de banco de dados ou arquivos).
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 

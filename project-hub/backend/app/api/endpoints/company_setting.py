@@ -1,3 +1,9 @@
+"""
+Documentação do módulo company_setting.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o endpoint de API para company_setting.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para company_setting funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 

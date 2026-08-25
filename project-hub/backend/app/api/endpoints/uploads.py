@@ -1,3 +1,9 @@
+"""
+Documentação do módulo uploads.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o endpoint de API para uploads.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para uploads funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 import os
 import shutil
 import uuid
@@ -14,6 +20,13 @@ from app.core.auth import get_current_user, check_project_edit_permission
 router = APIRouter()
 
 def get_upload_subfolder(file_type: str) -> str:
+    """
+    Função/Método get_upload_subfolder.
+
+    O que faz: Recuperação de dados cadastrados para get_upload_subfolder recebendo os parâmetros (file_type) no contexto de o endpoint de API para uploads.
+    Impacto na regra de negócio: Assegura que o fluxo da operação get_upload_subfolder seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
+# Lógica de decisão (if): Avalia 'if file_type.startswith("image...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if file_type.startswith("image/"):
         return "images"
     elif file_type.startswith("video/"):
@@ -30,8 +43,15 @@ def upload_file(
     db: Session = Depends(get_db),
     current_user: str = Depends(check_project_edit_permission)
 ):
+    """
+    Função/Método upload_file.
+
+    O que faz: Processa upload_file recebendo os parâmetros (project_id, file, db, current_user) no contexto de o endpoint de API para uploads.
+    Impacto na regra de negócio: Assegura que o fluxo da operação upload_file seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
     # Check if project exists
     project = project_repo.get(db, id=project_id)
+# Lógica de decisão (if): Avalia 'if not project:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -49,6 +69,7 @@ def upload_file(
     relative_path = f"uploads/{subfolder}/{filename}"
 
     # Save file
+# Gerenciador de contexto (with): Garante o gerenciamento seguro de recursos (ex: sessões de banco de dados ou arquivos).
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
@@ -68,7 +89,14 @@ from fastapi.responses import FileResponse
 
 @router.get("/{subfolder}/{filename}")
 def get_uploaded_file(subfolder: str, filename: str):
+    """
+    Função/Método get_uploaded_file.
+
+    O que faz: Recuperação de dados cadastrados para get_uploaded_file recebendo os parâmetros (subfolder, filename) no contexto de o endpoint de API para uploads.
+    Impacto na regra de negócio: Assegura que o fluxo da operação get_uploaded_file seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
     file_path = os.path.join(settings.UPLOAD_DIR, subfolder, filename)
+# Lógica de decisão (if): Avalia 'if not os.path.exists(file_pat...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(file_path)

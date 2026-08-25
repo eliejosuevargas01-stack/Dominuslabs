@@ -1,8 +1,20 @@
+"""
+Documentação do módulo company_setting.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o modelo de banco de dados company_setting.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o modelo de banco de dados company_setting funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Float
 from datetime import datetime
 from app.core.database import Base
 
 class CompanySetting(Base):
+    """
+    Classe CompanySetting.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade CompanySetting em o modelo de banco de dados company_setting.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade CompanySetting, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     __tablename__ = "company_settings"
 
     id = Column(Integer, primary_key=True, index=True)

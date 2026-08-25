@@ -1,8 +1,20 @@
+"""
+Documentação do módulo user.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o modelo de banco de dados user.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o modelo de banco de dados user funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from datetime import datetime
 from app.core.database import Base
 
 class User(Base):
+    """
+    Classe User.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade User em o modelo de banco de dados user.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade User, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)

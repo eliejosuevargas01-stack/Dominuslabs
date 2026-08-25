@@ -25,14 +25,17 @@ async def is_token_still_valid(token: str, margin_seconds: int = 30) -> bool:
     """
     Verifica se o token M2M/JWT é válido e tem mais de `margin_seconds` de vida útil restante.
     """
+# Lógica de decisão (if): Avalia 'if not token or "." not in tok...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not token or "." not in token:
         return False
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         import base64
         import json
         import time
 
         parts = token.split(".")
+# Lógica de decisão (if): Avalia 'if len(parts) != 3:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if len(parts) != 3:
             return False
 
@@ -55,7 +58,9 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
     """
     cache_key = (tenant_id, scope)
     cached_token = _identity_token_cache.get(cache_key)
+# Lógica de decisão (if): Avalia 'if cached_token:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if cached_token:
+# Lógica de decisão (if): Avalia 'if await is_token_still_valid(...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if await is_token_still_valid(cached_token, margin_seconds=30):
             logger.debug(f"[IDENTITY-WORKER] Reutilizando JWT M2M do cache para tenant_id={tenant_id}, scope={scope}")
             return cached_token
@@ -73,6 +78,7 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
         "cf-client-cert-issuer-dn": "CN=dominus-prod"
     }
 
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         payload = {
             "client_id": "dominus-prod",
@@ -92,14 +98,18 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
     logger.info(f"[IDENTITY-WORKER] Requisitando novo JWT M2M para tenant_id={tenant_id}, scope={scope}...")
     print(f"[AUDIT] 🔐 Conexão com Identity Worker: URL={url}", flush=True)
 
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         async with get_async_client(timeout=10.0, service_name="identity") as client:
             resp = await client.post(url, json=payload, headers=headers)
+# Lógica de decisão (if): Avalia 'if resp.status_code == 200:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if resp.status_code == 200:
                 logger.info("[FLOW-STEP 4] Received successful response from Identity Worker")
                 print("[FLOW-STEP 4] Received successful response from Identity Worker", flush=True)
                 data = resp.json()
+# Lógica de decisão (if): Avalia 'if isinstance(data, dict) and ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if isinstance(data, dict) and data.get("_encrypted") is True:
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
                     try:
                         data = decrypt_payload(data)
                         logger.info("[FLOW-STEP 5] Identity Worker response payload decrypted successfully")
@@ -118,6 +128,7 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
                 token = data.get("access_token")
                 expires_in = data.get("expires_in", 300)
 
+# Lógica de decisão (if): Avalia 'if not token:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if not token:
                     logger.error("[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker response payload (access_token missing)")
                     print("[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker response payload (access_token missing)", flush=True)

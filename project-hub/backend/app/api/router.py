@@ -1,3 +1,9 @@
+"""
+Documentação do módulo router.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o módulo core/base router.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o módulo core/base router funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 from fastapi import APIRouter
 
 from app.api.endpoints import projects, uploads, webhooks, auth, crm, users, whatsapp, health, company_setting, product_media, products

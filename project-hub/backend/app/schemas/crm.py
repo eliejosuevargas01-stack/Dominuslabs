@@ -1,8 +1,20 @@
+"""
+Documentação do módulo crm.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o esquema de validação Pydantic crm.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o esquema de validação Pydantic crm funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional, Union
 from datetime import datetime
 
 class LeadBase(BaseModel):
+    """
+    Classe LeadBase.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade LeadBase em o esquema de validação Pydantic crm.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade LeadBase, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     lead_id: Optional[str] = None
     empresa_nome: Optional[str] = None
     company_name: Optional[str] = None  # Mantido para compatibilidade
@@ -35,12 +47,30 @@ class LeadBase(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 class LeadCreate(LeadBase):
+    """
+    Classe LeadCreate.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade LeadCreate em o esquema de validação Pydantic crm.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade LeadCreate, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     pass
 
 class LeadUpdate(LeadBase):
+    """
+    Classe LeadUpdate.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade LeadUpdate em o esquema de validação Pydantic crm.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade LeadUpdate, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     pass
 
 class Lead(LeadBase):
+    """
+    Classe Lead.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade Lead em o esquema de validação Pydantic crm.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade Lead, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     id: str  # String ID to support flexible N8N systems
     last_interaction: Optional[str] = None
     created_at: Optional[str] = None
@@ -50,18 +80,42 @@ class Lead(LeadBase):
     model_config = ConfigDict(from_attributes=True, extra="allow")
 
 class MessageBase(BaseModel):
+    """
+    Classe MessageBase.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade MessageBase em o esquema de validação Pydantic crm.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade MessageBase, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     sender: str  # "lead" or "user"
     message: str
     channel: Optional[str] = "instagram"
     timestamp: Optional[str] = None
 
 class MessageCreate(MessageBase):
+    """
+    Classe MessageCreate.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade MessageCreate em o esquema de validação Pydantic crm.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade MessageCreate, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     pass
 
 class Message(MessageBase):
+    """
+    Classe Message.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade Message em o esquema de validação Pydantic crm.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade Message, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     id: Optional[str] = None
 
 class MessageSendPayload(BaseModel):
+    """
+    Classe MessageSendPayload.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade MessageSendPayload em o esquema de validação Pydantic crm.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade MessageSendPayload, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     lead_id: str
     phone: Optional[str] = None
     message: str
@@ -70,6 +124,12 @@ class MessageSendPayload(BaseModel):
     jid: Optional[str] = None
 
 class CrmDashboardMetrics(BaseModel):
+    """
+    Classe CrmDashboardMetrics.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade CrmDashboardMetrics em o esquema de validação Pydantic crm.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade CrmDashboardMetrics, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     total_leads: int
     leads_novos: int
     conversas_iniciadas: int
