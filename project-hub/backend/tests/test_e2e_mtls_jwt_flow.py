@@ -41,11 +41,12 @@ async def test_full_m2m_flow():
         print(f"\n[E2E-TEST] 1. Usuário criado: user_id={user.id}, tenant_id={user.tenant_id}")
 
         # 2. Provisionamento da conta WhatsApp vinculada ao tenant_id
+        import uuid
+        from app.models.whatsapp_account import WhatsappAccount
         wa_account = WhatsappAccount(
             user_id=user.id,
             tenant_id=user.tenant_id,
-            client_id="123e4567-e89b-12d3-a456-426614174000",
-            client_secret="test_secret_key_12345"
+            idpw=str(uuid.uuid4())
         )
         db.add(wa_account)
         db.commit()

@@ -38,6 +38,12 @@ def test_get_products(mock_auth, mocker):
     mock_product.disponivel = True
     mock_product.imagem_url = "http://example.com/img.png"
     mock_product.estoque = 5
+    from datetime import datetime
+    mock_product.created_at = datetime.utcnow()
+    mock_product.descricao = "Test Description"
+    mock_product.disponivel = True
+    mock_product.imagem_url = "http://example.com/img.png"
+    mock_product.estoque = 5
     mock_product.created_at = "2023-01-01T00:00:00Z"
     
     mock_auth.query().filter().all.return_value = [mock_product]
@@ -57,6 +63,14 @@ def test_create_product(mock_auth, mocker):
     from app.core.database import get_db
     app.dependency_overrides[get_db] = lambda: mock_auth
     
+    # We need to ensure the mocked product returned by add/refresh has created_at
+    def mock_refresh(obj):
+        from datetime import datetime
+        obj.id = "new-uuid"
+        obj.created_at = datetime.utcnow()
+
+    mock_auth.refresh.side_effect = mock_refresh
+
     response = client.post("/api/v1/products", json={
         "name": "New Product",
         "category": "Cat",
@@ -82,9 +96,15 @@ def test_update_product(mock_auth, mocker):
     mock_product = mocker.MagicMock()
     mock_product.id = "prod-1"
     mock_product.tenant_id = "tenant-123"
-    mock_product.nome = "Old Product"
-    mock_product.categoria = "Old Category"
+    mock_product.nome = "Test Product"
+    mock_product.categoria = "Test Category"
     mock_product.preco = 10.0
+    mock_product.descricao = "Test Description"
+    mock_product.disponivel = True
+    mock_product.imagem_url = "http://example.com/img.png"
+    mock_product.estoque = 5
+    from datetime import datetime
+    mock_product.created_at = datetime.utcnow()
     
     # query().filter().first() is called twice (user, then product)
     # We can handle this by side_effect

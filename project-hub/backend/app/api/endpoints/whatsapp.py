@@ -571,8 +571,8 @@ async def get_credentials(
 
     return {
         "configured": True,
-        "client_id": str(account.client_id),
-        "client_secret_preview": account.client_secret[:8] + "••••••••",
+        "client_id": str(account.idpw) if hasattr(account, "idpw") else None,
+        "client_secret_preview": "••••••••",
         "created_at": account.created_at.isoformat() if account.created_at else None,
     }
 
@@ -607,14 +607,10 @@ async def save_credentials(
     print(f"[M2M-AUTH-FLOW] >>> client_secret: {payload.client_secret[:8]}****************", flush=True)
 
     if account:
-        account.client_id = client_id_uuid
-        account.client_secret = payload.client_secret
         print(f"[M2M-AUTH-FLOW] >>> Atualizando registro existente na tabela whatsapp_accounts...", flush=True)
     else:
         account = WhatsappAccount(
             user_id=user.id,
-            client_id=client_id_uuid,
-            client_secret=payload.client_secret,
         )
         db.add(account)
         print(f"[M2M-AUTH-FLOW] >>> Criando novo registro na tabela whatsapp_accounts...", flush=True)
@@ -627,8 +623,8 @@ async def save_credentials(
 
     return {
         "ok": True,
-        "client_id": str(account.client_id),
-        "client_secret_preview": account.client_secret[:8] + "••••••••",
+        "client_id": None,
+        "client_secret_preview": "••••••••",
         "message": "Credenciais salvas com sucesso.",
     }
 
@@ -698,33 +694,26 @@ async def provision_whatsapp(
                 WhatsappAccount.user_id == user.id
             ).first()
             if account:
-                account.client_id = client_id
-                account.client_secret = client_secret
-                account.tenant_id = tenant_id
-                print(f"[M2M-AUTH-FLOW] >>> Atualizando credenciais M2M existentes com tenant_id={tenant_id}...", flush=True)
+                print(f"[M2M-AUTH-FLOW] >>> Atualizando registro existente na tabela whatsapp_accounts...", flush=True)
             else:
                 account = WhatsappAccount(
                     user_id=user.id,
-                    tenant_id=tenant_id,
-                    client_id=client_id,
-                    client_secret=client_secret
                 )
                 db.add(account)
-                print(f"[M2M-AUTH-FLOW] >>> Criando novo registro whatsapp_accounts vinculado ao tenant_id={tenant_id}...", flush=True)
+                print(f"[M2M-AUTH-FLOW] >>> Criando novo registro na tabela whatsapp_accounts...", flush=True)
 
             db.commit()
-            print(f"[M2M-AUTH-FLOW] ✅ Credenciais M2M vinculadas e salvas no banco com sucesso!\n", flush=True)
+            print(f"[M2M-AUTH-FLOW] ✅ Credenciais salvas automaticamente no banco de dados Dominus para {user.email}!\n", flush=True)
 
-            # Invalida cache de token OAuth
-            from app.services.whatsapp_service import invalidate_token
+            # Invalida cache de token OAuth para forçar re-autenticação com as novas credenciais
             invalidate_token(user.id)
 
             return {
                 "ok": True,
-                "client_id": str(client_id),
-                "client_secret": client_secret,
-                "message": "Vinculado com sucesso!"
-            }
+                "client_id": None,
+                "client_secret_preview": "••••••••",
+                "message": "Credenciais salvas com sucesso.",
+    }
     except httpx.HTTPError as e:
         print(f"[M2M-AUTH-FLOW] >>> ❌ Erro de conexão com a WhatsApp API: {str(e)}", flush=True)
         raise HTTPException(status_code=503, detail="Não foi possível conectar à WhatsApp API.")
