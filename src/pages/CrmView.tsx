@@ -6,8 +6,51 @@ import {
 } from 'lucide-react';
 import { API_BASE, fetchWithAuth } from '../services/api';
 
+export interface Lead {
+  id: string;
+  lead_id?: string;
+  empresa_nome?: string;
+  company_name?: string;
+  instagram?: string;
+  whatsapp?: string;
+  telefone_contato?: string;
+  email_contato?: string;
+  email?: string;
+  status?: string;
+  origem?: string;
+  origin?: string;
+  nicho?: string;
+  segmento?: string;
+  localizacao?: string;
+  data_coleta?: string;
+  score?: string | number;
+  temperatura?: string | number;
+  proposta_inicial?: string;
+  lid?: string | number;
+  payload?: Record<string, any>;
+  notes?: string;
+  proposal?: string;
+  responsible?: string;
+  falha_identificada?: string;
+  solucao_recomendada?: string;
+  id_anuncio_meta?: string;
+  alterado_por?: string;
+  updated_by?: string;
+  created_by?: string;
+  last_interaction?: string;
+  created_at?: string;
+  updated_at?: string;
+  has_messages?: boolean;
+  mensagem_enviada?: boolean;
+  push_name?: string;
+  nome?: string;
+  display_phone?: string;
+  phone?: string;
+  ultima_mensagem?: string;
+}
+
 export default function CrmView() {
-  const [leads, setLeads] = useState<any[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [metrics, setMetrics] = useState<any>(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
@@ -31,12 +74,12 @@ export default function CrmView() {
       
       // Auto-advance leads with chat history from Em Atendimento → Aguardando Cliente
       const leadsToAdvance = leadsData.filter(
-        (l: any) => l.mensagem_enviada === true && l.status === 'Em Atendimento'
+        (l: Lead) => l.mensagem_enviada === true && l.status === 'Em Atendimento'
       );
 
       if (leadsToAdvance.length > 0) {
         await Promise.allSettled(
-          leadsToAdvance.map((l: any) =>
+          leadsToAdvance.map((l: Lead) =>
             fetchWithAuth(`${API_BASE}/crm/leads/${l.id}`, {
               method: 'PUT',
               body: JSON.stringify({ ...l, status: 'Aguardando Cliente' })
@@ -44,7 +87,7 @@ export default function CrmView() {
           )
         );
 
-        leadsData.forEach((l: any) => {
+        leadsData.forEach((l: Lead) => {
           if (l.mensagem_enviada === true && l.status === 'Em Atendimento') {
             l.status = 'Aguardando Cliente';
           }
