@@ -67,12 +67,6 @@ class Settings(BaseSettings):
     WHATSAPP_MASTER_SECRET: str = os.getenv("WHATSAPP_MASTER_SECRET", os.getenv("WHATSAPP_MASTER_KEY", os.getenv("MASTER_API_KEY", "default_master_secret")))
     IDENTITY_WORKER_URL: str = os.getenv("IDENTITY_WORKER_URL", "https://identity.dominus.online")
 
-    # mTLS Security Settings
-    MTLS_CERT_PATH: str = os.getenv("MTLS_CERT_PATH", "")
-    MTLS_KEY_PATH: str = os.getenv("MTLS_KEY_PATH", "")
-    MTLS_CA_CERT_PATH: str = os.getenv("MTLS_CA_CERT_PATH", "")
-    ENABLE_MTLS: bool = os.getenv("ENABLE_MTLS", "false").lower() in ("true", "1")
-
     # Hybrid Encryption Keys (Zero-Trust)
     DOMINUS_PRIVATE_KEY: str = os.getenv("DOMINUS_PRIVATE_KEY", "")
     DOMINUS_PUBLIC_KEY: str = os.getenv("DOMINUS_PUBLIC_KEY", "")

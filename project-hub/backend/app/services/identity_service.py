@@ -11,8 +11,8 @@ import httpx
 from cachetools import TTLCache
 from fastapi import HTTPException, status
 from app.core.config import settings
-from app.core.mtls_client import get_mtls_async_client
 from app.core.crypto import decrypt_payload
+from app.core.http_client import get_async_client
 
 logger = logging.getLogger("identity_service")
 
@@ -89,11 +89,11 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
         print(f"[FLOW-STEP 2] ERROR: Failed to create Identity Worker request payload ({create_err})", flush=True)
         raise create_err
 
-    logger.info(f"[IDENTITY-WORKER] Requisitando novo JWT M2M via mTLS para tenant_id={tenant_id}, scope={scope}...")
-    print(f"[mTLS-AUDIT] 🔐 Conexão mTLS com Identity Worker NECESSÁRIA (autenticação de certificado cliente Cloudflare): URL={url}", flush=True)
+    logger.info(f"[IDENTITY-WORKER] Requisitando novo JWT M2M para tenant_id={tenant_id}, scope={scope}...")
+    print(f"[AUDIT] 🔐 Conexão com Identity Worker: URL={url}", flush=True)
 
     try:
-        async with get_mtls_async_client(timeout=10.0, service_name="identity") as client:
+        async with get_async_client(timeout=10.0, service_name="identity") as client:
             resp = await client.post(url, json=payload, headers=headers)
             if resp.status_code == 200:
                 logger.info("[FLOW-STEP 4] Received successful response from Identity Worker")
