@@ -150,6 +150,7 @@ export default function TaskChecklist({ projectId, admin, onTasksUpdated }: Task
           />
           <button
             type="submit"
+            aria-label="Adicionar nova tarefa"
             className="bg-purple-600 hover:bg-purple-700 text-white rounded-xl p-2 flex items-center justify-center transition-colors disabled:opacity-50"
             disabled={addingTask}
           >

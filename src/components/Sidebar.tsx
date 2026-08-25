@@ -39,6 +39,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
       <div className="lg:hidden fixed top-3 left-4 z-50">
         <button
           onClick={() => setIsOpen(!isOpen)}
+          aria-label={isOpen ? "Fechar menu" : "Abrir menu"}
           className="p-2 rounded-xl   border border-zinc-200 shadow-sm text-slate-700 hover:text-purple-700 transition-all cursor-pointer flex items-center justify-center"
         >
           {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
