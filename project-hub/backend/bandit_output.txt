@@ -1,0 +1,145 @@
+Run started:2026-08-25 14:26:04.174523+00:00
+
+Test results:
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: app/services/n8n_service.py:54:8
+53	                return parsed
+54	        except Exception:
+55	            pass
+56	    return {}
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: app/services/n8n_service.py:267:8
+266	            session_id = profile_pic.split("/api/sessions/")[1].split("/")[0]
+267	        except Exception:
+268	            pass
+269	    if not session_id:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: app/services/n8n_service.py:1500:16
+1499	                        return res_data
+1500	                except Exception:
+1501	                    pass
+1502	                return {"status": "success", "id": lead_id}
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: app/services/n8n_service.py:1667:28
+1666	                                    return decoded_data.get("message") or decoded_data.get("error") or inner_msg
+1667	                            except Exception:
+1668	                                pass
+1669	                        return inner_msg
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: app/services/n8n_service.py:1672:8
+1671	                return resp_data.get("message") or resp_data.get("error") or str(resp_data)
+1672	        except Exception:
+1673	            pass
+1674	        return None
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: app/services/n8n_service.py:1701:12
+1700	                        lid = cached.get("lid") or cached.get("LID") or cached.get("Lid")
+1701	            except Exception:
+1702	                pass
+1703
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: app/services/n8n_service.py:1785:16
+1784	                            is_auth_error = True
+1785	                except Exception:
+1786	                    pass
+1787
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: app/services/n8n_service.py:1822:28
+1821	                                msg_ts = datetime.fromtimestamp(float(ts_val)).isoformat() + "Z"
+1822	                            except Exception:
+1823	                                pass
+1824	                except Exception:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: app/services/n8n_service.py:1824:16
+1823	                                pass
+1824	                except Exception:
+1825	                    pass
+1826
+
+--------------------------------------------------
+>> Issue: [B106:hardcoded_password_funcarg] Possible hardcoded password: 'securepassword123'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b106_hardcoded_password_funcarg.html
+   Location: tests/test_e2e_jwt_flow.py:33:18
+32	            email=test_email,
+33	            password="securepassword123",
+34	            role="custom",
+35	            can_manage_crm=True
+36	        )
+37	        user = user_repo.create(db, user_in)
+38	        assert user.id is not None
+39	        assert user.tenant_id is not None
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'wrong'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: tests/test_projects.py:17:35
+16	        "/api/v1/auth/login",
+17	        json={"username": "wrong", "password": "wrong"}
+18	    )
+
+--------------------------------------------------
+
+Code scanned:
+	Total lines of code: 2439
+	Total lines skipped (#nosec): 0
+	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0
+		Low: 11
+		Medium: 0
+		High: 0
+	Total issues (by confidence):
+		Undefined: 0
+		Low: 0
+		Medium: 2
+		High: 9
+Files skipped (0):
