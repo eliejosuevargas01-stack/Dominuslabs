@@ -546,6 +546,74 @@ function renderMessageMedia(msg: any, defaultSessionId?: string, onOpenLightbox?
   return null;
 }
 
+export interface Lead {
+  id: string;
+  lead_id?: string;
+  empresa_nome?: string;
+  company_name?: string;
+  instagram?: string;
+  whatsapp?: string;
+  telefone_contato?: string;
+  email_contato?: string;
+  email?: string;
+  status?: string;
+  origem?: string;
+  origin?: string;
+  nicho?: string;
+  segmento?: string;
+  localizacao?: string;
+  data_coleta?: string;
+  score?: string | number;
+  temperatura?: string | number;
+  proposta_inicial?: string;
+  lid?: string | number;
+  payload?: Record<string, any>;
+  notes?: string;
+  proposal?: string;
+  responsible?: string;
+  falha_identificada?: string;
+  solucao_recomendada?: string;
+  id_anuncio_meta?: string;
+  alterado_por?: string;
+  updated_by?: string;
+  created_by?: string;
+  last_interaction?: string;
+  created_at?: string;
+  updated_at?: string;
+  has_messages?: boolean;
+  mensagem_enviada?: boolean;
+  push_name?: string;
+  nome?: string;
+  display_phone?: string;
+  phone?: string;
+  ultima_mensagem?: string;
+}
+
+export interface Conversation {
+  id?: string;
+  contact_jid: string;
+  session_id?: string;
+  unread_count?: number;
+  push_name?: string;
+  name?: string;
+  ultima_mensagem?: string;
+  last_interaction?: string;
+  avatar?: string;
+}
+
+export interface OmnichannelMessage {
+  id?: string;
+  message_id?: string;
+  sender?: string;
+  message?: string;
+  content?: string;
+  timestamp?: string;
+  status?: string;
+  media_url?: string;
+  media_type?: string;
+  caption?: string;
+}
+
 export default function OmnichannelView() {
   const navigate = useNavigate();
   // Navigation / Tabs state

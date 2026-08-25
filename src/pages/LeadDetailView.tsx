@@ -28,6 +28,49 @@ const InstagramIcon = ({ size = 16, ...props }: React.SVGProps<SVGSVGElement> & 
   </svg>
 );
 
+export interface Lead {
+  id: string;
+  lead_id?: string;
+  empresa_nome?: string;
+  company_name?: string;
+  instagram?: string;
+  whatsapp?: string;
+  telefone_contato?: string;
+  email_contato?: string;
+  email?: string;
+  status?: string;
+  origem?: string;
+  origin?: string;
+  nicho?: string;
+  segmento?: string;
+  localizacao?: string;
+  data_coleta?: string;
+  score?: string | number;
+  temperatura?: string | number;
+  proposta_inicial?: string;
+  lid?: string | number;
+  payload?: Record<string, any>;
+  notes?: string;
+  proposal?: string;
+  responsible?: string;
+  falha_identificada?: string;
+  solucao_recomendada?: string;
+  id_anuncio_meta?: string;
+  alterado_por?: string;
+  updated_by?: string;
+  created_by?: string;
+  last_interaction?: string;
+  created_at?: string;
+  updated_at?: string;
+  has_messages?: boolean;
+  mensagem_enviada?: boolean;
+  push_name?: string;
+  nome?: string;
+  display_phone?: string;
+  phone?: string;
+  ultima_mensagem?: string;
+}
+
 export default function LeadDetailView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -43,7 +86,7 @@ export default function LeadDetailView() {
   const [deletingLead, setDeletingLead] = useState(false);
 
   // Chat & Messaging state
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<Lead[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [whatsappMessage, setWhatsappMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -52,7 +95,7 @@ export default function LeadDetailView() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // WhatsApp sessions
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<Lead[]>([]);
   const [selectedSession, setSelectedSession] = useState<string>('');
 
   const statuses = [

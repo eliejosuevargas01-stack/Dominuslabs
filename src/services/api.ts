@@ -55,7 +55,7 @@ export async function fetchWithAuth(
   });
 
   if (response.status === 401) {
-    const isSubServiceRoute = url.includes("/whatsapp/") || url.includes("/scrapper/");
+    const isSubServiceRoute = url.includes("/whatsapp/");
     const refreshToken = localStorage.getItem("admin_refresh_token");
     if (refreshToken && refreshToken !== "null" && refreshToken !== "undefined") {
       try {
