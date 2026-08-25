@@ -1,3 +1,9 @@
+"""
+Documentação do módulo users.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o endpoint de API para users.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para users funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
@@ -29,6 +35,7 @@ def create_user(
 ):
     """Create a new user (Admin only)"""
     existing = user_repo.get_by_email(db, email=user_in.email)
+# Lógica de decisão (if): Avalia 'if existing:...' para validar se o registro já existe para evitar duplicações no banco de dados.
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -45,14 +52,17 @@ def update_user(
 ):
     """Update a user details or permissions (Admin only)"""
     user = user_repo.get(db, id=user_id)
+# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Usuário não encontrado."
         )
         
+# Lógica de decisão (if): Avalia 'if user_in.email and user_in.e...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if user_in.email and user_in.email != user.email:
         existing = user_repo.get_by_email(db, email=user_in.email)
+# Lógica de decisão (if): Avalia 'if existing:...' para validar se o registro já existe para evitar duplicações no banco de dados.
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -69,12 +79,14 @@ def delete_user(
 ):
     """Delete a user (Admin only). Prevent deleting oneself."""
     user = user_repo.get(db, id=user_id)
+# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Usuário não encontrado."
         )
         
+# Lógica de decisão (if): Avalia 'if user.email == current_user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if user.email == current_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -94,6 +106,7 @@ def anonymize_my_data(
     Anonymizes user PII instead of hard deleting to preserve referential integrity if needed.
     """
     user = user_repo.get_by_email(db, email=current_user_email)
+# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

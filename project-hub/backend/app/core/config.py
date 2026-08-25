@@ -1,13 +1,23 @@
+"""
+Documentação do módulo config.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o módulo core/base config.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o módulo core/base config funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 import os
 from dotenv import load_dotenv
 
+# Lógica de decisão (if): Avalia 'if os.path.exists(".env.exampl...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
 if os.path.exists(".env.example"):
     load_dotenv(".env.example")
+# Lógica de decisão (if): Avalia 'if os.path.exists(".env"):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
 if os.path.exists(".env"):
     load_dotenv(".env", override=True)
 
 # Clean empty strings from os.environ so Pydantic defaults apply
+# Lógica de repetição (for): Itera sobre elementos de 'for k, v in list(os....' processando múltiplos dados em lote para as regras de domínio.
 for k, v in list(os.environ.items()):
+# Lógica de decisão (if): Avalia 'if v in ('""', "''", ""):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if v in ('""', "''", ""):
         del os.environ[k]
 
@@ -16,6 +26,12 @@ from typing import List, Union
 from pydantic import AnyHttpUrl, validator
 
 class Settings(BaseSettings):
+    """
+    Classe Settings.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade Settings em o módulo core/base config.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade Settings, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     PROJECT_NAME: str = "Dominuslabs"
     API_V1_STR: str = "/api/v1"
 
@@ -39,9 +55,17 @@ class Settings(BaseSettings):
     # Database (SQLite file stored in persistent uploads directory or PostgreSQL if DATABASE_URL is set)
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
+        """
+        Função/Método SQLALCHEMY_DATABASE_URI.
+
+        O que faz: Processa SQLALCHEMY_DATABASE_URI sem parâmetros específicos no contexto de o módulo core/base config.
+        Impacto na regra de negócio: Assegura que o fluxo da operação SQLALCHEMY_DATABASE_URI seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        """
+# Lógica de decisão (if): Avalia 'if self.DATABASE_URL:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if self.DATABASE_URL:
             # SQLAlchemy expects 'postgresql://' instead of 'postgres://'
             url = self.DATABASE_URL
+# Lógica de decisão (if): Avalia 'if url.startswith("postgres://...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if url.startswith("postgres://"):
                 url = url.replace("postgres://", "postgresql://", 1)
             return url
@@ -75,6 +99,12 @@ class Settings(BaseSettings):
     N8N_PUBLIC_KEY: str = os.getenv("N8N_PUBLIC_KEY", "")
 
     class Config:
+        """
+        Classe Config.
+
+        O que faz: Representa a estrutura de dados e operações para a entidade Config em o módulo core/base config.
+        Impacto na regra de negócio: Centraliza o comportamento da entidade Config, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+        """
         case_sensitive = True
 
 settings = Settings()

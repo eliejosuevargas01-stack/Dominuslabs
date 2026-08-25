@@ -29,9 +29,11 @@ async def get_tenant_id_for_user(user: User, db: Session) -> str:
     Retorna o tenant_id associado ao usuário.
     Se o usuário for admin, retorna 'admin' para permitir acesso universal às sessões master.
     """
+# Lógica de decisão (if): Avalia 'if user.role == "admin" or use...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if user.role == "admin" or user.email == settings.ADMIN_USERNAME:
         return settings.ADMIN_TENANT_ID
 
+# Lógica de decisão (if): Avalia 'if user.tenant_id:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if user.tenant_id:
         return user.tenant_id
 
@@ -48,14 +50,17 @@ async def check_token_validity(token: str) -> bool:
     """
     Verifica se o token M2M/JWT é válido sem depender de bibliotecas externas (PyJWT).
     """
+# Lógica de decisão (if): Avalia 'if not token or "." not in tok...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not token or "." not in token:
         return False
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         import base64
         import json
         import time
 
         parts = token.split(".")
+# Lógica de decisão (if): Avalia 'if len(parts) != 3:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if len(parts) != 3:
             return False
 

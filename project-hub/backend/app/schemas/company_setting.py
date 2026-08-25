@@ -1,8 +1,20 @@
+"""
+Documentação do módulo company_setting.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o esquema de validação Pydantic company_setting.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o esquema de validação Pydantic company_setting funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 class MenuItemSchema(BaseModel):
+    """
+    Classe MenuItemSchema.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade MenuItemSchema em o esquema de validação Pydantic company_setting.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade MenuItemSchema, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     id: Optional[str] = None
     name: str
     category: Optional[str] = None
@@ -12,6 +24,12 @@ class MenuItemSchema(BaseModel):
     image_url: Optional[str] = None
 
 class CompanySettingBase(BaseModel):
+    """
+    Classe CompanySettingBase.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade CompanySettingBase em o esquema de validação Pydantic company_setting.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade CompanySettingBase, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     company_name: Optional[str] = None
     niche: Optional[str] = None
     cnpj_cpf: Optional[str] = None
@@ -51,16 +69,40 @@ class CompanySettingBase(BaseModel):
     promotions: Optional[List[Dict[str, Any]]] = []
 
 class CompanySettingCreate(CompanySettingBase):
+    """
+    Classe CompanySettingCreate.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade CompanySettingCreate em o esquema de validação Pydantic company_setting.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade CompanySettingCreate, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     tenant_id: Optional[str] = "default"
 
 class CompanySettingUpdate(CompanySettingBase):
+    """
+    Classe CompanySettingUpdate.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade CompanySettingUpdate em o esquema de validação Pydantic company_setting.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade CompanySettingUpdate, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     pass
 
 class CompanySettingResponse(CompanySettingBase):
+    """
+    Classe CompanySettingResponse.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade CompanySettingResponse em o esquema de validação Pydantic company_setting.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade CompanySettingResponse, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     id: int
     tenant_id: str
     created_at: datetime
     updated_at: datetime
 
     class Config:
+        """
+        Classe Config.
+
+        O que faz: Representa a estrutura de dados e operações para a entidade Config em o esquema de validação Pydantic company_setting.
+        Impacto na regra de negócio: Centraliza o comportamento da entidade Config, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+        """
         from_attributes = True

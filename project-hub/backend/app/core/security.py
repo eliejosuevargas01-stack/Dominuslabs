@@ -1,3 +1,9 @@
+"""
+Documentação do módulo security.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o módulo core/base security.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o módulo core/base security funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 import hashlib
 import os
 
@@ -14,6 +20,7 @@ def get_password_hash(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify standard password against PBKDF2 hash"""
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         salt, db_hash = hashed_password.split(':')
         test_hash = hashlib.pbkdf2_hmac(

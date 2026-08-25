@@ -1,3 +1,9 @@
+"""
+Documentação do módulo whatsapp.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o endpoint de API para whatsapp.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para whatsapp funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.orm import Session
 import httpx
@@ -14,13 +20,21 @@ logger = logging.getLogger("whatsapp")
 router = APIRouter()
 
 async def get_user_m2m_headers(email: str, db: Session, scope: str = "whatsapp:sessions:read") -> Dict[str, str]:
+    """
+    Função/Método get_user_m2m_headers.
+
+    O que faz: Recuperação de dados cadastrados para get_user_m2m_headers recebendo os parâmetros (email, db, scope) no contexto de o endpoint de API para whatsapp.
+    Impacto na regra de negócio: Assegura que o fluxo da operação get_user_m2m_headers seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
     user = db.query(User).filter(User.email == email).first()
+# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Usuário não encontrado."
         )
     from app.services.whatsapp_service import get_oauth_token, get_tenant_id_for_user
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         tenant_id = await get_tenant_id_for_user(user, db)
         token = await get_oauth_token(user, db, scope=scope)
@@ -29,6 +43,7 @@ async def get_user_m2m_headers(email: str, db: Session, scope: str = "whatsapp:s
             "x-tenant-id": tenant_id,
             "Authorization": f"Bearer {token}"
         }
+# Lógica de decisão (if): Avalia 'if getattr(settings, "WHATSAPP...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if getattr(settings, "WHATSAPP_MASTER_SECRET", None):
             headers["X-Master-API-Key"] = settings.WHATSAPP_MASTER_SECRET
         return headers
@@ -41,6 +56,12 @@ async def get_user_m2m_headers(email: str, db: Session, scope: str = "whatsapp:s
         )
 
 async def get_user_token(email: str, db: Session, scope: str = "whatsapp:sessions:read") -> str:
+    """
+    Função/Método get_user_token.
+
+    O que faz: Recuperação de dados cadastrados para get_user_token recebendo os parâmetros (email, db, scope) no contexto de o endpoint de API para whatsapp.
+    Impacto na regra de negócio: Assegura que o fluxo da operação get_user_token seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
     headers = await get_user_m2m_headers(email, db, scope=scope)
     return headers.get("x-session-token", "")
 
@@ -51,15 +72,24 @@ async def make_whatsapp_api_request(
     json_data: Optional[Dict[str, Any]] = None,
     timeout: float = 15.0
 ) -> Any:
+    """
+    Função/Método make_whatsapp_api_request.
+
+    O que faz: Processa make_whatsapp_api_request recebendo os parâmetros (method, path, headers, json_data, timeout) no contexto de o endpoint de API para whatsapp.
+    Impacto na regra de negócio: Assegura que o fluxo da operação make_whatsapp_api_request seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
     clean_path = path if path.startswith("/") else f"/{path}"
     base_url = settings.WHATSAPP_API_URL.rstrip("/")
+# Lógica de decisão (if): Avalia 'if base_url.startswith("http:/...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if base_url.startswith("http://") and ":3000" in base_url:
         base_url = base_url.replace("http://", "https://", 1)
     
     import urllib.parse, socket, asyncio
     parsed = urllib.parse.urlparse(base_url)
     is_resolvable = False
+# Lógica de decisão (if): Avalia 'if parsed.hostname:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if parsed.hostname:
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
         try:
             socket.gethostbyname(parsed.hostname)
             is_resolvable = True
@@ -67,6 +97,7 @@ async def make_whatsapp_api_request(
             is_resolvable = False
 
     url = f"{base_url}{clean_path}"
+# Lógica de decisão (if): Avalia 'if not is_resolvable:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not is_resolvable:
         import ssl
         ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
@@ -74,9 +105,17 @@ async def make_whatsapp_api_request(
         ctx.verify_mode = ssl.CERT_NONE
         
         async def check_ip(ip: str):
+            """
+            Função/Método check_ip.
+
+            O que faz: Processa check_ip recebendo os parâmetros (ip) no contexto de o endpoint de API para whatsapp.
+            Impacto na regra de negócio: Assegura que o fluxo da operação check_ip seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+            """
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 async with httpx.AsyncClient(verify=ctx, timeout=0.5) as test_client:
                     res = await test_client.get(f"https://{ip}:3000/api/health")
+# Lógica de decisão (if): Avalia 'if res.status_code in (200, 40...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                     if res.status_code in (200, 401, 403, 404):
                         return ip
             except Exception:
@@ -85,19 +124,25 @@ async def make_whatsapp_api_request(
         
         ips = await asyncio.gather(*[check_ip(f"10.0.1.{i}") for i in range(2, 50)])
         valid = [ip for ip in ips if ip]
+# Lógica de decisão (if): Avalia 'if valid:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if valid:
             url = f"https://{valid[0]}:3000{clean_path}"
 
     req_headers = dict(headers) if headers else {}
+# Lógica de decisão (if): Avalia 'if "x-session-token" in req_he...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if "x-session-token" in req_headers:
         token = req_headers["x-session-token"]
+# Lógica de decisão (if): Avalia 'if "Authorization" not in req_...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if "Authorization" not in req_headers and token:
             req_headers["Authorization"] = f"Bearer {token}"
 
+# Lógica de decisão (if): Avalia 'if "Authorization" not in req_...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if "Authorization" not in req_headers or not req_headers.get("Authorization"):
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
         try:
             from app.services.identity_service import get_m2m_jwt
             tenant_id = req_headers.get("x-tenant-id") or getattr(settings, "ADMIN_TENANT_ID", "admin") or "admin"
+# Lógica de decisão (if): Avalia 'if "messages" in clean_path or...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if "messages" in clean_path or "send" in clean_path:
                 scope = "whatsapp:messages:send"
             elif method.upper() in ("POST", "PUT", "DELETE", "PATCH"):
@@ -105,17 +150,21 @@ async def make_whatsapp_api_request(
             else:
                 scope = "whatsapp:sessions:read"
             token = await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
+# Lógica de decisão (if): Avalia 'if token:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if token:
                 req_headers["x-session-token"] = token
                 req_headers["Authorization"] = f"Bearer {token}"
+# Lógica de decisão (if): Avalia 'if "x-tenant-id" not in req_he...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if "x-tenant-id" not in req_headers:
                     req_headers["x-tenant-id"] = tenant_id
         except Exception as e:
             logger.warning(f"[make_whatsapp_api_request] Não foi possível obter JWT M2M do Identity Provider: {e}")
 
     # Always include the Master API Key if configured (read from settings, never hardcoded)
+# Lógica de decisão (if): Avalia 'if "X-Master-API-Key" not in r...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if "X-Master-API-Key" not in req_headers:
         master_secret = getattr(settings, "WHATSAPP_MASTER_SECRET", None)
+# Lógica de decisão (if): Avalia 'if master_secret and master_se...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if master_secret and master_secret != "default_master_secret":
             req_headers["X-Master-API-Key"] = master_secret
 
@@ -125,7 +174,9 @@ async def make_whatsapp_api_request(
     async with get_async_client(timeout=timeout, service_name="whatsapp") as client:
         last_exception = None
         response = None
+# Lógica de repetição (for): Itera sobre elementos de 'for attempt in range...' processando múltiplos dados em lote para as regras de domínio.
         for attempt in range(MAX_RETRIES):
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 response = await client.request(
                     method,
@@ -133,6 +184,7 @@ async def make_whatsapp_api_request(
                     headers=req_headers,
                     json=json_data
                 )
+# Lógica de decisão (if): Avalia 'if response.status_code not in...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if response.status_code not in (502, 503, 504, 408):
                     break
                 else:
@@ -145,6 +197,7 @@ async def make_whatsapp_api_request(
                 import asyncio
                 await asyncio.sleep(RETRY_DELAY * (2 ** attempt))
         
+# Lógica de decisão (if): Avalia 'if response is None and last_e...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if response is None and last_exception:
             logger.error(f"[FLOW-STEP 6] ERROR: WhatsApp API request failed ({last_exception})")
             print(f"[FLOW-STEP 6] ERROR: WhatsApp API request failed ({last_exception})", flush=True)
@@ -158,11 +211,14 @@ async def make_whatsapp_api_request(
                 detail="A API de WhatsApp está indisponível no momento após várias tentativas."
             )
 
+# Lógica de decisão (if): Avalia 'if response.status_code == 401...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if response.status_code == 401:
             logger.warning("[FLOW-STEP 6] WhatsApp API retornou 401. Invalidando cache de JWT e renovando...")
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 from app.services.identity_service import invalidate_m2m_token, get_m2m_jwt
                 tenant_id = req_headers.get("x-tenant-id") or getattr(settings, "ADMIN_TENANT_ID", "admin") or "admin"
+# Lógica de decisão (if): Avalia 'if "messages" in clean_path or...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if "messages" in clean_path or "send" in clean_path:
                     scope = "whatsapp:messages:send"
                 elif method.upper() in ("POST", "PUT", "DELETE", "PATCH"):
@@ -172,6 +228,7 @@ async def make_whatsapp_api_request(
                 
                 invalidate_m2m_token(tenant_id=tenant_id, scope=scope)
                 fresh_token = await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
+# Lógica de decisão (if): Avalia 'if fresh_token:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if fresh_token:
                     req_headers["x-session-token"] = fresh_token
                     req_headers["Authorization"] = f"Bearer {fresh_token}"
@@ -186,6 +243,7 @@ async def make_whatsapp_api_request(
             except Exception as retry_err:
                 logger.warning(f"[make_whatsapp_api_request] Falha no retry com token renovado: {retry_err}")
 
+# Lógica de decisão (if): Avalia 'if response.status_code >= 400...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if response.status_code >= 400:
             logger.error(f"[FLOW-STEP 6] ERROR: WhatsApp API authentication with JWT failed (status {response.status_code})")
             print(f"[FLOW-STEP 6] ERROR: WhatsApp API authentication with JWT failed (status {response.status_code})", flush=True)
@@ -193,23 +251,28 @@ async def make_whatsapp_api_request(
             logger.info("[FLOW-STEP 6] Authenticated with WhatsApp API using JWT")
             print("[FLOW-STEP 6] Authenticated with WhatsApp API using JWT", flush=True)
         
+# Lógica de decisão (if): Avalia 'if response.status_code in (30...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if response.status_code in (301, 302, 303, 307) and response.headers.get("location"):
             return {"url": response.headers.get("location")}
 
         content_type = response.headers.get("content-type", "").lower()
         
         # Try decoding JSON if content-type is json or by default
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
         try:
             res_data = response.json()
+# Lógica de decisão (if): Avalia 'if isinstance(res_data, dict) ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if isinstance(res_data, dict) and res_data.get("_encrypted") is True:
                 from app.core.crypto import decrypt_payload
                 res_data = decrypt_payload(res_data)
+# Lógica de decisão (if): Avalia 'if response.status_code >= 400...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if response.status_code >= 400:
                 detail_msg = res_data.get("message") or res_data.get("detail") or "Erro na API de WhatsApp."
                 raise HTTPException(status_code=response.status_code, detail=detail_msg)
             return res_data
         except (ValueError, TypeError):
             # If not JSON, but status is 200 OK, return binary data structure
+# Lógica de decisão (if): Avalia 'if response.status_code < 400:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if response.status_code < 400:
                 return {
                     "_is_binary": True,
@@ -236,12 +299,14 @@ async def get_session_avatar(
     Evita erros de NS_BINDING_ABORTED e SSL em requisições cross-origin do navegador.
     Acessível por tags <img> do navegador sem exigir token Bearer nos cabeçalhos.
     """
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         clean_path = f"/api/sessions/{session_id}/avatar?jid={jid}&json=true"
         res = await make_whatsapp_api_request(
             "GET",
             clean_path
         )
+# Lógica de decisão (if): Avalia 'if isinstance(res, dict) and r...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if isinstance(res, dict) and res.get("url"):
             return RedirectResponse(
                 res["url"],
@@ -269,14 +334,18 @@ async def get_session_media(
     Acessível por tags <img>, <video>, <audio> e <a> do navegador sem exigir token Bearer nos cabeçalhos.
     """
     target_msg_id = messageId or message_id
+# Lógica de decisão (if): Avalia 'if not target_msg_id:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not target_msg_id:
         raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
 
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         clean_path = f"/api/sessions/{session_id}/media?messageId={target_msg_id}"
         res = await make_whatsapp_api_request("GET", clean_path, timeout=30.0)
 
+# Lógica de decisão (if): Avalia 'if isinstance(res, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if isinstance(res, dict):
+# Lógica de decisão (if): Avalia 'if res.get("_is_binary"):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if res.get("_is_binary"):
                 return Response(
                     content=res["content"],
@@ -286,6 +355,7 @@ async def get_session_media(
                         "Cache-Control": "public, max-age=86400"
                     }
                 )
+# Lógica de decisão (if): Avalia 'if res.get("url"):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if res.get("url"):
                 return RedirectResponse(
                     res["url"],
@@ -294,9 +364,11 @@ async def get_session_media(
                         "Cache-Control": "public, max-age=86400"
                     }
                 )
+# Lógica de decisão (if): Avalia 'if res.get("data") and isinsta...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if res.get("data") and isinstance(res["data"], str):
                 base64_str = res["data"]
                 import base64
+# Lógica de decisão (if): Avalia 'if "," in base64_str:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if "," in base64_str:
                     header, base64_str = base64_str.split(",", 1)
                     mime_type = header.split(";")[0].replace("data:", "") if "data:" in header else "application/octet-stream"
@@ -342,6 +414,7 @@ async def create_session(
     Create a new WhatsApp session.
     """
     name = payload.get("name")
+# Lógica de decisão (if): Avalia 'if not name:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not name:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -470,6 +543,7 @@ async def send_session_message(
     """
     phone = payload.get("phone") or payload.get("number")
     message = payload.get("message") or payload.get("text")
+# Lógica de decisão (if): Avalia 'if not phone or not message:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not phone or not message:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -504,6 +578,7 @@ async def login_instagram_proxy(
     """
     username = payload.get("username")
     password = payload.get("password")
+# Lógica de decisão (if): Avalia 'if not username or not passwor...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not username or not password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -546,6 +621,12 @@ from app.models.whatsapp_account import WhatsappAccount
 import uuid as _uuid
 
 class CredentialsPayload(BaseModel):
+    """
+    Classe CredentialsPayload.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade CredentialsPayload em o endpoint de API para whatsapp.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade CredentialsPayload, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     client_id: str
     client_secret: str
 
@@ -559,6 +640,7 @@ async def get_credentials(
     Não expõe o client_secret completo — apenas os primeiros 8 chars.
     """
     user = db.query(User).filter(User.email == current_user).first()
+# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
 
@@ -566,6 +648,7 @@ async def get_credentials(
         WhatsappAccount.user_id == user.id
     ).first()
 
+# Lógica de decisão (if): Avalia 'if not account:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not account:
         return {"configured": False, "client_id": None, "client_secret_preview": None}
 
@@ -589,10 +672,12 @@ async def save_credentials(
     from app.services.whatsapp_service import invalidate_token
 
     user = db.query(User).filter(User.email == current_user).first()
+# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
 
     # Valida UUID
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         client_id_uuid = _uuid.UUID(payload.client_id)
     except ValueError:
@@ -606,6 +691,7 @@ async def save_credentials(
     print(f"[M2M-AUTH-FLOW] >>> client_id: {payload.client_id}", flush=True)
     print(f"[M2M-AUTH-FLOW] >>> client_secret: {payload.client_secret[:8]}****************", flush=True)
 
+# Lógica de decisão (if): Avalia 'if account:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if account:
         print(f"[M2M-AUTH-FLOW] >>> Atualizando registro existente na tabela whatsapp_accounts...", flush=True)
     else:
@@ -639,6 +725,7 @@ async def provision_whatsapp(
     Envia o email e a senha criptografada do usuário Dominus e salva o client_id/client_secret.
     """
     user = db.query(User).filter(User.email == current_user).first()
+# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
 
@@ -651,6 +738,7 @@ async def provision_whatsapp(
 
     tenant_id = await get_tenant_id_for_user(user, db)
 
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         async with get_async_client(timeout=20.0, service_name="whatsapp") as client:
             print(f"[M2M-AUTH-FLOW] >>> Enviando solicitação de provisionamento M2M para WhatsApp API: email={user.email}, tenant_id={tenant_id}", flush=True)
@@ -662,6 +750,7 @@ async def provision_whatsapp(
             )
 
             # Caso já exista na WhatsApp API (conflito 409), tenta reprovisionar
+# Lógica de decisão (if): Avalia 'if resp.status_code == 409:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if resp.status_code == 409:
                 print(f"[M2M-AUTH-FLOW] >>> Usuário/Tenant já cadastrado na WhatsApp API (409). Tentando REPROVISIONAR...", flush=True)
                 reprovision_url = f"{base_url}/api/v1/clients/reprovision"
@@ -671,6 +760,7 @@ async def provision_whatsapp(
                     headers=headers
                 )
 
+# Lógica de decisão (if): Avalia 'if resp.status_code not in (20...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if resp.status_code not in (200, 201):
                 print(f"[M2M-AUTH-FLOW] >>> ❌ Erro ao vincular/reprovisionar na WhatsApp API: status={resp.status_code} body={resp.text[:300]}", flush=True)
                 raise HTTPException(
@@ -682,6 +772,7 @@ async def provision_whatsapp(
             client_id = data.get("client_id")
             client_secret = data.get("client_secret")
 
+# Lógica de decisão (if): Avalia 'if not client_id or not client...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if not client_id or not client_secret:
                 print(f"[M2M-AUTH-FLOW] >>> ❌ Resposta inválida da WhatsApp API: {data}", flush=True)
                 raise HTTPException(status_code=502, detail="WhatsApp API retornou resposta incompleta.")
@@ -692,6 +783,7 @@ async def provision_whatsapp(
             account = db.query(WhatsappAccount).filter(
                 WhatsappAccount.user_id == user.id
             ).first()
+# Lógica de decisão (if): Avalia 'if account:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if account:
                 print(f"[M2M-AUTH-FLOW] >>> Atualizando registro existente na tabela whatsapp_accounts...", flush=True)
             else:

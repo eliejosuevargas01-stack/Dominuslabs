@@ -1,3 +1,9 @@
+"""
+Documentação do módulo auth.py.
+
+O que faz: Implementa a lógica estrutural e funcional para o endpoint de API para auth.
+Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para auth funcionem corretamente e mantenham a integridade dos dados da aplicação.
+"""
 import secrets
 import httpx
 import logging
@@ -17,11 +23,23 @@ router = APIRouter()
 
 
 class LoginRequest(BaseModel):
+    """
+    Classe LoginRequest.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade LoginRequest em o endpoint de API para auth.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade LoginRequest, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     username: str
     password: str
 
 
 class RefreshRequest(BaseModel):
+    """
+    Classe RefreshRequest.
+
+    O que faz: Representa a estrutura de dados e operações para a entidade RefreshRequest em o endpoint de API para auth.
+    Impacto na regra de negócio: Centraliza o comportamento da entidade RefreshRequest, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
+    """
     refresh_token: str
 
 
@@ -42,6 +60,7 @@ async def _provision_whatsapp_client(user: User, db: Session) -> None:
     base_url = settings.WHATSAPP_API_URL.rstrip("/")
     provision_url = f"{base_url}/api/v1/clients/provision"
 
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
             logger.info(f"[WA-PROVISION] Provisionando cliente para {user.email}...")
@@ -53,11 +72,13 @@ async def _provision_whatsapp_client(user: User, db: Session) -> None:
                 headers=headers
             )
 
+# Lógica de decisão (if): Avalia 'if resp.status_code == 409:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if resp.status_code == 409:
                 # Já provisionado anteriormente — verifica se temos no banco
                 existing = db.query(WhatsappAccount).filter(
                     WhatsappAccount.user_id == user.id
                 ).first()
+# Lógica de decisão (if): Avalia 'if existing:...' para validar se o registro já existe para evitar duplicações no banco de dados.
                 if existing:
                     logger.info(f"[WA-PROVISION] {user.email} já provisionado (banco OK).")
                     print(f"[M2M-AUTH-FLOW] >>> Usuário {user.email} já possui credenciais provisionadas e salvas no banco.", flush=True)
@@ -69,6 +90,7 @@ async def _provision_whatsapp_client(user: User, db: Session) -> None:
                     print(f"[M2M-AUTH-FLOW] >>> ⚠️ Usuário {user.email} já provisionado na WhatsApp API, mas ausente no banco Dominus. Use a interface para reprovisionar.", flush=True)
                 return
 
+# Lógica de decisão (if): Avalia 'if resp.status_code not in (20...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if resp.status_code not in (200, 201):
                 logger.error(
                     f"[WA-PROVISION] ❌ Falha para {user.email}: "
@@ -81,6 +103,7 @@ async def _provision_whatsapp_client(user: User, db: Session) -> None:
             client_id = data.get("client_id")
             client_secret = data.get("client_secret")
 
+# Lógica de decisão (if): Avalia 'if not client_id or not client...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if not client_id or not client_secret:
                 logger.error(f"[WA-PROVISION] Resposta inválida da WhatsApp API: {data}")
                 print(f"[M2M-AUTH-FLOW] >>> ❌ Resposta inválida da WhatsApp API (faltando client_id ou client_secret): {data}", flush=True)
@@ -115,11 +138,13 @@ async def _maybe_provision(user: User, db: Session) -> None:
     Só chama o provisionamento se o usuário ainda não tiver
     credenciais na tabela whatsapp_accounts.
     """
+# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         existing = db.query(WhatsappAccount).filter(
             WhatsappAccount.user_id == user.id
         ).first()
 
+# Lógica de decisão (if): Avalia 'if existing:...' para validar se o registro já existe para evitar duplicações no banco de dados.
         if existing:
             logger.debug(f"[WA-PROVISION] {user.email} já tem credenciais — pulando provisão.")
             return
@@ -134,6 +159,12 @@ async def _maybe_provision(user: User, db: Session) -> None:
 # ---------------------------------------------------------------------------
 
 def _build_token_data(user: User) -> dict:
+    """
+    Função/Método _build_token_data.
+
+    O que faz: Processa _build_token_data recebendo os parâmetros (user) no contexto de o endpoint de API para auth.
+    Impacto na regra de negócio: Assegura que o fluxo da operação _build_token_data seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
     role = getattr(user, "role", "custom") or "custom"
     perms = getattr(user, "permissions", "") or "read,write,update,delete"
     is_admin = role == "admin"
@@ -162,11 +193,19 @@ async def login(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
+    """
+    Função/Método login.
+
+    O que faz: Processa login recebendo os parâmetros (request, payload, background_tasks, db) no contexto de o endpoint de API para auth.
+    Impacto na regra de negócio: Assegura que o fluxo da operação login seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
     username = payload.username
+# Lógica de decisão (if): Avalia 'if "@" not in username:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if "@" not in username:
         username = f"{username}@dominuslabs.online"
 
     user = db.query(User).filter(User.email == username).first()
+# Lógica de decisão (if): Avalia 'if not user or not verify_pass...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user or not verify_password(payload.password, user.hashed_password):
         logger.error("[FLOW-STEP 1] ERROR: User login failed")
         print("[FLOW-STEP 1] ERROR: User login failed", flush=True)
@@ -176,6 +215,7 @@ async def login(
     print("[FLOW-STEP 1] User logged in successfully", flush=True)
 
     # Garante whatsapp_token local
+# Lógica de decisão (if): Avalia 'if not user.whatsapp_token:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user.whatsapp_token:
         user.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
 
@@ -210,15 +250,24 @@ async def refresh(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
+    """
+    Função/Método refresh.
+
+    O que faz: Processa refresh recebendo os parâmetros (payload, background_tasks, db) no contexto de o endpoint de API para auth.
+    Impacto na regra de negócio: Assegura que o fluxo da operação refresh seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    """
     token_payload = decode_access_token(payload.refresh_token)
+# Lógica de decisão (if): Avalia 'if not token_payload or token_...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not token_payload or token_payload.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Token de atualização inválido ou expirado")
 
     email = token_payload.get("sub", "")
     user = db.query(User).filter(User.email == email).first()
+# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         raise HTTPException(status_code=401, detail="Usuário não encontrado.")
 
+# Lógica de decisão (if): Avalia 'if not user.whatsapp_token:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user.whatsapp_token:
         user.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
 
