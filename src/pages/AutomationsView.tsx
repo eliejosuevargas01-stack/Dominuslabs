@@ -1,3 +1,11 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para AutomationsView.tsx:
+ * - Botão 'Nova Automação': Inicia o fluxo de construção.
+ * - Toggles: Ativam e desativam os fluxos imediatamente via API.
+ * - Toasts notificam o sucesso/erro da operação.
+ */
+
 import { useState } from 'react';
 import {
   Workflow,

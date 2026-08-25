@@ -1,3 +1,10 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para Showcase.tsx:
+ * - Botões 'Ver Mais': Expande os modais ou links com cases de sucesso.
+ * - Animações em Grid CSS (hover/transform) implementadas com classes Tailwind.
+ */
+
 import { useState, useEffect } from 'react';
 import { fetchShowcaseData, API_BASE } from '../services/api';
 import Footer from '../components/Footer';

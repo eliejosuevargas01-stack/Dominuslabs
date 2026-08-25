@@ -1,3 +1,10 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para AdminDashboard.tsx:
+ * - Botão 'Novo Projeto': Exibe modal de cadastro com loading na submissão.
+ * - Renderiza listagens, filtragem de buscas de projetos e aciona toasts via `Sonner`.
+ */
+
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchProjects, createProject, API_BASE, getUserRole, deleteProject } from '../services/api';

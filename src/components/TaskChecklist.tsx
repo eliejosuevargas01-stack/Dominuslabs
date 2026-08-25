@@ -1,3 +1,10 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para TaskChecklist.tsx:
+ * - Inputs tipo checkbox alteram visualmente (riscado e fade) ao clicar.
+ * - Animações e progressos respondem à verificação.
+ */
+
 import { useState, useEffect } from 'react';
 import { fetchTasks, createTask, updateTask } from '../services/api';
 import { CheckCircle2, Circle, Plus, Loader2 } from 'lucide-react';

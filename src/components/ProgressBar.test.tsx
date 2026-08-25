@@ -1,3 +1,9 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para testes:
+ * - Arquivos de teste verificam a lógica renderizada.
+ */
+
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { describe, it, expect } from 'vitest';

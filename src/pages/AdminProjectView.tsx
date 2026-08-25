@@ -1,3 +1,10 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para AdminProjectView.tsx:
+ * - Botões de Controle (Danger Zone): Suspensão de projetos com modal de confirmação prévia (exigindo digitar o nome).
+ * - Componentes Globais exibem skeleton ou spinners durante requests.
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 

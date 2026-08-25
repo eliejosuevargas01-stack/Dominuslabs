@@ -1,3 +1,11 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para ConnectionsView.tsx:
+ * - Botões 'Conectar/Desconectar': Modificam os links com integrações via API (WhatsApp, etc).
+ * - Modal QR Code: Abre com a imagem ou renderização de conexão.
+ * - Tratamento de Loading e status dinâmico nos cards (Conectado/Desconectado).
+ */
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   MessageSquare, Plus, Trash2, Wifi, WifiOff, Loader2, 

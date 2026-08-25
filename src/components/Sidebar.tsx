@@ -1,3 +1,11 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para Sidebar.tsx:
+ * - Botões de Link: Navegam para as rotas corretas pelo react-router-dom sem reload (Spa).
+ * - Botão Colapsar: Minimiza a largura e guarda valor no LocalStorage.
+ * - Botão Logout: Limpa localStorage e redireciona ao '/login'.
+ */
+
 import { Link, useLocation } from 'react-router-dom';
 import { Users, Folder, LogOut, Menu, X, PanelLeftClose, PanelLeftOpen, Briefcase, Radio, MessageSquare, Building2, BarChart2, Cpu, Workflow, Megaphone } from 'lucide-react';
 import { useState } from 'react';

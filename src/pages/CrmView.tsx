@@ -1,3 +1,11 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para CrmView.tsx:
+ * - Drag and Drop: Os cards do Kanban devem alterar o status do Lead (`Em Contato`, `Proposta`, etc).
+ * - Botões (+ Novo Lead): Abre o painel lateral de criação de Lead.
+ * - Inputs de Busca: Filtram leads ativos listados.
+ */
+
 import { useState, useEffect, useMemo } from 'react';
 import { 
   Users, UserCheck, MessageSquare, Check, 

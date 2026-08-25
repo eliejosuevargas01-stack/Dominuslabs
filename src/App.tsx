@@ -1,3 +1,10 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para App.tsx:
+ * - `ProtectedRoute`: Bloqueia o acesso sem `admin_token`, forçando redirecionamento `/login`.
+ * - Rotas renderizam as páginas correspondentes envelopadas no `DashboardLayout` se autenticado.
+ */
+
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import AdminDashboard from './pages/AdminDashboard';

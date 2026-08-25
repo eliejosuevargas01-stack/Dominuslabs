@@ -1,3 +1,10 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para ProgressBar.tsx:
+ * - Recebe prop de progresso em porcentagem.
+ * - A largura do preenchimento da barra deve animar com Tailwind (transition-width) correspondendo à porcentagem.
+ */
+
 export default function ProgressBar({ progress }: { progress: number }) {
   const clampedProgress = Math.min(100, Math.max(0, Math.round(progress)));
 
