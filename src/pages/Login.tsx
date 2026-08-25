@@ -77,32 +77,36 @@ export default function Login() {
           )}
 
           <div className="space-y-1">
-            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+            <label htmlFor="username" className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-zinc-400" />
               Usuário
             </label>
             <input
+              id="username"
               type="text"
               required
               value={username}
               onChange={e => setUsername(e.target.value)}
               placeholder="ex: admin"
+              autoComplete="username"
               className="w-full text-sm border border-zinc-200 rounded-xl px-3.5 py-2.5  focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
               disabled={loading}
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+            <label htmlFor="password" className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
               <Lock className="w-3.5 h-3.5 text-zinc-400" />
               Senha
             </label>
             <input
+              id="password"
               type="password"
               required
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
+              autoComplete="current-password"
               className="w-full text-sm border border-zinc-200 rounded-xl px-3.5 py-2.5  focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
               disabled={loading}
             />
