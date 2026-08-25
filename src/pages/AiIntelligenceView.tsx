@@ -1,3 +1,11 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para AiIntelligenceView.tsx:
+ * - Botões 'Atualizar Treinamento': Submetem o formulário com dados base do agente.
+ * - Inputs de Texto/Textarea: Capturam o prompt e regras.
+ * - Exibem um feedback (toast) e loaders na submissão.
+ */
+
 import { useState } from 'react';
 import {
   Cpu,

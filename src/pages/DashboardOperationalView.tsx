@@ -1,3 +1,11 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para DashboardOperationalView.tsx:
+ * - Botão 'Nova Ação': Exibe ou abre um modal conforme o contexto.
+ * - Animações: Cartões de estatísticas (`StatCard`) usam transições Tailwind para hover e skeleton loaders.
+ * - Erros: Carregamento falho dispara toasts, e o loading exibe componentes vazios/esqueleto.
+ */
+
 import { useState } from 'react';
 import {
   ShoppingBag,

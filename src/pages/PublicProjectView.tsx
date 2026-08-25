@@ -1,3 +1,10 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para PublicProjectView.tsx:
+ * - Visualização 'Read Only' de dados de um token público.
+ * - Tratamento de falha (Token Inválido) deve exibir um empty state ou mensagem de 'Não Encontrado'.
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { fetchPublicProject, API_BASE, submitFeedback } from '../services/api';

@@ -1,3 +1,11 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para Login.tsx:
+ * - Botão 'Acessar Plataforma': Ao clicar, aciona `loginUser`. Exibe um loader de loading enquanto processa a requisição.
+ * - Inputs (Usuário/Senha): Validam e atualizam o estado React (`username`, `password`).
+ * - Tratamento de erro: Se o login falhar, um toast (Sonner) será disparado.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginUser } from '../services/api';

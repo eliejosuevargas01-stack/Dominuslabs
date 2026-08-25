@@ -1,3 +1,11 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para OmnichannelView.tsx:
+ * - Botão Enviar Mensagem: Envia payload SSE ou POST e anexa à lista de mensagens.
+ * - Input Mensagem: Captura o texto do chat.
+ * - Animações: O painel de contatos e conversas carrega dados assincronamente (loading spin).
+ */
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   MessageSquare, Send, Paperclip, Smile, Search, 

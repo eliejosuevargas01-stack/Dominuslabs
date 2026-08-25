@@ -1,3 +1,9 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para Footer.tsx:
+ * - Links apontam para páginas externas ou âncoras legais sem quebrar as rotas do projeto.
+ */
+
 import { Link } from 'react-router-dom';
 import { 
   Heart, 

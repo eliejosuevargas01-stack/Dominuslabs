@@ -1,3 +1,11 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para CampaignsWizardView.tsx:
+ * - Botões (Avançar/Voltar): Alternam os steps do wizard (estado numérico do step atual).
+ * - Inputs (Nome da campanha): Devem ser validados antes de permitir o avanço.
+ * - O botão final dispara o envio da campanha e exibe estado de loading/toast de sucesso.
+ */
+
 import { useState } from 'react';
 import {
   Megaphone,

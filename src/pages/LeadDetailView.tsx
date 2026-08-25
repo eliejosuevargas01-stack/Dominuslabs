@@ -1,3 +1,11 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para LeadDetailView.tsx:
+ * - Botões de Ação (Mensagem, Salvar): Acionam navegações (`/omnichannel`) ou atualização dos campos no backend via API.
+ * - Inputs/Form: Atualizam o objeto do Lead em edição local.
+ * - Animações: Sidebar desliza com base em Framer/Tailwind, toasts notificam atualizações bem-sucedidas.
+ */
+
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 

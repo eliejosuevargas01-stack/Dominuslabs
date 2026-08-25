@@ -1,3 +1,11 @@
+/**
+ * Documentation-Driven Testing:
+ * O comportamento esperado para CompanySettingsView.tsx:
+ * - Botões Salvar: Engatilham `updateCompanySettings` ou métodos relacionados com estado de loading (spinner).
+ * - Inputs (Nome, Tone, Fuso): Atualizam estado de config.
+ * - Notificações: Sucesso ao salvar lança toast via Sonner.
+ */
+
 import { useState, useEffect } from 'react';
 import {
   Building2,
