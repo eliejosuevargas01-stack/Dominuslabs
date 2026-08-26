@@ -1125,7 +1125,9 @@ function playOutgoingSound() {
                 is_from_me: msgIsFromMe,
                 from_me: msgIsFromMe,
                 fromMe: msgIsFromMe,
-                contact_jid: rawMsg.contact_jid || rawMsg.jid || rawMsg.resolvedJid || rawMsg.lid || rawMsg.key?.remoteJid || parsed.conversation?.jid || parsed.contact_jid,
+                contact_jid: msgIsFromMe
+                  ? (rawMsg.to || rawMsg.recipient || rawMsg.key?.remoteJid || parsed.to || parsed.recipient || rawMsg.contact_jid || rawMsg.jid || rawMsg.resolvedJid || rawMsg.lid || parsed.conversation?.jid || parsed.contact_jid)
+                  : (rawMsg.contact_jid || rawMsg.jid || rawMsg.resolvedJid || rawMsg.lid || rawMsg.key?.remoteJid || parsed.conversation?.jid || parsed.contact_jid),
                 session_id: rawMsg.session_id || parsed.session_id || parsed.session?.id,
                 message_timestamp: msgTs,
                 status: rawMsg.status || 'sent',
@@ -1216,8 +1218,8 @@ function playOutgoingSound() {
             const cleanB = String(b).split('@')[0].split(':')[0].trim().toLowerCase();
             if (!cleanA || !cleanB) return false;
             if (cleanA === cleanB) return true;
-            if (cleanA.length > 6 && cleanB.length > 6) {
-              return cleanA.includes(cleanB) || cleanB.includes(cleanA);
+            if (/^\d+$/.test(cleanA) && /^\d+$/.test(cleanB) && cleanA.length >= 8 && cleanB.length >= 8) {
+              return cleanA.endsWith(cleanB) || cleanB.endsWith(cleanA);
             }
             return false;
           };
