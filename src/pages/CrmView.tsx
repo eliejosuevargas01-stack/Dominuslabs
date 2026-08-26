@@ -158,8 +158,8 @@ export default function CrmView() {
     });
 
     return filtered.sort((a, b) => {
-      const aDate = (a.updated_at || a.last_interaction) ? new Date(a.updated_at || a.last_interaction).getTime() : 0;
-      const bDate = (b.updated_at || b.last_interaction) ? new Date(b.updated_at || b.last_interaction).getTime() : 0;
+      const aDate = (a.updated_at || a.last_interaction) ? new Date((a.updated_at || a.last_interaction) as string).getTime() : 0;
+      const bDate = (b.updated_at || b.last_interaction) ? new Date((b.updated_at || b.last_interaction) as string).getTime() : 0;
       return bDate - aDate;
     });
   }, [leads, searchTerm, kpiFilter]);
@@ -384,7 +384,7 @@ export default function CrmView() {
                           {displaySub && <div className="text-[11px] text-zinc-400 truncate max-w-[200px]">{displaySub}</div>}
                         </td>
                         <td className="py-3.5 px-3">
-                          <span className={`px-2.5 py-1 rounded-full border text-[10px] uppercase font-bold tracking-wide ${getStatusColor(lead.status)}`}>
+                          <span className={`px-2.5 py-1 rounded-full border text-[10px] uppercase font-bold tracking-wide ${getStatusColor(lead.status || '')}`}>
                             {lead.status}
                           </span>
                         </td>

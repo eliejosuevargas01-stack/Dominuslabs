@@ -103,7 +103,7 @@ export default function LeadDetailView() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // WhatsApp sessions
-  const [sessions, setSessions] = useState<Lead[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
   const [selectedSession, setSelectedSession] = useState<string>('');
 
   const statuses = [
