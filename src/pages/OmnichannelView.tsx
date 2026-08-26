@@ -24,6 +24,7 @@ import {
   API_BASE
 } from '../services/api';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 // ============================================================================
 // KNOWN CONTACT DICTIONARY (FOR NAME RESOLUTION)
@@ -754,7 +755,7 @@ export default function OmnichannelView() {
         setRecordingTime((prev) => prev + 1);
       }, 1000);
     } catch (err: any) {
-      alert('Não foi possível acessar o microfone. Permita o uso do microfone no seu navegador.');
+      toast.error('Não foi possível acessar o microfone. Permita o uso do microfone no seu navegador.');
     }
   };
 
@@ -870,7 +871,7 @@ export default function OmnichannelView() {
         }
         setChatMessages(msgsList);
       } catch (err: any) {
-        alert('Falha ao enviar mensagem de voz.');
+        toast.error(err instanceof Error ? err.message : 'Falha ao enviar mensagem de voz.');
       } finally {
         setUploadingMedia(false);
         setIsRecording(false);
@@ -961,7 +962,7 @@ export default function OmnichannelView() {
       }
       setChatMessages(msgsList);
     } catch (err: any) {
-      alert('Falha ao enviar arquivo de mídia.');
+      toast.error(err instanceof Error ? err.message : 'Falha ao enviar arquivo de mídia.');
     } finally {
       setUploadingMedia(false);
       if (fileInputRef.current) {
@@ -1375,6 +1376,7 @@ function playOutgoingSound() {
       }
     } catch (err) {
       console.warn("Error fetching contacts from backend/n8n", err);
+      toast.error(err instanceof Error ? err.message : 'Erro ao buscar contatos');
     } finally {
       setLoadingList(false);
     }
@@ -1425,6 +1427,7 @@ function playOutgoingSound() {
       }
     } catch (err) {
       console.warn("Error fetching conversations from backend/n8n", err);
+      toast.error(err instanceof Error ? err.message : 'Erro ao buscar conversas');
       setConversations([]);
     } finally {
       setLoadingList(false);
@@ -1460,6 +1463,7 @@ function playOutgoingSound() {
         })
         .catch((err) => {
           console.warn("Error fetching chat history from backend/n8n", err);
+          toast.error(err instanceof Error ? err.message : 'Erro ao buscar histórico do chat');
           setChatMessages([]);
         })
         .finally(() => setLoadingHistory(false));
@@ -1538,6 +1542,7 @@ function playOutgoingSound() {
       }));
     } catch (err) {
       console.warn("Send message error", err);
+      toast.error(err instanceof Error ? err.message : 'Erro ao enviar mensagem');
       setChatMessages(prev => prev.map(m => {
         if (m.message_id === tempMessage.message_id) {
           return { ...m, status: 'error' };
