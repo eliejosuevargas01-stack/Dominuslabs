@@ -33,13 +33,9 @@ def mask_sensitive_data(data):
     Fields to mask: password, cpf, rg, email, etc.
     """
     sensitive_keys = {"password", "senha", "cpf", "rg", "email", "secret", "token", "credit_card", "cc"}
-
-# Lógica de decisão (if): Avalia 'if isinstance(data, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if isinstance(data, dict):
         masked_data = {}
-# Lógica de repetição (for): Itera sobre elementos de 'for k, v in data.ite...' processando múltiplos dados em lote para as regras de domínio.
         for k, v in data.items():
-# Lógica de decisão (if): Avalia 'if k.lower() in sensitive_keys...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if k.lower() in sensitive_keys:
                 masked_data[k] = "***"
             else:
@@ -60,26 +56,18 @@ class DecryptionMiddleware(BaseHTTPMiddleware):
         O que faz: Processa dispatch recebendo os parâmetros (request, call_next) no contexto de o módulo core/base middleware.
         Impacto na regra de negócio: Assegura que o fluxo da operação dispatch seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
-# Lógica de decisão (if): Avalia 'if request.method in ["POST", ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if request.method in ["POST", "PUT", "PATCH"]:
             content_type = request.headers.get("Content-Type", "")
-# Lógica de decisão (if): Avalia 'if "application/json" in conte...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if "application/json" in content_type:
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
                 try:
                     body = await request.body()
-# Lógica de decisão (if): Avalia 'if body:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                     if body:
                         payload = json.loads(body.decode("utf-8"))
                         is_encrypted = False
-                        
-# Lógica de decisão (if): Avalia 'if isinstance(payload, dict) a...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                         if isinstance(payload, dict) and str(payload.get("_encrypted", "")).lower() == "true":
                             is_encrypted = True
                         elif isinstance(payload, list) and len(payload) > 0 and isinstance(payload[0], dict) and str(payload[0].get("_encrypted", "")).lower() == "true":
                             is_encrypted = True
-                            
-# Lógica de decisão (if): Avalia 'if is_encrypted:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                         if is_encrypted:
                             decrypted_payload = decrypt_payload(payload)
                             
@@ -137,13 +125,10 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
         # Extract user_id from JWT if present
         user_id = "anonymous"
         auth_header = request.headers.get("Authorization")
-# Lógica de decisão (if): Avalia 'if auth_header and auth_header...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
             try:
                 parts = token.split('.')
-# Lógica de decisão (if): Avalia 'if len(parts) == 3:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
                 if len(parts) == 3:
                     payload_b64 = parts[1]
                     payload_json = base64url_decode(payload_b64).decode('utf-8')
@@ -161,8 +146,6 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
         # However, to meet the exact PII masking requirement, we should mask the query string at least,
         # and if the body was already parsed by DecryptionMiddleware, we could log it.
         # But standard audit logs usually just log the metadata + masked query.
-
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
         try:
             response = await call_next(request)
             process_time = time.time() - start_time

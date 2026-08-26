@@ -24,7 +24,6 @@ class ProjectService:
         Impacto na regra de negócio: Assegura que o fluxo da operação calculate_progress seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         tasks = task_repo.get_by_project(db, project_id)
-# Lógica de decisão (if): Avalia 'if not tasks:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not tasks:
             return 0.0
 

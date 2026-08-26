@@ -20,7 +20,6 @@ def get_password_hash(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify standard password against PBKDF2 hash"""
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         salt, db_hash = hashed_password.split(':')
         test_hash = hashlib.pbkdf2_hmac(

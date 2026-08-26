@@ -63,9 +63,7 @@ class ProjectRepository:
         Impacto na regra de negócio: Assegura que o fluxo da operação update seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         update_data = obj_in.model_dump(exclude_unset=True)
-# Lógica de repetição (for): Itera sobre elementos de 'for field in update_...' processando múltiplos dados em lote para as regras de domínio.
         for field in update_data:
-# Lógica de decisão (if): Avalia 'if hasattr(db_obj, field):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if hasattr(db_obj, field):
                 setattr(db_obj, field, update_data[field])
         db.add(db_obj)
@@ -81,7 +79,6 @@ class ProjectRepository:
         Impacto na regra de negócio: Assegura que o fluxo da operação remove seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         db_obj = db.query(Project).filter(Project.id == id).first()
-# Lógica de decisão (if): Avalia 'if db_obj:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if db_obj:
             db.delete(db_obj)
             db.commit()

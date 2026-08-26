@@ -64,10 +64,8 @@ def decode_access_token(token: str) -> dict:
     O que faz: Processa decode_access_token recebendo os parâmetros (token) no contexto de o módulo core/base auth.
     Impacto na regra de negócio: Assegura que o fluxo da operação decode_access_token seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         parts = token.split('.')
-# Lógica de decisão (if): Avalia 'if len(parts) != 3:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if len(parts) != 3:
             return None
         header_b64, payload_b64, signature_b64 = parts
@@ -79,13 +77,10 @@ def decode_access_token(token: str) -> dict:
             hashlib.sha256
         ).digest()
         expected_sig_b64 = base64url_encode(expected_sig)
-        
-# Lógica de decisão (if): Avalia 'if not hmac.compare_digest(sig...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not hmac.compare_digest(signature_b64, expected_sig_b64):
             return None
             
         payload = json.loads(base64url_decode(payload_b64).decode('utf-8'))
-# Lógica de decisão (if): Avalia 'if payload.get("exp", 0) < tim...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if payload.get("exp", 0) < time.time():
             return None # Expired
             
@@ -108,13 +103,11 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
     """
     token = credentials.credentials
     payload = decode_access_token(token)
-# Lógica de decisão (if): Avalia 'if not payload:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not payload:
         raise HTTPException(
             status_code=401,
             detail="Token de autenticação inválido ou expirado"
         )
-# Lógica de decisão (if): Avalia 'if payload.get("type") == "ref...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if payload.get("type") == "refresh":
         raise HTTPException(
             status_code=401,
@@ -131,7 +124,6 @@ def check_admin_role(credentials: HTTPAuthorizationCredentials = Security(securi
     """
     token = credentials.credentials
     payload = decode_access_token(token)
-# Lógica de decisão (if): Avalia 'if not payload:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not payload:
         raise HTTPException(
             status_code=401,
@@ -139,7 +131,6 @@ def check_admin_role(credentials: HTTPAuthorizationCredentials = Security(securi
         )
     email = payload.get("sub", "")
     user = db.query(User).filter(User.email == email).first()
-# Lógica de decisão (if): Avalia 'if not user or user.role != "a...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user or user.role != "admin":
         raise HTTPException(
             status_code=403,
@@ -154,13 +145,10 @@ def user_has_permission(user: User, required_perm: str) -> bool:
     O que faz: Processa user_has_permission recebendo os parâmetros (user, required_perm) no contexto de o módulo core/base auth.
     Impacto na regra de negócio: Assegura que o fluxo da operação user_has_permission seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
-# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         return False
-# Lógica de decisão (if): Avalia 'if user.role == "admin":...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if user.role == "admin":
         return True
-# Lógica de decisão (if): Avalia 'if not user.permissions:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user.permissions:
         return False
     perms = [p.strip().lower() for p in user.permissions.split(",")]
@@ -175,15 +163,12 @@ def check_permission(required_perm: str, credentials: HTTPAuthorizationCredentia
     """
     token = credentials.credentials
     payload = decode_access_token(token)
-# Lógica de decisão (if): Avalia 'if not payload:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not payload:
         raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
     email = payload.get("sub", "")
     user = db.query(User).filter(User.email == email).first()
-# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         raise HTTPException(status_code=403, detail="Usuário não encontrado.")
-# Lógica de decisão (if): Avalia 'if not user_has_permission(use...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user_has_permission(user, required_perm):
         raise HTTPException(
             status_code=403,
