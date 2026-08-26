@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   fetchProject, 
@@ -86,7 +87,7 @@ export default function AdminProjectView() {
       await deleteProject(id);
       navigate('/project-hub');
     } catch (err: any) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       setError('Erro ao excluir o projeto.');
     } finally {
       setUpdating(false);
@@ -151,7 +152,7 @@ export default function AdminProjectView() {
 
       setError('');
     } catch (err: any) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       setError('Erro ao carregar detalhes do projeto.');
     } finally {
       setLoading(false);
@@ -202,7 +203,7 @@ export default function AdminProjectView() {
       setEditOpen(false);
       loadProjectData();
     } catch (err) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       setError('Erro ao atualizar projeto.');
     } finally {
       setUpdating(false);
@@ -222,7 +223,7 @@ export default function AdminProjectView() {
       const assetsData = await fetchAssets(id);
       setAssets(assetsData);
     } catch (err) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       setUploadError('Falha no upload do arquivo.');
     } finally {
       setUploading(false);

@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 from app.main import app
 from app.core.auth import create_access_token
-from datetime import datetime
+from datetime import datetime, timezone
 
 client = TestClient(app)
 
@@ -10,7 +10,7 @@ def test_company_settings_crud(db):
     token = create_access_token({"sub": "admin@example.com"})
     headers = {"Authorization": f"Bearer {token}"}
 
-    test_tenant = f"tenant_{int(datetime.utcnow().timestamp())}"
+    test_tenant = f"tenant_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}"
 
     # 2. Get initial settings (should auto-create default tenant settings)
     res = client.get(f"/api/v1/company-settings/?tenant_id={test_tenant}", headers=headers)

@@ -9,7 +9,7 @@ import shutil
 import uuid
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -57,7 +57,7 @@ def upload_product_media(
         product_id=product_id,
         media_type=media_type,
         media_url=relative_url,
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None)
     )
     
     db.add(db_media)

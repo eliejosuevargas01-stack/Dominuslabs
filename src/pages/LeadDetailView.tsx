@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, MessageSquare, Send, Check, Clipboard, Loader2, 
@@ -37,6 +38,8 @@ const InstagramIcon = ({ size = 16, ...props }: React.SVGProps<SVGSVGElement> & 
 );
 
 export interface Lead {
+  snapshot?: any;
+  name?: string;
   id: string;
   lead_id?: string;
   empresa_nome?: string;
@@ -125,7 +128,7 @@ export default function LeadDetailView() {
         setMessages(msgData);
       }
     } catch (err) {
-      console.error('Erro ao buscar mensagens do lead:', err);
+      console.error('Erro ao buscar mensagens do lead:', err); toast.error("Ocorreu um erro na operacao.");
     } finally {
       if (showLoading) setLoadingMessages(false);
     }

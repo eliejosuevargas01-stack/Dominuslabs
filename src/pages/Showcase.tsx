@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { fetchShowcaseData, API_BASE } from '../services/api';
 import Footer from '../components/Footer';
 import { 
@@ -46,7 +47,7 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
         setData(res);
         setError('');
       } catch (err: any) {
-        console.error(err);
+        console.error(err); toast.error("Ocorreu um erro na operacao.");
         setError('Não foi possível carregar os cases de sucesso.');
       } finally {
         setLoading(false);

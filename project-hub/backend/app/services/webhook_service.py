@@ -5,7 +5,7 @@ O que faz: Implementa a lógica estrutural e funcional para o serviço de domín
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o serviço de domínio webhook_service funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from app.schemas.logs import CommitLogCreate, DeployLogCreate
 from app.repositories.log_repo import log_repo
 from app.repositories.task_repo import task_repo
@@ -50,7 +50,7 @@ class WebhookService:
             # Mark task as DONE if commit message matches or contains the task name
             if clean_task == clean_msg or clean_task in clean_msg:
                 task.status = TaskStatus.DONE
-                task.completed_at = datetime.utcnow()
+                task.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 task.completed_by_github = True
                 db.add(task)
         

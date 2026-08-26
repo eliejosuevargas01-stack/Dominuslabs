@@ -165,7 +165,7 @@ def _build_token_data(user: User) -> dict:
     }
 
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # ---------------------------------------------------------------------------
 # Endpoints
@@ -173,7 +173,7 @@ from datetime import datetime, timedelta
 
 @router.post("/login")
 @limiter.limit("5/minute")
-async def login(
+def login(
     request: Request,
     payload: LoginRequest,
     background_tasks: BackgroundTasks,
@@ -210,7 +210,7 @@ async def login(
     access_token = create_access_token(data=token_data, expires_in=3600)
     refresh_token = create_refresh_token(data=token_data, expires_in=604800)
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     user.access_token = access_token
     user.refresh_token = refresh_token
     user.token_issued_at = now
@@ -229,7 +229,7 @@ async def login(
 
 
 @router.post("/refresh")
-async def refresh(
+def refresh(
     payload: RefreshRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -258,7 +258,7 @@ async def refresh(
     new_access_token = create_access_token(data=token_data, expires_in=3600)
     new_refresh_token = create_refresh_token(data=token_data, expires_in=604800)
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     user.access_token = new_access_token
     user.refresh_token = new_refresh_token
     user.token_issued_at = now
