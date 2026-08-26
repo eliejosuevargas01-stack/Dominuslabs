@@ -35,11 +35,11 @@ class Settings(BaseSettings):
 
     # Authentication
     ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
-    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")
     ADMIN_TENANT_ID: str = os.getenv("ADMIN_TENANT_ID", os.getenv("MASTER_TENANT_ID", "admin"))
     VIEWER_USERNAME: str = os.getenv("VIEWER_USERNAME", "patrik182rodrigues@gmail.com")
-    VIEWER_PASSWORD: str = os.getenv("VIEWER_PASSWORD", "patrik182")
-    SECRET_KEY: str = os.getenv("JWT_SECRET", "dominuslabs-super-secret-key-2026")
+    VIEWER_PASSWORD: str = os.getenv("VIEWER_PASSWORD", "")
+    SECRET_KEY: str = os.getenv("JWT_SECRET", "")
 
     # Uploads
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads"))
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
         return f"sqlite:///{os.path.join(self.UPLOAD_DIR, 'dominuslabs.db')}"
 
     # N8N Integration Webhooks
-    WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "default_webhook_secret")
+    WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "")
     SCRAPPER_META_WEBHOOK_URL: str = os.getenv("SCRAPPER_META_WEBHOOK_URL", "https://scrapper.dominuslabs.online/scrape/meta_ads")
     SCRAPPER_MAPS_WEBHOOK_URL: str = os.getenv("SCRAPPER_MAPS_WEBHOOK_URL", "https://scrapper.dominuslabs.online/scrape/google_maps")
     CRM_GET_LEADS_WEBHOOK_URL: str = os.getenv("CRM_GET_LEADS_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     
     WHATSAPP_API_URL: str = os.getenv("WHATSAPP_API_URL", "http://localhost:3000")
     WHATSAPP_PUBLIC_URL: str = os.getenv("WHATSAPP_PUBLIC_URL", "https://dominuslabs.online")
-    WHATSAPP_MASTER_SECRET: str = os.getenv("WHATSAPP_MASTER_SECRET", os.getenv("WHATSAPP_MASTER_KEY", os.getenv("MASTER_API_KEY", "default_master_secret")))
+    WHATSAPP_MASTER_SECRET: str = os.getenv("WHATSAPP_MASTER_SECRET", os.getenv("WHATSAPP_MASTER_KEY", os.getenv("MASTER_API_KEY", "")))
     IDENTITY_WORKER_URL: str = os.getenv("IDENTITY_WORKER_URL", "https://identity.dominus.online")
 
     # Hybrid Encryption Keys (Zero-Trust)
