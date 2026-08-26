@@ -7,7 +7,7 @@ Impacto na regra de negócio: É responsável por garantir que as operações e 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from app.core.database import Base
@@ -44,8 +44,8 @@ class Project(Base):
     status = Column(SQLEnum(ProjectStatus), default=ProjectStatus.NEW)
     github_url = Column(String, nullable=True)
     deploy_url = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     completed_at = Column(DateTime, nullable=True)
     last_commit_message = Column(String, nullable=True)
     last_deploy_date = Column(DateTime, nullable=True)

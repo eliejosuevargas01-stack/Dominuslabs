@@ -579,7 +579,7 @@ class CredentialsPayload(BaseModel):
     client_secret: str
 
 @router.get("/credentials")
-async def get_credentials(
+def get_credentials(
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
@@ -606,7 +606,7 @@ async def get_credentials(
 
 
 @router.put("/credentials")
-async def save_credentials(
+def save_credentials(
     payload: CredentialsPayload,
     db: Session = Depends(get_db),
     current_user: str = Depends(check_crm_permission)

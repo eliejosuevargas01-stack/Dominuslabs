@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import { useParams } from 'react-router-dom';
 import { fetchPublicProject, API_BASE, submitFeedback } from '../services/api';
 import ProgressBar from '../components/ProgressBar';
@@ -76,7 +77,7 @@ export default function PublicProjectView() {
       setFeedbackSuccess(true);
       loadPublicData(true);
     } catch (err: any) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       setFeedbackError('Erro ao enviar avaliação.');
     } finally {
       setSubmittingFeedback(false);
@@ -91,7 +92,7 @@ export default function PublicProjectView() {
       setData(result);
       setError('');
     } catch (err: any) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       setError('Projeto não encontrado ou token inválido.');
     } finally {
       if (!silent) setLoading(false);

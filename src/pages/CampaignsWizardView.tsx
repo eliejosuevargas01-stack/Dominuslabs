@@ -7,6 +7,7 @@
  */
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import {
   Megaphone,
   Users,
@@ -67,7 +68,7 @@ export default function CampaignsWizardView({
       }
       setCurrentStep(3);
     } catch (err) {
-      console.error("Erro ao gerar mensagem:", err);
+      console.error("Erro ao gerar mensagem:", err); toast.error("Ocorreu um erro na operacao.");
     } finally {
       setIsGenerating(false);
     }
@@ -82,7 +83,7 @@ export default function CampaignsWizardView({
         await onDispatchCampaign(selectedSegmentId, promptInput, generatedMessage);
       }
     } catch (err) {
-      console.error("Erro ao disparar campanha:", err);
+      console.error("Erro ao disparar campanha:", err); toast.error("Ocorreu um erro na operacao.");
     } finally {
       setIsDispatching(false);
     }

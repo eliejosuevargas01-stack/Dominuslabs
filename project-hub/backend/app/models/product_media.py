@@ -5,7 +5,7 @@ O que faz: Implementa a lógica estrutural e funcional para o modelo de banco de
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o modelo de banco de dados product_media funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
 from sqlalchemy import Column, Integer, String, DateTime
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.database import Base
 
 class ProductMedia(Base):
@@ -22,4 +22,4 @@ class ProductMedia(Base):
     product_id = Column(String, index=True, nullable=False)
     media_type = Column(String, nullable=False) # 'image' or 'video'
     media_url = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)

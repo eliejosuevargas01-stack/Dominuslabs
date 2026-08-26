@@ -7,6 +7,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import { 
   MessageSquare, Plus, Trash2, Wifi, WifiOff, Loader2, 
   AlertCircle, X, CheckCircle2, QrCode, ShieldAlert, Settings
@@ -106,7 +107,7 @@ export default function ConnectionsView() {
       const list = data?.sessions || (Array.isArray(data) ? data : []);
       setSessions(list);
     } catch (err: any) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       setError('Erro ao carregar conexões.');
     } finally {
       setLoading(false);
@@ -162,7 +163,7 @@ export default function ConnectionsView() {
             }, 1500);
           }
         } catch (err) {
-          console.error('Error polling session status', err);
+          console.error('Error polling session status', err); toast.error("Ocorreu um erro na operacao.");
         }
       }, 3000);
     }
@@ -299,7 +300,7 @@ export default function ConnectionsView() {
         setIncludeFromMe(!!wh.includeFromMe);
       }
     } catch (err: any) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       setError('Falha ao carregar configurações.');
       setIsSettingsModalOpen(false);
     } finally {

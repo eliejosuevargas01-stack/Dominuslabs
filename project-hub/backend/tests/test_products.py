@@ -38,8 +38,8 @@ def test_get_products(mock_auth, mocker):
     mock_product.disponivel = True
     mock_product.imagem_url = "http://example.com/img.png"
     mock_product.estoque = 5
-    from datetime import datetime
-    mock_product.created_at = datetime.utcnow()
+    from datetime import datetime, timezone, timezone, timezone
+    mock_product.created_at = datetime.now(timezone.utc).replace(tzinfo=None)
     mock_product.descricao = "Test Description"
     mock_product.disponivel = True
     mock_product.imagem_url = "http://example.com/img.png"
@@ -65,9 +65,9 @@ def test_create_product(mock_auth, mocker):
     
     # We need to ensure the mocked product returned by add/refresh has created_at
     def mock_refresh(obj):
-        from datetime import datetime
+        from datetime import datetime, timezone
         obj.id = "new-uuid"
-        obj.created_at = datetime.utcnow()
+        obj.created_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     mock_auth.refresh.side_effect = mock_refresh
 
@@ -103,8 +103,8 @@ def test_update_product(mock_auth, mocker):
     mock_product.disponivel = True
     mock_product.imagem_url = "http://example.com/img.png"
     mock_product.estoque = 5
-    from datetime import datetime
-    mock_product.created_at = datetime.utcnow()
+    from datetime import datetime, timezone
+    mock_product.created_at = datetime.now(timezone.utc).replace(tzinfo=None)
     
     # query().filter().first() is called twice (user, then product)
     # We can handle this by side_effect

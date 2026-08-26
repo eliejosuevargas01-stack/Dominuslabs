@@ -5,7 +5,7 @@ Processa chamadas recebidas via automações do N8N ou integradores de sistema. 
 from fastapi import APIRouter, Depends, Request, HTTPException, Header, Body, BackgroundTasks
 from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 import json
 import asyncio
@@ -463,9 +463,9 @@ async def github_webhook_by_token(public_token: str, request: Request, db: Sessi
                     created_at_str = created_at_str.replace("Z", "+00:00")
                 deploy_date = datetime.fromisoformat(created_at_str)
             else:
-                deploy_date = datetime.utcnow()
+                deploy_date = datetime.now(timezone.utc).replace(tzinfo=None)
         except Exception:
-            deploy_date = datetime.utcnow()
+            deploy_date = datetime.now(timezone.utc).replace(tzinfo=None)
 
         webhook_service.process_deploy_webhook(
             db=db,
@@ -492,9 +492,9 @@ async def github_webhook_by_token(public_token: str, request: Request, db: Sessi
             try:
                 if date_str and date_str.endswith("Z"):
                     date_str = date_str.replace("Z", "+00:00")
-                commit_date = datetime.fromisoformat(date_str) if date_str else datetime.utcnow()
+                commit_date = datetime.fromisoformat(date_str) if date_str else datetime.now(timezone.utc).replace(tzinfo=None)
             except Exception:
-                commit_date = datetime.utcnow()
+                commit_date = datetime.now(timezone.utc).replace(tzinfo=None)
 
             webhook_service.process_github_webhook(
                 db=db,
@@ -519,7 +519,7 @@ async def github_webhook_by_token(public_token: str, request: Request, db: Sessi
     try:
         commit_date = datetime.fromisoformat(date_str)
     except ValueError:
-        commit_date = datetime.utcnow()
+        commit_date = datetime.now(timezone.utc).replace(tzinfo=None)
 
     webhook_service.process_github_webhook(
         db=db,
@@ -572,9 +572,9 @@ async def github_webhook(request: Request, db: Session = Depends(get_db)):
             try:
                 if date_str and date_str.endswith("Z"):
                     date_str = date_str.replace("Z", "+00:00")
-                commit_date = datetime.fromisoformat(date_str) if date_str else datetime.utcnow()
+                commit_date = datetime.fromisoformat(date_str) if date_str else datetime.now(timezone.utc).replace(tzinfo=None)
             except Exception:
-                commit_date = datetime.utcnow()
+                commit_date = datetime.now(timezone.utc).replace(tzinfo=None)
 
             webhook_service.process_github_webhook(
                 db=db,
@@ -600,7 +600,7 @@ async def github_webhook(request: Request, db: Session = Depends(get_db)):
     try:
         commit_date = datetime.fromisoformat(date_str)
     except ValueError:
-        commit_date = datetime.utcnow()
+        commit_date = datetime.now(timezone.utc).replace(tzinfo=None)
 
     webhook_service.process_github_webhook(
         db=db,
@@ -638,7 +638,7 @@ async def deploy_webhook(request: Request, db: Session = Depends(get_db)):
     try:
         deploy_date = datetime.fromisoformat(date_str)
     except ValueError:
-        deploy_date = datetime.utcnow()
+        deploy_date = datetime.now(timezone.utc).replace(tzinfo=None)
 
     webhook_service.process_deploy_webhook(
         db=db,
@@ -682,11 +682,11 @@ async def whatsapp_inbound_webhook(request: Request):
     n8n_service.invalidate_leads_cache()
     
     new_msg = {
-        "id": f"msg_in_{int(datetime.utcnow().timestamp())}",
+        "id": f"msg_in_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}",
         "sender": sender,
         "message": message_text,
         "channel": "whatsapp",
-        "timestamp": datetime.utcnow().isoformat() + "Z"
+        "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
     }
     if lead_id not in MOCK_CONVERSATIONS:
         MOCK_CONVERSATIONS[lead_id] = []
@@ -695,7 +695,7 @@ async def whatsapp_inbound_webhook(request: Request):
     # Update last interaction timestamp on lead
     for lead in MOCK_LEADS:
         if lead["id"] == lead_id:
-            lead["last_interaction"] = datetime.utcnow().isoformat() + "Z"
+            lead["last_interaction"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
             if sender == "lead":
                 lead["status"] = "RESPONDED" # Toggle status to responded
             break
@@ -732,11 +732,11 @@ async def instagram_inbound_webhook(request: Request):
     n8n_service.invalidate_leads_cache()
     
     new_msg = {
-        "id": f"msg_in_{int(datetime.utcnow().timestamp())}",
+        "id": f"msg_in_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}",
         "sender": sender,
         "message": message_text,
         "channel": "instagram",
-        "timestamp": datetime.utcnow().isoformat() + "Z"
+        "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
     }
     if lead_id not in MOCK_CONVERSATIONS:
         MOCK_CONVERSATIONS[lead_id] = []
@@ -745,7 +745,7 @@ async def instagram_inbound_webhook(request: Request):
     # Update last interaction timestamp on lead
     for lead in MOCK_LEADS:
         if lead["id"] == lead_id:
-            lead["last_interaction"] = datetime.utcnow().isoformat() + "Z"
+            lead["last_interaction"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
             if sender == "lead":
                 lead["status"] = "RESPONDED"
             break

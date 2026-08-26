@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { fetchTasks, createTask, updateTask } from '../services/api';
 import { CheckCircle2, Circle, Plus, Loader2 } from 'lucide-react';
 
@@ -37,7 +38,7 @@ export default function TaskChecklist({ projectId, admin, onTasksUpdated }: Task
       setTasks(data);
       setError('');
     } catch (err: any) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       setError('Erro ao carregar tarefas.');
     } finally {
       setLoading(false);
@@ -62,7 +63,7 @@ export default function TaskChecklist({ projectId, admin, onTasksUpdated }: Task
       await updateTask(task.id, { status: newStatus });
       if (onTasksUpdated) onTasksUpdated();
     } catch (err) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       // Revert optimistic update
       setTasks(tasks.map(t => t.id === task.id ? { ...t, status: task.status } : t));
     }
@@ -82,7 +83,7 @@ export default function TaskChecklist({ projectId, admin, onTasksUpdated }: Task
       setNewTaskName('');
       if (onTasksUpdated) onTasksUpdated();
     } catch (err) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       setError('Erro ao criar tarefa.');
     } finally {
       setAddingTask(false);

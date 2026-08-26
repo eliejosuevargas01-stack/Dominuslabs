@@ -5,7 +5,7 @@ O que faz: Implementa a lógica estrutural e funcional para o modelo de banco de
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o modelo de banco de dados company_setting funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
 from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Float
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.database import Base
 
 class CompanySetting(Base):
@@ -67,5 +67,5 @@ class CompanySetting(Base):
     # Promoções e Ofertas
     promotions = Column(JSON, default=list, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)

@@ -7,7 +7,7 @@ Impacto na regra de negócio: É responsável por garantir que as operações e 
 from sqlalchemy.orm import Session
 from app.models.task import ProjectTask, TaskStatus
 from app.schemas.task import ProjectTaskCreate, ProjectTaskUpdate
-from datetime import datetime
+from datetime import datetime, timezone
 
 class TaskRepository:
     """
@@ -53,7 +53,7 @@ class TaskRepository:
         for field in update_data:
             setattr(db_obj, field, update_data[field])
         if update_data.get("status") == TaskStatus.DONE:
-            db_obj.completed_at = datetime.utcnow()
+            db_obj.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         db.add(db_obj)
         db.commit()

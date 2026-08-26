@@ -6,7 +6,7 @@ Impacto na regra de negócio: É responsável por garantir que as operações e 
 """
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.database import Base
 
@@ -27,6 +27,6 @@ class Feedback(Base):
     process_rating = Column(String)
     improvements = Column(String)
     rating = Column(Integer, default=5)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     project = relationship("Project")

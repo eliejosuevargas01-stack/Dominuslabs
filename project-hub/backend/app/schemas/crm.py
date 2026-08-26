@@ -9,6 +9,14 @@ from typing import List, Optional, Union
 from datetime import datetime
 
 class LeadBase(BaseModel):
+    push_name: Optional[str] = None
+    nome: Optional[str] = None
+    display_phone: Optional[str] = None
+    phone: Optional[str] = None
+    ultima_mensagem: Optional[str] = None
+    created_by: Optional[str] = None
+    updated_at: Optional[str] = None
+
     """
     Classe LeadBase.
 
@@ -140,3 +148,26 @@ class CrmDashboardMetrics(BaseModel):
     negociacoes: int
     clientes_fechados: int
     taxa_conversao: float
+
+class Conversation(BaseModel):
+    id: Optional[str] = None
+    contact_jid: str
+    session_id: Optional[str] = None
+    unread_count: Optional[int] = 0
+    push_name: Optional[str] = None
+    name: Optional[str] = None
+    ultima_mensagem: Optional[str] = None
+    last_interaction: Optional[str] = None
+    avatar: Optional[str] = None
+
+class OmnichannelMessage(BaseModel):
+    id: Optional[str] = None
+    message_id: Optional[str] = None
+    sender: Optional[str] = None
+    message: Optional[str] = None
+    content: Optional[str] = None
+    timestamp: Optional[str] = None
+    status: Optional[str] = None
+    media_url: Optional[str] = None
+    media_type: Optional[str] = None
+    caption: Optional[str] = None

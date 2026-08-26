@@ -104,8 +104,8 @@ export default function CrmView() {
 
       // Sort leads: by updated_at or last_interaction descending
       const sortedLeads = [...leadsData].sort((a: any, b: any) => {
-        const aDate = (a.updated_at || a.last_interaction) ? new Date(a.updated_at || a.last_interaction).getTime() : 0;
-        const bDate = (b.updated_at || b.last_interaction) ? new Date(b.updated_at || b.last_interaction).getTime() : 0;
+        const aDate = (a.updated_at || a.last_interaction) ? new Date(a.updated_at || a.last_interaction || '').getTime() : 0;
+        const bDate = (b.updated_at || b.last_interaction) ? new Date(b.updated_at || b.last_interaction || '').getTime() : 0;
         return bDate - aDate;
       });
       
@@ -158,8 +158,10 @@ export default function CrmView() {
     });
 
     return filtered.sort((a, b) => {
-      const aDate = (a.updated_at || a.last_interaction) ? new Date((a.updated_at || a.last_interaction) as string).getTime() : 0;
-      const bDate = (b.updated_at || b.last_interaction) ? new Date((b.updated_at || b.last_interaction) as string).getTime() : 0;
+<<<<<<< HEAD
+      const aDate = (a.updated_at || a.last_interaction) ? new Date(a.updated_at || a.last_interaction || '').getTime() : 0;
+      const bDate = (b.updated_at || b.last_interaction) ? new Date(b.updated_at || b.last_interaction || '').getTime() : 0;
+>>>>>>> origin/main
       return bDate - aDate;
     });
   }, [leads, searchTerm, kpiFilter]);
