@@ -158,10 +158,10 @@ export default function CrmView() {
     });
 
     return filtered.sort((a, b) => {
-<<<<<<< HEAD
+
       const aDate = (a.updated_at || a.last_interaction) ? new Date(a.updated_at || a.last_interaction || '').getTime() : 0;
       const bDate = (b.updated_at || b.last_interaction) ? new Date(b.updated_at || b.last_interaction || '').getTime() : 0;
->>>>>>> origin/main
+
       return bDate - aDate;
     });
   }, [leads, searchTerm, kpiFilter]);
