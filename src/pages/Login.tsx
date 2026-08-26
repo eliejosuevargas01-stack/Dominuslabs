@@ -9,12 +9,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginUser } from '../services/api';
-import { Lock, User, Loader2, Sparkles } from 'lucide-react';
+import { Lock, User, Loader2, Sparkles, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -110,17 +111,27 @@ export default function Login() {
               </label>
               <a href="#" className="text-sm text-purple-700 hover:text-purple-900 hover:underline font-semibold">Esqueci minha senha</a>
             </div>
-            <input
-              id="password"
-              type="password"
-              required
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="••••••••"
-              autoComplete="current-password"
-              className="w-full text-sm border border-zinc-400 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-700/50 focus:border-purple-700 placeholder:text-zinc-500 text-zinc-900 bg-white font-medium"
-              disabled={loading}
-            />
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                required
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                className="w-full text-sm border border-zinc-400 rounded-xl px-3.5 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-purple-700/50 focus:border-purple-700 placeholder:text-zinc-500 text-zinc-900 bg-white font-medium"
+                disabled={loading}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 focus:outline-none"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           <button
