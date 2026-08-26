@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 export const getDynamicApiUrl = () => {
   const hostname = window.location.hostname;
   if (hostname === "localhost" || hostname === "127.0.0.1") {
@@ -92,7 +93,7 @@ export async function fetchWithAuth(
           }
         }
       } catch (err) {
-        console.error("Token refresh failed:", err);
+        console.error("Token refresh failed:", err); toast.error("Ocorreu um erro na operacao.");
       }
     }
 
@@ -173,7 +174,7 @@ export async function refreshAuthTokenPreventively(): Promise<string | null> {
       handleExpiredSessionRedirect();
     }
   } catch (err) {
-    console.error("[PREVENTIVE-REAUTH] Erro ao re-autenticar preventivamente:", err);
+    console.error("[PREVENTIVE-REAUTH] Erro ao re-autenticar preventivamente:", err); toast.error("Ocorreu um erro na operacao.");
   }
   return null;
 }
@@ -498,7 +499,7 @@ export function getUserRole(): string {
     const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
     return payload.role || "admin";
   } catch (e) {
-    console.error("Failed to decode token", e);
+    console.error("Failed to decode token", e); toast.error("Ocorreu um erro na operacao.");
     return "";
   }
 }

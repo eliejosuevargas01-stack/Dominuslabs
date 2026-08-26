@@ -14,7 +14,7 @@ import os
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
 from app.core.crypto import encrypt_payload, decrypt_payload
-from datetime import datetime
+from datetime import datetime, timezone
 
 RAW_LEADS_CACHE = {}
 
@@ -68,6 +68,10 @@ def safe_parse_json(val: Any) -> dict:
     return {}
 
 def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
+    """
+    Mapeia os dados do Lead provenientes do webhook N8N para a estrutura do sistema Dominus.
+    Regra de Negócio: Mapeia um lead raw para garantir a consistência das entidades para o Frontend CRM e evitar dados corrompidos.
+    """
     """
     Função/Método map_n8n_lead.
 
@@ -672,8 +676,8 @@ def update_raw_lead(raw_lead: dict, payload: dict) -> dict:
         top_mappings["responsavel"] = resp_val
 
     # Time tracking
-    top_mappings["updated_at"] = datetime.utcnow().isoformat() + "Z"
-    top_mappings["updatedAt"] = datetime.utcnow().isoformat() + "Z"
+    top_mappings["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
+    top_mappings["updatedAt"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
 
     update_keys(res, top_mappings)
 
@@ -1045,7 +1049,7 @@ class ProgressiveContactCache:
             "whatsapp": contact_data.get("whatsapp") or existing.get("whatsapp") or "",
             "email": contact_data.get("email") or existing.get("email") or "",
             "status": contact_data.get("status") or existing.get("status") or "Prospectado",
-            "updated_at": datetime.utcnow().isoformat() + "Z"
+            "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
         })
         for k in ("session_id", "unread_count", "last_message_preview", "mensagens", "messages"):
             if k in contact_data:
@@ -1071,7 +1075,7 @@ class ProgressiveContactCache:
             existing["push_name"] = conv_data["push_name"]
         if conv_data.get("profile_pic_url"):
             existing["profile_pic_url"] = conv_data["profile_pic_url"]
-        existing["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        existing["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
         cls._cache[jid] = existing
         return existing
 
@@ -1089,7 +1093,7 @@ class ProgressiveContactCache:
         existing["mensagens"] = messages_list
         existing["messages"] = messages_list
         existing["has_messages"] = len(messages_list) > 0
-        existing["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        existing["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
         cls._cache[jid] = existing
         return existing
 
@@ -1353,7 +1357,7 @@ class N8NService:
                 continue
             is_me = m.get("is_from_me") is True or m.get("sender") == "user" or m.get("fromMe") is True
             msg_text = m.get("content") or m.get("message") or m.get("text") or ""
-            ts_val = m.get("timestamp") or m.get("message_timestamp") or m.get("created_at") or int(datetime.utcnow().timestamp())
+            ts_val = m.get("timestamp") or m.get("message_timestamp") or m.get("created_at") or int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())
             ts_iso = ts_val if isinstance(ts_val, str) and "T" in ts_val else (datetime.utcfromtimestamp(float(ts_val)).isoformat() + "Z")
 
             formatted.append({
@@ -1430,7 +1434,7 @@ class N8NService:
                     "erros_identificados_site": payload.get("erros_identificados_site") or None
                 },
                 "created_at": payload.get("created_at") or None,
-                "updated_at": datetime.utcnow().isoformat() + "Z",
+                "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
                 "proposta_inicial": payload.get("proposal") or "",
                 "lid": payload.get("lid") or None
             }
@@ -1479,7 +1483,7 @@ class N8NService:
                 lead["presenca_digital"] = reconstructed_presenca
                 lead["reputacao_google"] = reconstructed_reputacao
                 lead["oportunidades_identificadas"] = reconstructed_oportunidades
-                lead["last_interaction"] = datetime.utcnow().isoformat() + "Z"
+                lead["last_interaction"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
                 if current_user:
                     lead["alterado_por"] = current_user
                     lead["updated_by"] = current_user
@@ -1833,8 +1837,8 @@ class N8NService:
             MOCK_ACTIVITIES[lead_id].append(act)
             return msg
 
-        default_id = f"msg_{int(datetime.utcnow().timestamp())}"
-        default_ts = datetime.utcnow().isoformat() + "Z"
+        default_id = f"msg_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}"
+        default_ts = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
         if not url:
             logger.info("CRM_SEND_WHATSAPP_WEBHOOK_URL not configured. Message logged locally in-memory.")
             return update_local_mock_state(default_id, message_text, default_ts)
@@ -1938,7 +1942,7 @@ class N8NService:
         new_activity = {
             "lead_id": lead_id,
             "event_type": event_type,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
             "metadata": metadata
         }
         if lead_id not in MOCK_ACTIVITIES:

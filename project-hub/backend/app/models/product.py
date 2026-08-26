@@ -5,7 +5,7 @@ O que faz: Implementa a lógica estrutural e funcional para o modelo de banco de
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o modelo de banco de dados product funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.database import Base
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
@@ -30,5 +30,5 @@ class Product(Base):
     disponivel = Column(Boolean, nullable=False, default=True)
     estoque = Column(Integer, nullable=False, default=0)
     imagem_url = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)

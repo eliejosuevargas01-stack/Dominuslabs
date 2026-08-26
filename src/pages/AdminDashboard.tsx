@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { fetchProjects, createProject, API_BASE, getUserRole, deleteProject } from '../services/api';
 import { 
@@ -55,7 +56,7 @@ export default function AdminDashboard() {
       await deleteProject(id);
       loadDashboardData();
     } catch (err: any) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       setError('Erro ao excluir o projeto.');
     }
   };
@@ -81,7 +82,7 @@ export default function AdminDashboard() {
       setProjects(data);
       setError('');
     } catch (err: any) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       setError('Erro ao carregar os projetos. Verifique se o backend está ativo.');
     } finally {
       if (!silent) setLoading(false);
@@ -136,7 +137,7 @@ export default function AdminDashboard() {
       });
       loadDashboardData();
     } catch (err) {
-      console.error(err);
+      console.error(err); toast.error("Ocorreu um erro na operacao.");
       setError('Erro ao criar projeto. Verifique os campos.');
     } finally {
       setSubmitting(false);

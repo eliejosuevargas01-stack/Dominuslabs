@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from app.schemas.crm import Lead, LeadUpdate, Message, MessageSendPayload, CrmDashboardMetrics
 from app.services.n8n_service import n8n_service, MOCK_CONVERSATIONS
 from app.core.auth import get_current_user, check_crm_permission
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.user import User
@@ -86,8 +86,8 @@ async def get_contacts_action(
                 "push_name": l.get("push_name") or l.get("nome") or "Contato Sem Nome",
                 "display_phone": l.get("display_phone") or l.get("whatsapp") or None,
                 "profile_pic_url": l.get("profile_pic_url") or "",
-                "created_at": l.get("created_at") or datetime.utcnow().isoformat() + "Z",
-                "updated_at": l.get("updated_at") or datetime.utcnow().isoformat() + "Z",
+                "created_at": l.get("created_at") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
+                "updated_at": l.get("updated_at") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
                 "tenant_id": l.get("tenant_id") or "admin"
             })
         return contacts
@@ -123,7 +123,7 @@ async def get_conversations_action(
             "session_id": l.get("session_id") or "default",
             "unread_count": l.get("unread_count", 0),
             "last_message_preview": l.get("last_message_preview") or l.get("ultima_mensagem") or "",
-            "last_message_timestamp": l.get("last_message_timestamp") or l.get("last_interaction") or l.get("updated_at") or datetime.utcnow().isoformat() + "Z"
+            "last_message_timestamp": l.get("last_message_timestamp") or l.get("last_interaction") or l.get("updated_at") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
         })
     return result
 
@@ -251,7 +251,7 @@ async def proxy_crm_media(
 
 
 @router.get("/progressive/{contact_jid}")
-async def get_progressive_assembled_profile(contact_jid: str, current_user: str = Depends(get_current_user)):
+def get_progressive_assembled_profile(contact_jid: str, current_user: str = Depends(get_current_user)):
     """
     Retorna o perfil completo montado progressivamente no cache pelo contact_jid.
     """
@@ -275,7 +275,7 @@ class SessionPreferencePayload(BaseModel):
     session_id: str
 
 @router.get("/preferences/session")
-async def get_session_preference(
+def get_session_preference(
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user),
 ):
@@ -286,7 +286,7 @@ async def get_session_preference(
     return {"session_id": user.preferred_session_id}
 
 @router.put("/preferences/session")
-async def set_session_preference(
+def set_session_preference(
     payload: SessionPreferencePayload,
     db: Session = Depends(get_db),
     current_user: str = Depends(check_crm_permission),
@@ -337,8 +337,8 @@ async def send_crm_whatsapp_message(
             message_text=payload.message,
             session_id=session_id
         )
-        default_id = res.get("message", {}).get("id") or f"msg_{int(datetime.utcnow().timestamp())}"
-        default_ts = datetime.utcnow().isoformat() + "Z"
+        default_id = res.get("message", {}).get("id") or f"msg_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}"
+        default_ts = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
 
         return Message(
             id=default_id,
@@ -410,7 +410,7 @@ async def send_crm_whatsapp_media(
         "media": {
             "kind": payload.media.kind,
             "mimeType": payload.media.mimeType or ("image/jpeg" if payload.media.kind == "image" else "audio/ogg; codecs=opus" if payload.media.kind == "audio" else "video/mp4" if payload.media.kind == "video" else "application/pdf"),
-            "fileName": payload.media.fileName or f"file_{int(datetime.utcnow().timestamp())}",
+            "fileName": payload.media.fileName or f"file_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}",
             "data": payload.media.data
         }
     }
