@@ -65,13 +65,13 @@ export default function Login() {
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-amber-500/10 to-purple-500/10 rounded-full blur-xl -z-10"></div>
 
         {/* Heading Logo */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-2 flex flex-col items-center">
           <img src="/logo.png" alt="Dominus Labs" className="mx-auto w-12 h-12 rounded-2xl object-contain shadow-lg" />
           <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-purple-800 to-indigo-700 bg-clip-text text-transparent">
             Dominuslabs
           </h1>
-          <p className="text-xs text-zinc-400 font-semibold tracking-wider uppercase flex items-center justify-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+          <p className="text-sm text-zinc-600 font-medium flex items-center justify-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-amber-500" />
             Portal Corporativo de Alta Performance
           </p>
         </div>
@@ -79,14 +79,14 @@ export default function Login() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           {error && (
-            <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-semibold text-center">
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm font-semibold text-center">
               {error}
             </div>
           )}
 
-          <div className="space-y-1">
-            <label htmlFor="username" className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-zinc-400" />
+          <div className="space-y-1.5">
+            <label htmlFor="username" className="text-sm font-medium text-zinc-700 flex items-center gap-1.5">
+              <User className="w-4 h-4 text-zinc-500" />
               Usuário
             </label>
             <input
@@ -97,16 +97,19 @@ export default function Login() {
               onChange={e => setUsername(e.target.value)}
               placeholder="ex: admin"
               autoComplete="username"
-              className="w-full text-sm border border-zinc-200 rounded-xl px-3.5 py-2.5  focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+              className="w-full text-sm border border-zinc-300 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 placeholder:text-zinc-400 text-zinc-800 bg-white"
               disabled={loading}
             />
           </div>
 
-          <div className="space-y-1">
-            <label htmlFor="password" className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
-              <Lock className="w-3.5 h-3.5 text-zinc-400" />
-              Senha
-            </label>
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-center">
+              <label htmlFor="password" className="text-sm font-medium text-zinc-700 flex items-center gap-1.5">
+                <Lock className="w-4 h-4 text-zinc-500" />
+                Senha
+              </label>
+              <a href="#" className="text-xs text-purple-600 hover:text-purple-800 hover:underline">Esqueci minha senha</a>
+            </div>
             <input
               id="password"
               type="password"
@@ -115,19 +118,19 @@ export default function Login() {
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
               autoComplete="current-password"
-              className="w-full text-sm border border-zinc-200 rounded-xl px-3.5 py-2.5  focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+              className="w-full text-sm border border-zinc-300 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 placeholder:text-zinc-400 text-zinc-800 bg-white"
               disabled={loading}
             />
           </div>
 
           <button
             type="submit"
-            className="btn-primary w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold shadow-md cursor-pointer hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 mt-2"
+            className="btn-primary w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-semibold shadow-md cursor-pointer hover:bg-purple-700 active:scale-[0.99] transition-all disabled:opacity-50 mt-4 bg-purple-600 text-white"
             disabled={loading}
           >
             {loading ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-5 h-5 animate-spin" />
                 Entrando...
               </>
             ) : (
@@ -137,7 +140,7 @@ export default function Login() {
         </form>
 
         {/* Footer info */}
-        <p className="text-[10px] text-center text-zinc-400 font-medium">
+        <p className="text-xs text-center text-zinc-500 font-medium mt-4">
           Acesso estritamente autenticado e monitorado. Criptografia ponta a ponta Dominus Labs.
         </p>
 
