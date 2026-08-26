@@ -1258,8 +1258,31 @@ function playOutgoingSound() {
                      return oldM;
                   });
                 } else {
-                  if (id) existingIds.add(id);
-                  msgsToAdd.push(m);
+                  const mIsFromMe = m.is_from_me === true || m.fromMe === true || m.from_me === true || m.sender === 'user' || m.sender === 'me';
+                  let replacedTemp = false;
+
+                  if (mIsFromMe) {
+                    const getTxt = (msg: any) => String(msg.content || msg.message || msg.text || '').trim();
+                    const mTxt = getTxt(m);
+
+                    if (mTxt) {
+                      const tempIndex = updatedMsgs.findIndex(oldM => {
+                        const oldId = String(oldM.message_id || oldM.id || oldM.key?.id || '');
+                        return oldId.startsWith('temp_') && getTxt(oldM) === mTxt;
+                      });
+
+                      if (tempIndex !== -1) {
+                        updatedMsgs[tempIndex] = { ...updatedMsgs[tempIndex], ...m, status: m.status || updatedMsgs[tempIndex].status };
+                        replacedTemp = true;
+                        if (id) existingIds.add(id);
+                      }
+                    }
+                  }
+
+                  if (!replacedTemp) {
+                    if (id) existingIds.add(id);
+                    msgsToAdd.push(m);
+                  }
                 }
               }
 
