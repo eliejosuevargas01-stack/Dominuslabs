@@ -41,15 +41,18 @@ class EncryptedAsyncClient(httpx.AsyncClient):
         # Intercepta POST, PUT, PATCH se houver JSON no kwargs
         if method.upper() in ["POST", "PUT", "PATCH"]:
             if "json" in kwargs and kwargs["json"] is not None:
-                target_key = self.target_map.get(self.service_name, "n8n")
-                try:
-                    # Tenta criptografar
-                    encrypted_json = encrypt_payload(kwargs["json"], target_key)
-                    kwargs["json"] = encrypted_json
-                    logger.debug(f"[Zero-Trust] Payload criptografado para o serviço {self.service_name}")
-                except Exception as e:
-                    logger.error(f"[Zero-Trust] Erro ao criptografar payload para {self.service_name}: {e}")
-                    pass
+                if self.service_name == "whatsapp":
+                    logger.debug(f"[Zero-Trust] Bypass de criptografia para {self.service_name} (chaves RSA não configuradas no destino)")
+                else:
+                    target_key = self.target_map.get(self.service_name, "n8n")
+                    try:
+                        # Tenta criptografar
+                        encrypted_json = encrypt_payload(kwargs["json"], target_key)
+                        kwargs["json"] = encrypted_json
+                        logger.debug(f"[Zero-Trust] Payload criptografado para o serviço {self.service_name}")
+                    except Exception as e:
+                        logger.error(f"[Zero-Trust] Erro ao criptografar payload para {self.service_name}: {e}")
+                        pass
 
         return await super().request(method, url, **kwargs)
 
