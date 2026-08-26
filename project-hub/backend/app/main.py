@@ -25,6 +25,9 @@ from app.models.logs import CommitLog, DeployLog
 from app.models.feedback import Feedback
 from app.models.user import User
 from app.models.whatsapp_account import WhatsappAccount
+from app.models.company_setting import CompanySetting
+from app.models.product import Product
+from app.models.product_media import ProductMedia
 
 # Create persistent upload folders and database tables
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "images"), exist_ok=True)
