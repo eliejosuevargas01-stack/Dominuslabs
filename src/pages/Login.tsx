@@ -67,11 +67,11 @@ export default function Login() {
         {/* Heading Logo */}
         <div className="text-center space-y-2 flex flex-col items-center">
           <img src="/logo.png" alt="Dominus Labs" className="mx-auto w-12 h-12 rounded-2xl object-contain shadow-lg" />
-          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-purple-800 to-indigo-700 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-purple-900 to-indigo-900 bg-clip-text text-transparent">
             Dominuslabs
           </h1>
-          <p className="text-sm text-zinc-600 font-medium flex items-center justify-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-amber-500" />
+          <p className="text-sm text-zinc-800 font-bold flex items-center justify-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-amber-600" />
             Portal Corporativo de Alta Performance
           </p>
         </div>
@@ -79,14 +79,14 @@ export default function Login() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm font-semibold text-center">
+            <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-rose-900 text-sm font-semibold text-center">
               {error}
             </div>
           )}
 
           <div className="space-y-1.5">
-            <label htmlFor="username" className="text-sm font-medium text-zinc-700 flex items-center gap-1.5">
-              <User className="w-4 h-4 text-zinc-500" />
+            <label htmlFor="username" className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
+              <User className="w-4 h-4 text-zinc-700" />
               Usuário
             </label>
             <input
@@ -97,18 +97,18 @@ export default function Login() {
               onChange={e => setUsername(e.target.value)}
               placeholder="ex: admin"
               autoComplete="username"
-              className="w-full text-sm border border-zinc-300 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 placeholder:text-zinc-400 text-zinc-800 bg-white"
+              className="w-full text-sm border border-zinc-400 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-700/50 focus:border-purple-700 placeholder:text-zinc-500 text-zinc-900 bg-white font-medium"
               disabled={loading}
             />
           </div>
 
           <div className="space-y-1.5">
             <div className="flex justify-between items-center">
-              <label htmlFor="password" className="text-sm font-medium text-zinc-700 flex items-center gap-1.5">
-                <Lock className="w-4 h-4 text-zinc-500" />
+              <label htmlFor="password" className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
+                <Lock className="w-4 h-4 text-zinc-700" />
                 Senha
               </label>
-              <a href="#" className="text-xs text-purple-600 hover:text-purple-800 hover:underline">Esqueci minha senha</a>
+              <a href="#" className="text-sm text-purple-700 hover:text-purple-900 hover:underline font-semibold">Esqueci minha senha</a>
             </div>
             <input
               id="password"
@@ -118,14 +118,14 @@ export default function Login() {
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
               autoComplete="current-password"
-              className="w-full text-sm border border-zinc-300 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 placeholder:text-zinc-400 text-zinc-800 bg-white"
+              className="w-full text-sm border border-zinc-400 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-700/50 focus:border-purple-700 placeholder:text-zinc-500 text-zinc-900 bg-white font-medium"
               disabled={loading}
             />
           </div>
 
           <button
             type="submit"
-            className="btn-primary w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-semibold shadow-md cursor-pointer hover:bg-purple-700 active:scale-[0.99] transition-all disabled:opacity-50 mt-4 bg-purple-600 text-white"
+            className="btn-primary w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold shadow-md cursor-pointer hover:bg-purple-800 active:scale-[0.99] transition-all disabled:opacity-50 mt-4 bg-purple-700 text-white"
             disabled={loading}
           >
             {loading ? (
@@ -140,7 +140,7 @@ export default function Login() {
         </form>
 
         {/* Footer info */}
-        <p className="text-xs text-center text-zinc-500 font-medium mt-4">
+        <p className="text-xs text-center text-zinc-600 font-medium mt-4">
           Acesso estritamente autenticado e monitorado. Criptografia ponta a ponta Dominus Labs.
         </p>
 
