@@ -75,12 +75,9 @@ class UserRepository:
         update_data = obj_in.model_dump(exclude_unset=True)
         
         # Hash password if updated
-# Lógica de decisão (if): Avalia 'if "password" in update_data a...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if "password" in update_data and update_data["password"]:
             db_obj.hashed_password = get_password_hash(update_data["password"])
             del update_data["password"]
-            
-# Lógica de repetição (for): Itera sobre elementos de 'for field in update_...' processando múltiplos dados em lote para as regras de domínio.
         for field in update_data:
             setattr(db_obj, field, update_data[field])
             
@@ -97,7 +94,6 @@ class UserRepository:
         Impacto na regra de negócio: Assegura que o fluxo da operação remove seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         db_obj = db.query(User).filter(User.id == id).first()
-# Lógica de decisão (if): Avalia 'if db_obj:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if db_obj:
             db.delete(db_obj)
             db.commit()

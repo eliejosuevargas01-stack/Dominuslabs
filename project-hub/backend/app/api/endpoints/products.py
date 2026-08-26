@@ -113,25 +113,16 @@ async def update_product(
     tenant_id = await get_tenant_id_for_user(user, db)
     
     product = db.query(Product).filter(Product.id == product_id, Product.tenant_id == tenant_id).first()
-# Lógica de decisão (if): Avalia 'if not product:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not product:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
-        
-# Lógica de decisão (if): Avalia 'if product_in.name is not None...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if product_in.name is not None: 
         product.nome = product_in.name
         product.codigo_slug = generate_slug(product_in.name)
-# Lógica de decisão (if): Avalia 'if product_in.category is not ...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if product_in.category is not None: product.categoria = product_in.category
-# Lógica de decisão (if): Avalia 'if product_in.price is not Non...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if product_in.price is not None: product.preco = product_in.price
-# Lógica de decisão (if): Avalia 'if product_in.description is n...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if product_in.description is not None: product.descricao = product_in.description
-# Lógica de decisão (if): Avalia 'if product_in.available is not...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if product_in.available is not None: product.disponivel = product_in.available
-# Lógica de decisão (if): Avalia 'if product_in.image_url is not...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if product_in.image_url is not None: product.imagem_url = product_in.image_url
-# Lógica de decisão (if): Avalia 'if hasattr(product_in, 'stock'...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if hasattr(product_in, 'stock') and product_in.stock is not None: product.estoque = product_in.stock
         
     db.commit()
@@ -154,7 +145,6 @@ async def delete_product(
     tenant_id = await get_tenant_id_for_user(user, db)
     
     product = db.query(Product).filter(Product.id == product_id, Product.tenant_id == tenant_id).first()
-# Lógica de decisão (if): Avalia 'if not product:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not product:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
         

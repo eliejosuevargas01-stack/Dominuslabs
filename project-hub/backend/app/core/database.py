@@ -16,7 +16,6 @@ engine_kwargs = {
     "connect_args": connect_args,
     "pool_pre_ping": True,
 }
-# Lógica de decisão (if): Avalia 'if not is_sqlite:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
 if not is_sqlite:
     engine_kwargs["pool_recycle"] = 1800
     engine_kwargs["pool_timeout"] = 30
@@ -37,7 +36,6 @@ def get_db():
     Impacto na regra de negócio: Assegura que o fluxo da operação get_db seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     db = SessionLocal()
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         yield db
     finally:

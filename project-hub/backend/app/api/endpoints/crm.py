@@ -26,10 +26,8 @@ async def read_leads(
     """
     Fetch all leads from the n8n CRM webhook or fallback to direct WhatsApp API.
     """
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         leads = await n8n_service.get_leads(user_id=current_user)
-# Lógica de decisão (if): Avalia 'if leads and len(leads) > 0:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if leads and len(leads) > 0:
             return leads
     except Exception as e:
@@ -46,7 +44,6 @@ async def read_lead(lead_id: str, current_user: str = Depends(get_current_user))
     """
     leads = await n8n_service.get_leads(user_id=current_user)
     lead = next((l for l in leads if str(l.get("id")) == str(lead_id)), None)
-# Lógica de decisão (if): Avalia 'if not lead:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     return lead
@@ -80,11 +77,9 @@ async def get_contacts_action(
     Action 1: get_contacts
     Retorna a lista completa de contatos cadastrados.
     """
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         leads = await n8n_service.get_leads(user_id=current_user)
         contacts = []
-# Lógica de repetição (for): Itera sobre elementos de 'for l in leads:...' processando múltiplos dados em lote para as regras de domínio.
         for l in leads:
             contacts.append({
                 "contact_jid": l.get("contact_jid") or l.get("jid") or l.get("id"),
@@ -109,10 +104,8 @@ async def get_conversations_action(
     Action 2: get_conversations
     Retorna a prévia de todas as conversas agrupadas ou separadas por sessão.
     """
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         convs = await n8n_service.get_conversations(user_id=current_user)
-# Lógica de decisão (if): Avalia 'if convs and len(convs) > 0:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if convs and len(convs) > 0:
             return convs
     except Exception as e:
@@ -121,7 +114,6 @@ async def get_conversations_action(
     # Fallback return standard leads format mapped to conversations preview
     leads = await n8n_service.get_leads(user_id=current_user)
     result = []
-# Lógica de repetição (for): Itera sobre elementos de 'for l in leads:...' processando múltiplos dados em lote para as regras de domínio.
     for l in leads:
         result.append({
             "contact_jid": l.get("contact_jid") or l.get("jid") or l.get("id"),
@@ -165,16 +157,12 @@ async def proxy_crm_avatar(
     o redirecionamento para a CDN oficial do Meta (pps.whatsapp.net) ou a imagem.
     """
     target_session = session or session_id or "default"
-# Lógica de decisão (if): Avalia 'if not jid:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not jid:
         raise HTTPException(status_code=400, detail="Parâmetro 'jid' é obrigatório.")
-
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         from app.api.endpoints.whatsapp import make_whatsapp_api_request
         clean_path = f"/api/sessions/{target_session}/avatar?jid={jid}&json=true"
         res = None
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
         try:
             res = await make_whatsapp_api_request("GET", clean_path)
         except Exception:
@@ -182,11 +170,8 @@ async def proxy_crm_avatar(
             res = await make_whatsapp_api_request("GET", fallback_path)
 
         url_target = None
-# Lógica de decisão (if): Avalia 'if isinstance(res, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if isinstance(res, dict):
             url_target = res.get("url") or res.get("avatar_url") or res.get("profile_pic_url") or res.get("profile_url") or res.get("avatar")
-
-# Lógica de decisão (if): Avalia 'if url_target:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if url_target:
             return RedirectResponse(
                 url_target,
@@ -215,19 +200,13 @@ async def proxy_crm_media(
     """
     target_session = session or session_id or "default"
     target_msg_id = messageId or message_id
-# Lógica de decisão (if): Avalia 'if not target_msg_id:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not target_msg_id:
         raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
-
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         from app.api.endpoints.whatsapp import make_whatsapp_api_request
         clean_path = f"/api/sessions/{target_session}/media?messageId={target_msg_id}"
         res = await make_whatsapp_api_request("GET", clean_path, timeout=30.0)
-
-# Lógica de decisão (if): Avalia 'if isinstance(res, dict):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if isinstance(res, dict):
-# Lógica de decisão (if): Avalia 'if res.get("_is_binary"):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if res.get("_is_binary"):
                 return Response(
                     content=res["content"],
@@ -237,7 +216,6 @@ async def proxy_crm_media(
                         "Cache-Control": "public, max-age=86400"
                     }
                 )
-# Lógica de decisão (if): Avalia 'if res.get("url"):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if res.get("url"):
                 return RedirectResponse(
                     res["url"],
@@ -246,11 +224,9 @@ async def proxy_crm_media(
                         "Cache-Control": "public, max-age=86400"
                     }
                 )
-# Lógica de decisão (if): Avalia 'if res.get("data") and isinsta...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if res.get("data") and isinstance(res["data"], str):
                 base64_str = res["data"]
                 import base64
-# Lógica de decisão (if): Avalia 'if "," in base64_str:...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
                 if "," in base64_str:
                     header, base64_str = base64_str.split(",", 1)
                     mime_type = header.split(";")[0].replace("data:", "") if "data:" in header else "application/octet-stream"
@@ -281,7 +257,6 @@ async def get_progressive_assembled_profile(contact_jid: str, current_user: str 
     """
     from app.services.n8n_service import ProgressiveContactCache
     profile = ProgressiveContactCache.get_assembled_payload(contact_jid)
-# Lógica de decisão (if): Avalia 'if not profile:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not profile:
         raise HTTPException(status_code=404, detail="Perfil não encontrado no cache")
     return profile
@@ -306,7 +281,6 @@ async def get_session_preference(
 ):
     """Retorna a sessão WhatsApp preferida do usuário para envio de mensagens."""
     user = db.query(User).filter(User.email == current_user).first()
-# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     return {"session_id": user.preferred_session_id}
@@ -319,7 +293,6 @@ async def set_session_preference(
 ):
     """Define a sessão WhatsApp preferida do usuário para envio de mensagens."""
     user = db.query(User).filter(User.email == current_user).first()
-# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     user.preferred_session_id = payload.session_id
@@ -340,12 +313,10 @@ async def send_crm_whatsapp_message(
     Envia mensagem WhatsApp DIRETAMENTE para a WhatsApp API via mTLS + JWT (Sem n8n).
     """
     user = db.query(User).filter(User.email == current_user).first()
-# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         raise HTTPException(status_code=401, detail="Usuário não encontrado.")
 
     session_id = payload.session_id or user.preferred_session_id
-# Lógica de decisão (if): Avalia 'if not session_id:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not session_id:
         raise HTTPException(
             status_code=400,
@@ -353,14 +324,11 @@ async def send_crm_whatsapp_message(
         )
 
     to_phone = getattr(payload, "contact_jid", None) or getattr(payload, "jid", None) or getattr(payload, "lead_id", None) or payload.phone
-# Lógica de decisão (if): Avalia 'if not to_phone:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not to_phone:
         raise HTTPException(
             status_code=400,
             detail="Telefone/JID do destinatário é obrigatório."
         )
-
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         res = await send_whatsapp_message(
             user=user,
@@ -417,12 +385,10 @@ async def send_crm_whatsapp_media(
     no formato padronizado POST /api/sessions/{sessionId}/messages/send com objeto 'media'.
     """
     user = db.query(User).filter(User.email == current_user).first()
-# Lógica de decisão (if): Avalia 'if not user:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not user:
         raise HTTPException(status_code=401, detail="Usuário não encontrado.")
 
     active_session = payload.session_id or user.preferred_session_id
-# Lógica de decisão (if): Avalia 'if not active_session:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not active_session:
         raise HTTPException(status_code=400, detail="Nenhuma sessão WhatsApp selecionada.")
 
@@ -456,7 +422,6 @@ async def send_crm_whatsapp_media(
     }
 
     res = None
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
     try:
         res = await make_whatsapp_api_request("POST", clean_path, headers=headers, json_data=wa_payload)
     except Exception as e:
@@ -492,14 +457,11 @@ async def get_dashboard_metrics(current_user: str = Depends(get_current_user)):
     
     # Count pending responses
     respostas_pendentes = 0
-# Lógica de repetição (for): Itera sobre elementos de 'for lead in leads:...' processando múltiplos dados em lote para as regras de domínio.
     for lead in leads:
         l_id = lead.get("id")
-# Lógica de decisão (if): Avalia 'if lead.get("status") == "RESP...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if lead.get("status") == "RESPONDED":
             respostas_pendentes += 1
         elif l_id in MOCK_CONVERSATIONS and MOCK_CONVERSATIONS[l_id]:
-# Lógica de decisão (if): Avalia 'if MOCK_CONVERSATIONS[l_id][-1...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if MOCK_CONVERSATIONS[l_id][-1].get("sender") == "lead":
                 respostas_pendentes += 1
                 

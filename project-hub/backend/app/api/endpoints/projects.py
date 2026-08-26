@@ -75,7 +75,6 @@ def read_project(project_id: int, db: Session = Depends(get_db), current_user: s
     Impacto na regra de negócio: Assegura que o fluxo da operação read_project seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     project = project_repo.get(db, id=project_id)
-# Lógica de decisão (if): Avalia 'if not project:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
@@ -89,7 +88,6 @@ def update_project(project_id: int, project_in: ProjectUpdate, db: Session = Dep
     Impacto na regra de negócio: Assegura que o fluxo da operação update_project seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     project = project_repo.get(db, id=project_id)
-# Lógica de decisão (if): Avalia 'if not project:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project_repo.update(db, db_obj=project, obj_in=project_in)
@@ -103,7 +101,6 @@ def delete_project(project_id: int, db: Session = Depends(get_db), current_user:
     Impacto na regra de negócio: Assegura que o fluxo da operação delete_project seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     project = project_repo.get(db, id=project_id)
-# Lógica de decisão (if): Avalia 'if not project:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     project_repo.remove(db, id=project_id)
@@ -113,7 +110,6 @@ def delete_project(project_id: int, db: Session = Depends(get_db), current_user:
 def read_public_project(public_token: str, db: Session = Depends(get_db)):
     """Public access route - no authentication required"""
     project = project_repo.get_by_public_token(db, token=public_token)
-# Lógica de decisão (if): Avalia 'if not project:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -156,7 +152,6 @@ def create_task(project_id: int, task_in: ProjectTaskCreate, db: Session = Depen
     O que faz: Criação de novos registros e processamento para create_task recebendo os parâmetros (project_id, task_in, db, current_user) no contexto de o endpoint de API para projects.
     Impacto na regra de negócio: Assegura que o fluxo da operação create_task seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
-# Lógica de decisão (if): Avalia 'if task_in.project_id != proje...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if task_in.project_id != project_id:
         raise HTTPException(status_code=400, detail="Project ID mismatch")
     return task_repo.create(db, obj_in=task_in)
@@ -171,12 +166,10 @@ def update_task(task_id: int, task_in: ProjectTaskUpdate, db: Session = Depends(
     """
     from app.models.task import ProjectTask, TaskStatus
     task = db.query(ProjectTask).filter(ProjectTask.id == task_id).first()
-# Lógica de decisão (if): Avalia 'if not task:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
         
     # Block undoing tasks completed via GitHub Webhook
-# Lógica de decisão (if): Avalia 'if task.completed_by_github an...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if task.completed_by_github and task_in.status and task_in.status != TaskStatus.DONE:
         raise HTTPException(status_code=400, detail="Tarefas concluídas pelo GitHub não podem ser desfeitas.")
         
@@ -271,18 +264,15 @@ def submit_feedback(feedback_in: FeedbackCreate, db: Session = Depends(get_db)):
     Impacto na regra de negócio: Assegura que o fluxo da operação submit_feedback seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     project = project_repo.get_by_public_token(db, token=feedback_in.project_token)
-# Lógica de decisão (if): Avalia 'if not project:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
     from app.models.project import ProjectStatus
-# Lógica de decisão (if): Avalia 'if project.status != ProjectSt...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
     if project.status != ProjectStatus.DELIVERED:
         raise HTTPException(status_code=400, detail="Feedback só pode ser enviado para projetos concluídos.")
 
     from app.models.feedback import Feedback
     existing = db.query(Feedback).filter(Feedback.project_id == project.id).first()
-# Lógica de decisão (if): Avalia 'if existing:...' para validar se o registro já existe para evitar duplicações no banco de dados.
     if existing:
         raise HTTPException(status_code=400, detail="Feedback já enviado para este projeto.")
 
@@ -312,7 +302,6 @@ def get_public_showcase(db: Session = Depends(get_db)):
     all_projects = db.query(Project).all()
     
     projects_list = []
-# Lógica de repetição (for): Itera sobre elementos de 'for p in all_project...' processando múltiplos dados em lote para as regras de domínio.
     for p in all_projects:
         # Filter assets to include only images and videos for safety/portfolio relevance
         filtered_assets = [a for a in p.assets if a.file_type in ("images", "videos")]
@@ -329,7 +318,6 @@ def get_public_showcase(db: Session = Depends(get_db)):
     feedbacks = db.query(Feedback).join(Project).all()
     
     testimonials_list = []
-# Lógica de repetição (for): Itera sobre elementos de 'for f in feedbacks:...' processando múltiplos dados em lote para as regras de domínio.
     for f in feedbacks:
         testimonials_list.append({
             "client_name": f.project.client_name,

@@ -39,12 +39,9 @@ class EncryptedAsyncClient(httpx.AsyncClient):
         Impacto na regra de negócio: Assegura que o fluxo da operação request seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         # Intercepta POST, PUT, PATCH se houver JSON no kwargs
-# Lógica de decisão (if): Avalia 'if method.upper() in ["POST", ...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
         if method.upper() in ["POST", "PUT", "PATCH"]:
-# Lógica de decisão (if): Avalia 'if "json" in kwargs and kwargs...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if "json" in kwargs and kwargs["json"] is not None:
                 target_key = self.target_map.get(self.service_name, "n8n")
-# Tratamento de exceção (try): Tenta executar o bloco e previne que falhas inesperadas interrompam a execução do sistema.
                 try:
                     # Tenta criptografar
                     encrypted_json = encrypt_payload(kwargs["json"], target_key)

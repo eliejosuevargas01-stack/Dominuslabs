@@ -23,7 +23,6 @@ class CompanySettingRepository:
         Impacto na regra de negócio: Assegura que o fluxo da operação get_by_tenant seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         setting = db.query(CompanySetting).filter(CompanySetting.tenant_id == tenant_id).first()
-# Lógica de decisão (if): Avalia 'if not setting:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not setting:
             # Create a default empty record if none exists for the tenant
             setting = CompanySetting(tenant_id=tenant_id)
@@ -40,7 +39,6 @@ class CompanySettingRepository:
         Impacto na regra de negócio: Assegura que o fluxo da operação upsert seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         setting = db.query(CompanySetting).filter(CompanySetting.tenant_id == tenant_id).first()
-# Lógica de decisão (if): Avalia 'if not setting:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not setting:
             setting = CompanySetting(tenant_id=tenant_id)
             db.add(setting)
@@ -48,9 +46,7 @@ class CompanySettingRepository:
             db.refresh(setting)
 
         update_data = obj_in.model_dump(exclude_unset=True)
-# Lógica de repetição (for): Itera sobre elementos de 'for field, value in ...' processando múltiplos dados em lote para as regras de domínio.
         for field, value in update_data.items():
-# Lógica de decisão (if): Avalia 'if hasattr(setting, field):...' para garantir que a regra de negócio siga o fluxo correto ou evite erros (ex: validação de unicidade ou estado).
             if hasattr(setting, field):
                 setattr(setting, field, value)
 

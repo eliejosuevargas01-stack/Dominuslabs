@@ -44,13 +44,10 @@ class WebhookService:
             ProjectTask.project_id == project_id,
             ProjectTask.status != TaskStatus.DONE
         ).all()
-        
-# Lógica de repetição (for): Itera sobre elementos de 'for task in tasks:...' processando múltiplos dados em lote para as regras de domínio.
         for task in tasks:
             clean_task = task.name.strip().lower()
             clean_msg = message.strip().lower()
             # Mark task as DONE if commit message matches or contains the task name
-# Lógica de decisão (if): Avalia 'if clean_task == clean_msg or ...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
             if clean_task == clean_msg or clean_task in clean_msg:
                 task.status = TaskStatus.DONE
                 task.completed_at = datetime.utcnow()

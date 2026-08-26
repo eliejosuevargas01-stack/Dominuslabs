@@ -46,16 +46,12 @@ class TaskRepository:
         Impacto na regra de negócio: Assegura que o fluxo da operação update seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         db_obj = db.query(ProjectTask).filter(ProjectTask.id == task_id).first()
-# Lógica de decisão (if): Avalia 'if not db_obj:...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if not db_obj:
             return None
 
         update_data = obj_in.model_dump(exclude_unset=True)
-# Lógica de repetição (for): Itera sobre elementos de 'for field in update_...' processando múltiplos dados em lote para as regras de domínio.
         for field in update_data:
             setattr(db_obj, field, update_data[field])
-
-# Lógica de decisão (if): Avalia 'if update_data.get("status") =...' para checar condições e aplicar restrições de permissão/acesso aos dados do usuário.
         if update_data.get("status") == TaskStatus.DONE:
             db_obj.completed_at = datetime.utcnow()
 
