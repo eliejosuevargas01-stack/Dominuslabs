@@ -9,7 +9,7 @@ import { toast } from 'sonner';
  * - `Card de Pedido`: Exibe detalhes do pedido (nome, valor, endereço, itens).
  * - `Botão Aceitar`: Para o loop de áudio e atualiza o status do pedido localmente ou via API.
  * - `Link Waze`: Abre a URL `https://waze.com/ul?q=endereco_encode` em nova aba.
- * - `Áudio TTS`: Toca em loop "Olá..." a cada 15s até aceitar ou 3min.
+ * - `Áudio TTS`: Toca em loop "Olá..." a cada 15s até aceitar o pedido.
  */
 
 // API Base URL (adjust for testing/prod)
@@ -93,7 +93,7 @@ function useOrdersSSE() {
 
 export default function OrderManagerView() {
   const { orders, setOrders, connectionStatus } = useOrdersSSE();
-  const activeAlarms = useRef<{ [orderId: string]: { interval: ReturnType<typeof setInterval>, timeout: ReturnType<typeof setTimeout> } }>({});
+  const activeAlarms = useRef<{ [orderId: string]: { interval: ReturnType<typeof setInterval> } }>({});
 
   useEffect(() => {
     // Check for new pending orders and start alarm
@@ -136,20 +136,13 @@ export default function OrderManagerView() {
       speak();
     }, 15000);
 
-    // Setup timeout (stop after 3 mins = 180000ms)
-    const timeout = setTimeout(() => {
-      stopAlarm(order.id);
-      toast.error(`Alerta parado para o pedido de ${order.customerName} (tempo limite).`);
-    }, 180000);
-
-    activeAlarms.current[order.id] = { interval, timeout };
+    activeAlarms.current[order.id] = { interval };
   };
 
   const stopAlarm = (orderId: string) => {
     const alarm = activeAlarms.current[orderId];
     if (alarm) {
       clearInterval(alarm.interval);
-      clearTimeout(alarm.timeout);
       delete activeAlarms.current[orderId];
       // Try to stop any currently playing speech, though this stops all speech queue
       if ('speechSynthesis' in window) {
