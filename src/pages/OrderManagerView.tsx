@@ -56,7 +56,9 @@ function useOrdersSSE() {
           try {
             const data = JSON.parse(event.data);
             if (data.event === 'new_order' && data.order) {
-              setOrders(prev => [data.order, ...prev]);
+              setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
+            } else if (data.event === 'order_updated' && data.order) {
+              setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
             }
           } catch (e) {
             console.error('Error parsing SSE event:', e);
@@ -166,15 +168,21 @@ export default function OrderManagerView() {
     };
   }, []);
 
-  const handleAccept = (orderId: string) => {
+  const handleAccept = async (orderId: string) => {
     stopAlarm(orderId);
-
-    setOrders(prev => prev.map(o =>
-      o.id === orderId ? { ...o, status: 'accepted' } : o
-    ));
-
-    toast.success('Pedido aceito com sucesso!');
-    // Idealmente, chamaríamos uma API aqui (ex: axios.post(`/api/v1/orders/${orderId}/accept`))
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await fetch(`${API_BASE}/api/v1/orders/${encodeURIComponent(orderId)}/accept?token=${encodeURIComponent(token || '')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) throw new Error('Falha ao confirmar pedido');
+      const data = await response.json();
+      setOrders(prev => prev.map(o => o.id === orderId ? data.order : o));
+      toast.success('Pedido aceito com sucesso!');
+    } catch {
+      toast.error('Não foi possível confirmar o pedido.');
+    }
   };
 
   return (
