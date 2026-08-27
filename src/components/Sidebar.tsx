@@ -22,6 +22,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
 
   const menuItems = [
     { name: 'Resumo Operacional', path: '/dashboard-operacional', icon: BarChart2 },
+    { name: 'Order Manager (PDV)', path: '/order-manager', icon: BarChart2 },
     { name: 'Central Omnichannel', path: '/omnichannel', icon: MessageSquare },
     { name: 'CRM & Pipeline Pedidos', path: '/crm', icon: Users },
     { name: 'Consumo & IA', path: '/ia-inteligencia', icon: Cpu },
