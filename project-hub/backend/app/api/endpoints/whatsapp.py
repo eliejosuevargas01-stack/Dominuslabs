@@ -4,6 +4,7 @@ Documentação do módulo whatsapp.py.
 O que faz: Implementa a lógica estrutural e funcional para o endpoint de API para whatsapp.
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para whatsapp funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
+from fastapi.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.orm import Session
 import httpx
@@ -26,7 +27,7 @@ async def get_user_m2m_headers(email: str, db: Session, scope: str = "whatsapp:s
     O que faz: Recuperação de dados cadastrados para get_user_m2m_headers recebendo os parâmetros (email, db, scope) no contexto de o endpoint de API para whatsapp.
     Impacto na regra de negócio: Assegura que o fluxo da operação get_user_m2m_headers seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
-    user = db.query(User).filter(User.email == email).first()
+    user = await run_in_threadpool(lambda: db.query(User).filter(User.email == email).first())
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -85,7 +86,7 @@ async def make_whatsapp_api_request(
     is_resolvable = False
     if parsed.hostname:
         try:
-            socket.gethostbyname(parsed.hostname)
+            await asyncio.get_running_loop().getaddrinfo(parsed.hostname, None)
             is_resolvable = True
         except Exception:
             is_resolvable = False
@@ -94,8 +95,8 @@ async def make_whatsapp_api_request(
     if not is_resolvable:
         import ssl
         ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        # ctx.check_hostname = False
+        # ctx.verify_mode = ssl.CERT_NONE
         
         async def check_ip(ip: str):
             """
