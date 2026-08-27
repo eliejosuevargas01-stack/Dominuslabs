@@ -96,7 +96,7 @@ def create_refresh_token(data: dict, expires_in: int = 604800) -> str:
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
     token = credentials.credentials
-    if token == settings.WHATSAPP_MASTER_KEY or token == settings.WEBHOOK_SECRET:
+    if token == getattr(settings, "WHATSAPP_MASTER_KEY", getattr(settings, "WHATSAPP_MASTER_SECRET", None)) or token == settings.WEBHOOK_SECRET:
         return "admin@dominuslabs.online"
     payload = decode_access_token(token)
     if not payload:
@@ -107,7 +107,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
 
 def check_admin_role(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
     token = credentials.credentials
-    if token == settings.WHATSAPP_MASTER_KEY or token == settings.WEBHOOK_SECRET:
+    if token == getattr(settings, "WHATSAPP_MASTER_KEY", getattr(settings, "WHATSAPP_MASTER_SECRET", None)) or token == settings.WEBHOOK_SECRET:
         return "admin@dominuslabs.online"
     payload = decode_access_token(token)
     if not payload:
@@ -136,7 +136,7 @@ def user_has_permission(user: User, required_perm: str) -> bool:
 
 def check_permission(required_perm: str, credentials: HTTPAuthorizationCredentials, db: Session) -> str:
     token = credentials.credentials
-    if token == settings.WHATSAPP_MASTER_KEY or token == settings.WEBHOOK_SECRET:
+    if token == getattr(settings, "WHATSAPP_MASTER_KEY", getattr(settings, "WHATSAPP_MASTER_SECRET", None)) or token == settings.WEBHOOK_SECRET:
         return "admin@dominuslabs.online"
     payload = decode_access_token(token)
     if not payload:
