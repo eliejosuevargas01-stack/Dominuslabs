@@ -200,7 +200,14 @@ def decrypt_payload(encrypted_data: Any) -> Any:
         # AESGCM.decrypt expects ciphertext + auth_tag concatenated
         payload_bytes = aesgcm.decrypt(iv, ciphertext + auth_tag, None)
         try:
-            return json.loads(payload_bytes.decode('utf-8'))
+            decrypted_json = json.loads(payload_bytes.decode('utf-8'))
+            if isinstance(decrypted_json, dict):
+                # Preserve top-level metadata keys from the encrypted payload (like session_id, tenant_id)
+                for k, v in encrypted_data.items():
+                    if k not in ["_encrypted", "encryptedKey", "iv", "authTag", "payload"]:
+                        if k not in decrypted_json:
+                            decrypted_json[k] = v
+            return decrypted_json
         except json.JSONDecodeError:
             # Se não for JSON, retorna a string pura
             return payload_bytes.decode('utf-8')
