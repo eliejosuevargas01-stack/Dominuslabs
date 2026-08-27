@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from app.core.config import settings
 
 client = TestClient(app)
 
@@ -62,3 +63,39 @@ def test_deploy_webhook(mocker):
     assert response.status_code == 200
     mock_process.assert_called_once()
     app.dependency_overrides.clear()
+
+
+def test_outbound_whatsapp_send_accepts_master_api_key_without_bearer_token(mocker, client):
+    mocker.patch.object(settings, "WHATSAPP_MASTER_SECRET", "test-master-key")
+    mocker.patch(
+        "app.services.identity_service.get_m2m_jwt",
+        return_value="internal-token",
+    )
+    mock_request = mocker.patch(
+        "app.api.endpoints.whatsapp.make_whatsapp_api_request",
+        return_value={"status": "success"},
+    )
+
+    response = client.post(
+        "/api/v1/webhooks/outbound/whatsapp/send",
+        headers={"X-Master-Api-Key": "test-master-key"},
+        json={"phone": "5511999999999", "message": "Ola"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "success"}
+    assert mock_request.call_args.kwargs["headers"]["X-Master-API-Key"] == "test-master-key"
+
+
+def test_outbound_whatsapp_send_rejects_master_key_in_body(mocker, client):
+    mocker.patch.object(settings, "WHATSAPP_MASTER_SECRET", "test-master-key")
+    response = client.post(
+        "/api/v1/webhooks/outbound/whatsapp/send",
+        json={
+            "master_api_key": "test-master-key",
+            "phone": "5511999999999",
+            "message": "Ola",
+        },
+    )
+
+    assert response.status_code == 401

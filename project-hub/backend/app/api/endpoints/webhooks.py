@@ -791,8 +791,7 @@ async def n8n_outbound_whatsapp_send(
     x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
     db: Session = Depends(get_db)
 ):
-    master_key = x_master_api_key or payload.get("master_api_key") or payload.get("x_master_api_key")
-    if not master_key or master_key != settings.WHATSAPP_MASTER_SECRET:
+    if not x_master_api_key or x_master_api_key != settings.WHATSAPP_MASTER_SECRET:
         raise HTTPException(status_code=401, detail="Invalid or missing Master API Key")
 
     session_id = payload.get("session_id", "default")
