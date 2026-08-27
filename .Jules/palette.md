@@ -9,3 +9,6 @@
 ## 2024-08-26 - Password Visibility Toggle Accessibility
 **Learning:** Interactive icon-only buttons used for toggling states (like the show/hide password eye icon) must not be removed from keyboard focus flow. The use of `tabIndex={-1}` prevented keyboard users from accessing this crucial functionality, violating basic accessibility (a11y) standards.
 **Action:** Remove `tabIndex={-1}` from such interactive elements. Always provide descriptive, state-aware `aria-label` and `title` attributes (e.g., "Ocultar senha" vs "Mostrar senha") for screen readers and hover tooltips. Add clear `focus-visible` styling (like `focus-visible:ring-2`) to provide visual feedback for keyboard navigation.
+## 2024-08-27 - Icon-only buttons accessibility in Omnichannel
+**Learning:** Several icon-only utility buttons (like the search clear button and refresh conversations button) in complex views like OmnichannelView.tsx were missing `aria-label` attributes and keyboard focus states, making them invisible to screen readers and difficult to navigate via keyboard. There was also a Tailwind class typo (`-tranzinc-y-1/2`) which broke visual styling.
+**Action:** Always add descriptive `aria-label` attributes and clear `focus-visible:ring-2 focus:outline-none` styles to all interactive icon-only elements. Validate Tailwind utility classes carefully.
