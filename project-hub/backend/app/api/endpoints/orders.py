@@ -6,7 +6,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Query, Request, status, Body
+from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,17 +15,38 @@ from app.core.config import settings
 
 router = APIRouter()
 
-
 orders: Dict[str, Dict[str, Any]] = {}
 listeners: Dict[str, set[asyncio.Queue]] = {}
 
 
+# --- N8N AI Agent Payload Schemas ---
+
+class AgentOrderItem(BaseModel):
+    codigo: str
+    nome: str
+    quantidade: int
+    subtotal: str
+
+class AgentOrderPayload(BaseModel):
+    tenant_id: str
+    pedido_id: str
+    content_jid: str
+    localização: str
+    items: List[AgentOrderItem]
+    cliente_id: str
+
+# ------------------------------------
+
+
 def public_order(order: Dict[str, Any]) -> Dict[str, Any]:
     return {
-        "id": order["id"], "customerName": order["customer_name"],
+        "id": order["id"], 
+        "customerName": order["customer_name"],
         "tenantId": order["tenant_id"],
-        "total": order["total"], "address": order["address"],
-        "items": order["items"], "status": order["status"],
+        "total": order["total"], 
+        "address": order["address"],
+        "items": order["items"], 
+        "status": order["status"],
         "createdAt": order["created_at"],
     }
 
@@ -56,59 +77,39 @@ async def broadcast(event: str, order: Dict[str, Any]) -> None:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def receive_order(
-    payload: Dict[str, Any] = Body(...),
+    payload: AgentOrderPayload,
     x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
 ):
-    """Recebe um pedido flexível do agente (N8N) e publica no Order Manager."""
+    """Recebe o pedido ESTRITO do agente IA (N8N) e publica no Order Manager."""
     if not valid_master_key(x_master_api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing Master API Key")
         
-    tenant_id = payload.get("tenant_id") or payload.get("tenantId") or "admin"
-    order_id = payload.get("pedido_id") or payload.get("order_id") or payload.get("id") or secrets.token_urlsafe(9)
-    customer_name = payload.get("customer_name") or payload.get("customerName") or payload.get("customer_jid") or "Cliente WhatsApp"
-    address = payload.get("address") or payload.get("loc") or "Endereço não informado"
-    
-    total = payload.get("total", 0.0)
-    try:
-        total = float(total)
-    except:
-        total = 0.0
+    # Calculando o total a partir dos itens do payload do agente
+    total_calc = 0.0
+    for item in payload.items:
+        try:
+            total_calc += float(item.subtotal)
+        except ValueError:
+            pass
+            
+    # Mapeando os itens para o formato que o frontend espera
+    frontend_items = [
+        {"name": item.nome, "quantity": item.quantidade}
+        for item in payload.items
+    ]
         
-    raw_items = payload.get("items") or payload.get("itens")
-    parsed_items = []
-    
-    if isinstance(raw_items, list):
-        for item in raw_items:
-            if isinstance(item, dict):
-                # Try to extract a name and quantity
-                name = str(item.get("name") or item.get("nome") or item.get("item") or item)
-                try:
-                    qty = int(item.get("quantity") or item.get("quantidade") or item.get("qtd") or 1)
-                except:
-                    qty = 1
-                parsed_items.append({"name": name, "quantity": qty})
-            else:
-                # If it's a list of strings or numbers
-                parsed_items.append({"name": str(item), "quantity": 1})
-    elif isinstance(raw_items, dict):
-        # If they send an object directly
-        parsed_items.append({"name": str(raw_items), "quantity": 1})
-    elif isinstance(raw_items, str) and raw_items.strip():
-        # If they send a comma separated string or text block
-        parsed_items.append({"name": raw_items.strip(), "quantity": 1})
-        
-    if not parsed_items:
-        payment = payload.get("payment_method", "Não especificado")
-        parsed_items = [{"name": f"Pedido via IA (Pagamento: {payment})", "quantity": 1}]
-        
-    storage_id = f"{tenant_id}:{order_id}"
+    storage_id = f"{payload.tenant_id}:{payload.pedido_id}"
     record = {
-        "id": order_id, "tenant_id": tenant_id,
-        "customer_name": customer_name,
-        "total": total, "address": address,
-        "items": parsed_items,
-        "status": "pending", "created_at": datetime.now(timezone.utc).isoformat(),
+        "id": payload.pedido_id, 
+        "tenant_id": payload.tenant_id,
+        "customer_name": payload.cliente_id,  # O frontend exibe isso como nome do cliente
+        "total": total_calc, 
+        "address": payload.localização,
+        "items": frontend_items,
+        "status": "pending", 
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    
     orders[storage_id] = record
     await broadcast("new_order", record)
     return {"ok": True, "order": public_order(record)}
