@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     VIEWER_PASSWORD: str = os.getenv("VIEWER_PASSWORD", "")
     SECRET_KEY: str = os.getenv("JWT_SECRET", "")
 
+    # LiteLLM TTS
+    LITELLM_API_KEY: Optional[str] = os.getenv("LITELLM_API_KEY")
+    LITELLM_API_BASE: Optional[str] = os.getenv("LITELLM_API_BASE")
+
     # Uploads
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads"))
 

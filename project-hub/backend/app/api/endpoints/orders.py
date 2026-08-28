@@ -1,3 +1,4 @@
+import httpx
 """Order Manager: entrada de pedidos, SSE e confirmação do operador."""
 
 import asyncio
@@ -166,3 +167,59 @@ async def accept_order(
     order["status"] = "accepted"
     await broadcast("order_updated", order)
     return {"ok": True, "order": public_order(order)}
+
+# --- TTS Logic ---
+tts_cache: Dict[str, bytes] = {}
+
+@router.get("/{order_id}/tts-alarm")
+async def get_order_tts_alarm(
+    order_id: str,
+    request: Request,
+    token: Optional[str] = Query(None),
+    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
+):
+    if not valid_operator(request, x_master_api_key or token):
+        raise HTTPException(status_code=401, detail="Authentication required")
+        
+    payload = operator_payload(request, x_master_api_key or token)
+    tenant_id = payload.get("tenant_id") if payload else request.query_params.get("tenant_id")
+    
+    order = orders.get(f"{tenant_id}:{order_id}")
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    if order["id"] in tts_cache:
+        def iterfile():
+            yield tts_cache[order["id"]]
+        return StreamingResponse(iterfile(), media_type="audio/mpeg")
+        
+    if not settings.LITELLM_API_KEY or not settings.LITELLM_API_BASE:
+        raise HTTPException(status_code=500, detail="TTS not configured in backend")
+        
+    # Construir o texto
+    items_text = ", ".join([f"{item['quantity']} {item['name']}" for item in order.get("items", [])])
+    total_brl = f"R$ {order.get('total', 0):.2f}".replace(".", ",")
+    text = f"Olá, o cliente {order.get('customerName')} fez um novo pedido {items_text} no valor de {total_brl} para entregar em {order.get('address')}, por favor aceite."
+
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(
+                f"{settings.LITELLM_API_BASE.rstrip('/')}/audio/speech",
+                headers={"Authorization": f"Bearer {settings.LITELLM_API_KEY}"},
+                json={
+                    "model": "tts-1",
+                    "input": text,
+                    "voice": "alloy"
+                },
+                timeout=30.0
+            )
+            resp.raise_for_status()
+            audio_bytes = resp.content
+            tts_cache[order["id"]] = audio_bytes
+            
+            def iterfile_new():
+                yield audio_bytes
+                
+            return StreamingResponse(iterfile_new(), media_type="audio/mpeg")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"TTS generation failed: {str(e)}")
