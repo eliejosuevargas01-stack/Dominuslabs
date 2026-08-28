@@ -24,7 +24,6 @@ import DashboardOperationalView from './pages/DashboardOperationalView';
 import AiIntelligenceView from './pages/AiIntelligenceView';
 import AutomationsView from './pages/AutomationsView';
 import CampaignsWizardView from './pages/CampaignsWizardView';
-import OrderManagerView from './pages/OrderManagerView';
 import { LogOut } from 'lucide-react';
 import { Toaster } from 'sonner';
 import './App.css';
