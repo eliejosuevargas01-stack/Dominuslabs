@@ -9,11 +9,11 @@ import { toast } from 'sonner';
  * - `Card de Pedido`: Exibe detalhes do pedido (nome, valor, endereço, itens).
  * - `Botão Aceitar`: Para o loop de áudio e atualiza o status do pedido localmente ou via API.
  * - `Link Waze`: Abre a URL `https://waze.com/ul?q=endereco_encode` em nova aba.
- * - `Áudio TTS`: Toca em loop "Olá..." a cada 15s até aceitar ou 3min.
+ * - `Áudio TTS`: Toca em loop "Olá..." a cada 15s até aceitar o pedido.
  */
 
 // API Base URL (adjust for testing/prod)
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_BASE } from "../services/api";
 
 interface OrderItem {
   name: string;
@@ -45,7 +45,7 @@ function useOrdersSSE() {
         const token = localStorage.getItem('admin_token');
         // Usar EventSource nativo ou polyfill dependendo da necessidade de auth (EventSource nativo não suporta headers, então podemos precisar enviar token via query string se aplicável)
         // Por simplicidade na simulação:
-        eventSource = new EventSource(`${API_BASE}/api/v1/orders/events?token=${token}`);
+        eventSource = new EventSource(`${API_BASE}/orders/events?token=${token}`);
 
         eventSource.onopen = () => {
           setConnectionStatus('connected');
@@ -56,7 +56,9 @@ function useOrdersSSE() {
           try {
             const data = JSON.parse(event.data);
             if (data.event === 'new_order' && data.order) {
-              setOrders(prev => [data.order, ...prev]);
+              setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
+            } else if (data.event === 'order_updated' && data.order) {
+              setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
             }
           } catch (e) {
             console.error('Error parsing SSE event:', e);
@@ -91,7 +93,7 @@ function useOrdersSSE() {
 
 export default function OrderManagerView() {
   const { orders, setOrders, connectionStatus } = useOrdersSSE();
-  const activeAlarms = useRef<{ [orderId: string]: { interval: ReturnType<typeof setInterval>, timeout: ReturnType<typeof setTimeout> } }>({});
+  const activeAlarms = useRef<{ [orderId: string]: { interval: ReturnType<typeof setInterval> } }>({});
 
   useEffect(() => {
     // Check for new pending orders and start alarm
@@ -134,20 +136,13 @@ export default function OrderManagerView() {
       speak();
     }, 15000);
 
-    // Setup timeout (stop after 3 mins = 180000ms)
-    const timeout = setTimeout(() => {
-      stopAlarm(order.id);
-      toast.error(`Alerta parado para o pedido de ${order.customerName} (tempo limite).`);
-    }, 180000);
-
-    activeAlarms.current[order.id] = { interval, timeout };
+    activeAlarms.current[order.id] = { interval };
   };
 
   const stopAlarm = (orderId: string) => {
     const alarm = activeAlarms.current[orderId];
     if (alarm) {
       clearInterval(alarm.interval);
-      clearTimeout(alarm.timeout);
       delete activeAlarms.current[orderId];
       // Try to stop any currently playing speech, though this stops all speech queue
       if ('speechSynthesis' in window) {
@@ -166,15 +161,21 @@ export default function OrderManagerView() {
     };
   }, []);
 
-  const handleAccept = (orderId: string) => {
+  const handleAccept = async (orderId: string) => {
     stopAlarm(orderId);
-
-    setOrders(prev => prev.map(o =>
-      o.id === orderId ? { ...o, status: 'accepted' } : o
-    ));
-
-    toast.success('Pedido aceito com sucesso!');
-    // Idealmente, chamaríamos uma API aqui (ex: axios.post(`/api/v1/orders/${orderId}/accept`))
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/accept?token=${encodeURIComponent(token || '')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) throw new Error('Falha ao confirmar pedido');
+      const data = await response.json();
+      setOrders(prev => prev.map(o => o.id === orderId ? data.order : o));
+      toast.success('Pedido aceito com sucesso!');
+    } catch {
+      toast.error('Não foi possível confirmar o pedido.');
+    }
   };
 
   return (
