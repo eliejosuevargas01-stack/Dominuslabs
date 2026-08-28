@@ -4,7 +4,7 @@ import asyncio
 import json
 import secrets
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -25,13 +25,13 @@ class AgentOrderItem(BaseModel):
     codigo: str
     nome: str
     quantidade: int
-    subtotal: str
+    subtotal: float
 
 class AgentOrderPayload(BaseModel):
     tenant_id: str
     pedido_id: str
     content_jid: str
-    localização: str
+    localização: Any
     items: List[AgentOrderItem]
     cliente_id: str
 
@@ -84,27 +84,29 @@ async def receive_order(
     if not valid_master_key(x_master_api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing Master API Key")
         
-    # Calculando o total a partir dos itens do payload do agente
-    total_calc = 0.0
-    for item in payload.items:
-        try:
-            total_calc += float(item.subtotal)
-        except ValueError:
-            pass
+    # Calculando o total
+    total_calc = sum(float(item.subtotal) for item in payload.items)
             
-    # Mapeando os itens para o formato que o frontend espera
+    # Mapeando os itens
     frontend_items = [
         {"name": item.nome, "quantity": item.quantidade}
         for item in payload.items
     ]
+    
+    # Tratando a localização que a IA pode mandar como objeto ou string
+    address_str = ""
+    if isinstance(payload.localização, dict):
+        address_str = payload.localização.get("endereco_completo", str(payload.localização))
+    else:
+        address_str = str(payload.localização)
         
     storage_id = f"{payload.tenant_id}:{payload.pedido_id}"
     record = {
         "id": payload.pedido_id, 
         "tenant_id": payload.tenant_id,
-        "customer_name": payload.cliente_id,  # O frontend exibe isso como nome do cliente
+        "customer_name": payload.cliente_id, 
         "total": total_calc, 
-        "address": payload.localização,
+        "address": address_str,
         "items": frontend_items,
         "status": "pending", 
         "created_at": datetime.now(timezone.utc).isoformat(),
