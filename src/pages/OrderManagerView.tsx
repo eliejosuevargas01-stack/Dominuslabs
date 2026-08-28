@@ -93,7 +93,7 @@ function useOrdersSSE() {
 
 export default function OrderManagerView() {
   const { orders, setOrders, connectionStatus } = useOrdersSSE();
-  const activeAlarms = useRef<{ [orderId: string]: { interval: ReturnType<typeof setInterval> } }>({});
+  const activeAlarms = useRef<{ [orderId: string]: { audio?: HTMLAudioElement, interval?: any } }>({});
 
   useEffect(() => {
     // Check for new pending orders and start alarm
@@ -114,40 +114,35 @@ export default function OrderManagerView() {
   }, [orders]);
 
   const playAlarm = (order: Order) => {
-    const orderItemsText = order.items.map(item => `${item.quantity} ${item.name}`).join(', ');
-    const text = `Olá, o cliente ${order.customerName} fez um novo pedido ${orderItemsText} no valor de ${order.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} para entregar em ${order.address}, por favor aceite.`;
+    const token = localStorage.getItem('admin_token');
+    const audioUrl = `${API_BASE}/orders/${encodeURIComponent(order.id)}/tts-alarm?token=${encodeURIComponent(token || '')}`;
+    const audio = new Audio(audioUrl);
+    
+    const playNext = () => {
+      audio.play().catch(e => console.error("Erro ao tocar alarme neural:", e));
+    };
 
-    const speak = () => {
-      if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'pt-BR';
-        utterance.rate = 1.0;
-        window.speechSynthesis.speak(utterance);
-      } else {
-        console.warn('Speech Synthesis API not supported');
+    audio.onended = () => {
+      // Repete o alarme após 10 segundos de silêncio
+      const interval = setTimeout(playNext, 10000) as any;
+      if (activeAlarms.current[order.id]) {
+         activeAlarms.current[order.id].interval = interval;
       }
     };
 
-    // Play immediately
-    speak();
-
-    // Setup interval (every 15s)
-    const interval = setInterval(() => {
-      speak();
-    }, 15000);
-
-    activeAlarms.current[order.id] = { interval };
+    playNext();
+    activeAlarms.current[order.id] = { audio };
   };
 
   const stopAlarm = (orderId: string) => {
-    const alarm = activeAlarms.current[orderId];
+    const alarm = activeAlarms.current[orderId] as any;
     if (alarm) {
-      clearInterval(alarm.interval);
-      delete activeAlarms.current[orderId];
-      // Try to stop any currently playing speech, though this stops all speech queue
-      if ('speechSynthesis' in window) {
-         window.speechSynthesis.cancel();
+      if (alarm.interval) clearTimeout(alarm.interval);
+      if (alarm.audio) {
+        alarm.audio.pause();
+        alarm.audio.currentTime = 0;
       }
+      delete activeAlarms.current[orderId];
     }
   };
 
@@ -155,9 +150,6 @@ export default function OrderManagerView() {
   useEffect(() => {
     return () => {
       Object.keys(activeAlarms.current).forEach(stopAlarm);
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
     };
   }, []);
 
