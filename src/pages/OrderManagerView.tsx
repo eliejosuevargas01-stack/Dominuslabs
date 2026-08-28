@@ -45,7 +45,7 @@ function useOrdersSSE() {
         const token = localStorage.getItem('admin_token');
         // Usar EventSource nativo ou polyfill dependendo da necessidade de auth (EventSource nativo não suporta headers, então podemos precisar enviar token via query string se aplicável)
         // Por simplicidade na simulação:
-        eventSource = new EventSource(`${API_BASE}/api/v1/orders/events?token=${token}`);
+        eventSource = new EventSource(`${API_BASE}/orders/events?token=${token}`);
 
         eventSource.onopen = () => {
           setConnectionStatus('connected');
@@ -165,7 +165,7 @@ export default function OrderManagerView() {
     stopAlarm(orderId);
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await fetch(`${API_BASE}/api/v1/orders/${encodeURIComponent(orderId)}/accept?token=${encodeURIComponent(token || '')}`, {
+      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/accept?token=${encodeURIComponent(token || '')}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
