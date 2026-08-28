@@ -17,7 +17,7 @@ for k, v in list(os.environ.items()):
         del os.environ[k]
 
 from pydantic_settings import BaseSettings
-from typing import List, Union
+from typing import List, Optional, Union
 from pydantic import AnyHttpUrl, validator
 
 class Settings(BaseSettings):
