@@ -6,7 +6,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Header, HTTPException, Query, Request, status, Body
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,22 +14,6 @@ from app.core.auth import decode_access_token
 from app.core.config import settings
 
 router = APIRouter()
-
-
-class OrderItem(BaseModel):
-    name: str
-    quantity: int = Field(default=1, ge=1)
-
-
-class OrderCreate(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    id: Optional[str] = None
-    tenant_id: str = Field(alias="tenantId", min_length=1)
-    customer_name: str = Field(alias="customerName")
-    total: float = Field(ge=0)
-    address: str
-    items: List[OrderItem] = Field(default_factory=list)
 
 
 orders: Dict[str, Dict[str, Any]] = {}
@@ -72,19 +56,35 @@ async def broadcast(event: str, order: Dict[str, Any]) -> None:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def receive_order(
-    order: OrderCreate,
+    payload: Dict[str, Any] = Body(...),
     x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
 ):
-    """Recebe um pedido do agente e o publica no Order Manager do tenant."""
+    """Recebe um pedido flexível do agente (N8N) e publica no Order Manager."""
     if not valid_master_key(x_master_api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing Master API Key")
-    order_id = order.id or secrets.token_urlsafe(9)
-    storage_id = f"{order.tenant_id}:{order_id}"
+        
+    tenant_id = payload.get("tenant_id") or payload.get("tenantId") or "admin"
+    order_id = payload.get("pedido_id") or payload.get("order_id") or payload.get("id") or secrets.token_urlsafe(9)
+    customer_name = payload.get("customer_name") or payload.get("customerName") or payload.get("customer_jid") or "Cliente WhatsApp"
+    address = payload.get("address") or payload.get("loc") or "Endereço não informado"
+    
+    total = payload.get("total", 0.0)
+    try:
+        total = float(total)
+    except:
+        total = 0.0
+        
+    items = payload.get("items") or []
+    if not items:
+        payment = payload.get("payment_method", "Não especificado")
+        items = [{"name": f"Pedido via IA (Pagamento: {payment})", "quantity": 1}]
+        
+    storage_id = f"{tenant_id}:{order_id}"
     record = {
-        "id": order_id, "tenant_id": order.tenant_id,
-        "customer_name": order.customer_name,
-        "total": order.total, "address": order.address,
-        "items": [item.model_dump() for item in order.items],
+        "id": order_id, "tenant_id": tenant_id,
+        "customer_name": customer_name,
+        "total": total, "address": address,
+        "items": items,
         "status": "pending", "created_at": datetime.now(timezone.utc).isoformat(),
     }
     orders[storage_id] = record
