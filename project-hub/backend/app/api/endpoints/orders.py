@@ -74,17 +74,39 @@ async def receive_order(
     except:
         total = 0.0
         
-    items = payload.get("items") or []
-    if not items:
+    raw_items = payload.get("items") or payload.get("itens")
+    parsed_items = []
+    
+    if isinstance(raw_items, list):
+        for item in raw_items:
+            if isinstance(item, dict):
+                # Try to extract a name and quantity
+                name = str(item.get("name") or item.get("nome") or item.get("item") or item)
+                try:
+                    qty = int(item.get("quantity") or item.get("quantidade") or item.get("qtd") or 1)
+                except:
+                    qty = 1
+                parsed_items.append({"name": name, "quantity": qty})
+            else:
+                # If it's a list of strings or numbers
+                parsed_items.append({"name": str(item), "quantity": 1})
+    elif isinstance(raw_items, dict):
+        # If they send an object directly
+        parsed_items.append({"name": str(raw_items), "quantity": 1})
+    elif isinstance(raw_items, str) and raw_items.strip():
+        # If they send a comma separated string or text block
+        parsed_items.append({"name": raw_items.strip(), "quantity": 1})
+        
+    if not parsed_items:
         payment = payload.get("payment_method", "Não especificado")
-        items = [{"name": f"Pedido via IA (Pagamento: {payment})", "quantity": 1}]
+        parsed_items = [{"name": f"Pedido via IA (Pagamento: {payment})", "quantity": 1}]
         
     storage_id = f"{tenant_id}:{order_id}"
     record = {
         "id": order_id, "tenant_id": tenant_id,
         "customer_name": customer_name,
         "total": total, "address": address,
-        "items": items,
+        "items": parsed_items,
         "status": "pending", "created_at": datetime.now(timezone.utc).isoformat(),
     }
     orders[storage_id] = record
