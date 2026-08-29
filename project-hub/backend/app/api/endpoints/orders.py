@@ -250,7 +250,9 @@ async def list_orders(
     if not valid_operator(request, x_master_api_key or token):
         raise HTTPException(status_code=401, detail="Authentication required")
     payload = operator_payload(request, x_master_api_key or token)
-    tenant_id = payload.get("tenant_id") if payload else request.query_params.get("tenant_id")
+    tenant_id = payload.get("tenant_id") if payload else None
+    if not tenant_id:
+        tenant_id = request.query_params.get("tenant_id")
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id is required")
 
