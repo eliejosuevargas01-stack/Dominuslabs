@@ -63,7 +63,7 @@ def public_order(order: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def notify_order_status(pedido_id: str, tenant_id: str, order_status: str) -> None:
+async def notify_order_status(pedido_id: str, tenant_id: str, order_status: str, client_jid: str) -> None:
     """Notifica o workflow externo após uma mudança operacional de status."""
     try:
         async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT) as client:
@@ -72,6 +72,7 @@ async def notify_order_status(pedido_id: str, tenant_id: str, order_status: str)
                 json={
                     "pedido_id": pedido_id,
                     "tenant_id": tenant_id,
+                    "client_jid": client_jid,
                     "status": order_status,
                 },
             )
@@ -200,7 +201,7 @@ async def receive_order(
     
     db_order = OrderManagerOrder(
         tenant_id=payload.tenant_id, pedido_id=payload.pedido_id,
-        cliente_id=payload.cliente_id, content_jid=payload.content_jid,
+        cliente_id=payload.cliente_id, client_jid=payload.cliente_id, content_jid=payload.content_jid,
         address=address_str, total=total_calc, status="pending",
         items=[OrderManagerOrderItem(codigo=item["codigo"], nome=item["nome"], quantidade=item["quantidade"], subtotal=item["subtotal"]) for item in canonical_items],
     )
@@ -312,7 +313,7 @@ async def accept_order(
     if order["status"] != "pending":
         return {"ok": True, "duplicate": True, "order": public_order(order)}
 
-    await notify_order_status(order_id, tenant_id, "order_accepted")
+    await notify_order_status(order_id, tenant_id, "order_accepted", db_order.client_jid or db_order.cliente_id)
 
     db_order.status = "accepted"
     db_order.accepted_at = utc_now()
@@ -355,7 +356,7 @@ async def update_order_status(
             detail=f"Cannot change order status from {db_order.status} to {order_status}",
         )
 
-    await notify_order_status(order_id, tenant_id, order_status)
+    await notify_order_status(order_id, tenant_id, order_status, db_order.client_jid or db_order.cliente_id)
     db_order.status = order_status
     db.commit()
     order = order_to_record(db_order)

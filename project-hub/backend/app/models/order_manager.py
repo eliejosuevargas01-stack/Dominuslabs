@@ -22,6 +22,7 @@ class OrderManagerOrder(Base):
     tenant_id = Column(String(255), nullable=False, index=True)
     pedido_id = Column(String(255), nullable=False, index=True)
     cliente_id = Column(String(255), nullable=False)
+    client_jid = Column(String(255), nullable=True)
     content_jid = Column(String(255), nullable=False)
     address = Column(String, nullable=False, default="")
     total = Column(Numeric(12, 2), nullable=False, default=0)
