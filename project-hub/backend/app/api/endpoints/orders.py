@@ -179,21 +179,6 @@ async def receive_order(
         for item in payload.items
     ])
 
-    # Persiste cada linha no contrato do workflow antes de publicar no SSE.
-    for item in canonical_items:
-        unit_price = item["subtotal"] / item["quantidade"]
-        await orders_webhook(
-            "insert_order_item",
-            id=item["codigo"],
-            units=item["quantidade"],
-            pedido_id=payload.pedido_id,
-            tenant_id=payload.tenant_id,
-            status="adicionar_ao_carrinho",
-            nome_produto=item["nome"],
-            preco_unitario=f"{unit_price:.2f}",
-            observacoes=payload.content_jid,
-        )
-
     total_calc = sum(item["subtotal"] for item in canonical_items)
             
     # Mapeando os itens
@@ -315,20 +300,6 @@ async def accept_order(
         return {"ok": True, "duplicate": True, "order": public_order(order)}
 
     await accept_order_webhook(order_id, tenant_id)
-
-    # Remove as linhas persistidas somente depois de confirmar o aceite.
-    for item in order.get("items_source", []):
-        await orders_webhook(
-            "delete_order_item",
-            id=item["codigo"],
-            units=item["quantidade"],
-            pedido_id=order_id,
-            tenant_id=tenant_id,
-            status="carrinho_aberto",
-            nome_produto=order.get("cliente_id", "-"),
-            preco_unitario="-",
-            observacoes=order.get("content_jid", "-"),
-        )
 
     order["status"] = "accepted"
     await broadcast("order_updated", order)
