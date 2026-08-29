@@ -93,7 +93,7 @@ function useOrdersSSE() {
 
 export default function OrderManagerView() {
   const { orders, setOrders, connectionStatus } = useOrdersSSE();
-  const activeAlarms = useRef<{ [orderId: string]: { audio?: HTMLAudioElement, interval?: any } }>({});
+  const activeAlarms = useRef<{ [orderId: string]: { audio?: HTMLAudioElement, interval?: any, blobUrl?: string, abortController?: AbortController } }>({});
 
   useEffect(() => {
     // Check for new pending orders and start alarm
@@ -116,31 +116,72 @@ export default function OrderManagerView() {
   const playAlarm = (order: Order) => {
     const token = localStorage.getItem('admin_token');
     const audioUrl = `${API_BASE}/orders/${encodeURIComponent(order.id)}/tts-alarm?token=${encodeURIComponent(token || '')}`;
-    const audio = new Audio(audioUrl);
     
-    const playNext = () => {
-      audio.play().catch(e => console.error("Erro ao tocar alarme neural:", e));
-    };
+    const abortController = new AbortController();
+    activeAlarms.current[order.id] = { abortController };
 
-    audio.onended = () => {
-      // Repete o alarme após 10 segundos de silêncio
-      const interval = setTimeout(playNext, 10000) as any;
-      if (activeAlarms.current[order.id]) {
-         activeAlarms.current[order.id].interval = interval;
-      }
-    };
+    fetch(audioUrl, { signal: abortController.signal })
+      .then(async (res) => {
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          console.error("Erro ao obter alarme neural. Servidor retornou:", res.status, errData);
+          delete activeAlarms.current[order.id];
+          return;
+        }
 
-    playNext();
-    activeAlarms.current[order.id] = { audio };
+        const blob = await res.blob();
+
+        // Verifica se a requisição não foi cancelada enquanto esperava pelo blob
+        if (abortController.signal.aborted) {
+           return;
+        }
+
+        const blobUrl = URL.createObjectURL(blob);
+        const audio = new Audio(blobUrl);
+
+        const playNext = () => {
+          audio.play().catch(e => console.error("Erro ao tocar alarme neural:", e));
+        };
+
+        audio.onended = () => {
+          // Repete o alarme após 10 segundos de silêncio
+          const interval = setTimeout(playNext, 10000) as any;
+          if (activeAlarms.current[order.id]) {
+             activeAlarms.current[order.id].interval = interval;
+          }
+        };
+
+        playNext();
+        // Atualiza a referência apenas se não tiver sido limpa
+        if (activeAlarms.current[order.id]) {
+            activeAlarms.current[order.id] = { ...activeAlarms.current[order.id], audio, blobUrl };
+        } else {
+            // Foi cancelado de forma síncrona logo antes da atualização, então limpamos tudo
+            audio.pause();
+            URL.revokeObjectURL(blobUrl);
+        }
+      })
+      .catch(e => {
+        if (e.name !== 'AbortError') {
+          console.error("Erro de rede ao buscar alarme neural:", e);
+        }
+        delete activeAlarms.current[order.id];
+      });
   };
 
   const stopAlarm = (orderId: string) => {
     const alarm = activeAlarms.current[orderId] as any;
     if (alarm) {
+      if (alarm.abortController) {
+          alarm.abortController.abort();
+      }
       if (alarm.interval) clearTimeout(alarm.interval);
       if (alarm.audio) {
         alarm.audio.pause();
         alarm.audio.currentTime = 0;
+      }
+      if (alarm.blobUrl) {
+        URL.revokeObjectURL(alarm.blobUrl);
       }
       delete activeAlarms.current[orderId];
     }
