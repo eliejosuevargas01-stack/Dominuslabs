@@ -11,6 +11,8 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminProjectView from './pages/AdminProjectView';
 import PublicProjectView from './pages/PublicProjectView';
 import Login from './pages/Login';
+import OrderManagerView from './pages/OrderManagerView';
+
 import Showcase from './pages/Showcase';
 import Sidebar from './components/Sidebar';
 import CrmView from './pages/CrmView';
@@ -22,7 +24,6 @@ import DashboardOperationalView from './pages/DashboardOperationalView';
 import AiIntelligenceView from './pages/AiIntelligenceView';
 import AutomationsView from './pages/AutomationsView';
 import CampaignsWizardView from './pages/CampaignsWizardView';
-import OrderManagerView from './pages/OrderManagerView';
 import { LogOut } from 'lucide-react';
 import { Toaster } from 'sonner';
 import './App.css';
@@ -274,6 +275,14 @@ function App() {
             } 
           />
 
+          <Route 
+            path="/order-manager" 
+            element={
+              <ProtectedRoute>
+                <OrderManagerView />
+              </ProtectedRoute>
+            } 
+          />
           {/* Default fallback redirects */}
           <Route path="/admin/*" element={<Navigate to="/dashboard-operacional" replace />} />
           <Route path="/admin" element={<Navigate to="/dashboard-operacional" replace />} />
