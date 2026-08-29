@@ -4,16 +4,19 @@ import asyncio
 import json
 import secrets
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.auth import decode_access_token
 from app.core.config import settings
+from app.core.database import get_db
+from app.models.order_manager import OrderManagerOrder, OrderManagerOrderItem, utc_now
+from sqlalchemy.orm import Session, joinedload
 
 router = APIRouter()
 
@@ -54,22 +57,6 @@ def public_order(order: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def orders_webhook(action: str, **params: Any) -> Any:
-    """Executa uma action do webhook de persistência de pedidos."""
-    query = {"action": action}
-    query.update({key: str(value) for key, value in params.items()})
-    try:
-        async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT) as client:
-            response = await client.post(settings.ORDERS_WEBHOOK_URL, params=query)
-            response.raise_for_status()
-            return response.json()
-    except (httpx.HTTPError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Falha na persistência do pedido ({action}).",
-        ) from exc
-
-
 async def accept_order_webhook(pedido_id: str, tenant_id: str) -> None:
     """Notifica o workflow externo somente após o aceite do operador."""
     try:
@@ -90,37 +77,8 @@ async def accept_order_webhook(pedido_id: str, tenant_id: str) -> None:
         ) from exc
 
 
-async def get_persisted_items(pedido_id: str, tenant_id: str) -> List[Dict[str, Any]]:
-    result = await orders_webhook(
-        "get_order_item",
-        id="-",
-        units="-",
-        pedido_id=pedido_id,
-        tenant_id=tenant_id,
-        status="carrinho_aberto",
-        nome_produto="-",
-        preco_unitario="-",
-        observacoes="-",
-    )
-    rows = result if isinstance(result, list) else result.get("items", []) if isinstance(result, dict) else []
-    grouped: Dict[str, Dict[str, Any]] = {}
-    for row in rows:
-        code = str(row.get("produto_id") or row.get("id") or "")
-        if not code:
-            continue
-        current = grouped.setdefault(code, {
-            "codigo": code,
-            "nome": row.get("nome_produto", code),
-            "quantidade": 0,
-            "subtotal": 0.0,
-        })
-        current["quantidade"] += int(row.get("quantidade") or 0)
-        current["subtotal"] += float(row.get("subtotal") or 0)
-    return list(grouped.values())
-
-
 def aggregate_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Consolida linhas repetidas do mesmo produto para o frontend e delete."""
+    """Consolida linhas repetidas do mesmo produto para o frontend."""
     aggregated: Dict[str, Dict[str, Any]] = {}
     for item in items:
         key = item["codigo"]
@@ -130,6 +88,26 @@ def aggregate_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             aggregated[key]["quantidade"] += item["quantidade"]
             aggregated[key]["subtotal"] += item["subtotal"]
     return list(aggregated.values())
+
+
+def order_to_record(db_order: OrderManagerOrder) -> Dict[str, Any]:
+    items = [
+        {"codigo": item.codigo, "nome": item.nome, "quantidade": item.quantidade, "subtotal": float(item.subtotal)}
+        for item in db_order.items
+    ]
+    return {
+        "id": db_order.pedido_id,
+        "tenant_id": db_order.tenant_id,
+        "customer_name": db_order.cliente_id,
+        "total": float(db_order.total),
+        "address": db_order.address,
+        "items": [{"name": item["nome"], "quantity": item["quantidade"], "codigo": item["codigo"]} for item in items],
+        "status": db_order.status,
+        "created_at": db_order.created_at.replace(tzinfo=timezone.utc).isoformat(),
+        "content_jid": db_order.content_jid,
+        "cliente_id": db_order.cliente_id,
+        "items_source": items,
+    }
 
 
 def valid_master_key(value: Optional[str]) -> bool:
@@ -160,14 +138,20 @@ async def broadcast(event: str, order: Dict[str, Any]) -> None:
 async def receive_order(
     payload: AgentOrderPayload,
     x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
+    db: Session = Depends(get_db),
 ):
     """Recebe o pedido ESTRITO do agente IA (N8N) e publica no Order Manager."""
     if not valid_master_key(x_master_api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing Master API Key")
         
     storage_id = f"{payload.tenant_id}:{payload.pedido_id}"
-    if storage_id in orders:
-        return {"ok": True, "duplicate": True, "order": public_order(orders[storage_id])}
+    existing = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter_by(
+        tenant_id=payload.tenant_id, pedido_id=payload.pedido_id
+    ).first()
+    if existing:
+        record = order_to_record(existing)
+        orders[storage_id] = record
+        return {"ok": True, "duplicate": True, "order": public_order(record)}
 
     canonical_items = aggregate_items([
         {
@@ -208,6 +192,16 @@ async def receive_order(
         "items_source": canonical_items,
     }
     
+    db_order = OrderManagerOrder(
+        tenant_id=payload.tenant_id, pedido_id=payload.pedido_id,
+        cliente_id=payload.cliente_id, content_jid=payload.content_jid,
+        address=address_str, total=total_calc, status="pending",
+        items=[OrderManagerOrderItem(codigo=item["codigo"], nome=item["nome"], quantidade=item["quantidade"], subtotal=item["subtotal"]) for item in canonical_items],
+    )
+    db.add(db_order)
+    db.commit()
+    db.refresh(db_order)
+    record = order_to_record(db_order)
     orders[storage_id] = record
     await broadcast("new_order", record)
     return {"ok": True, "order": public_order(record)}
@@ -247,6 +241,7 @@ async def get_order(
     request: Request,
     token: Optional[str] = Query(None),
     x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
+    db: Session = Depends(get_db),
 ):
     if not valid_operator(request, x_master_api_key or token):
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -255,26 +250,13 @@ async def get_order(
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id is required")
 
-    storage_id = f"{tenant_id}:{order_id}"
-    order = orders.get(storage_id)
-    persisted_items = await get_persisted_items(order_id, tenant_id)
-    if not order:
-        order = {
-            "id": order_id,
-            "tenant_id": tenant_id,
-            "customer_name": "",
-            "total": sum(item["subtotal"] for item in persisted_items),
-            "address": "",
-            "items": [{"name": item["nome"], "quantity": item["quantidade"], "codigo": item["codigo"]} for item in persisted_items],
-            "items_source": persisted_items,
-            "status": "pending",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-        orders[storage_id] = order
-    else:
-        order["items_source"] = persisted_items
-        order["items"] = [{"name": item["nome"], "quantity": item["quantidade"], "codigo": item["codigo"]} for item in persisted_items]
-        order["total"] = sum(item["subtotal"] for item in persisted_items)
+    db_order = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter_by(
+        tenant_id=tenant_id, pedido_id=order_id
+    ).first()
+    if not db_order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    order = order_to_record(db_order)
+    orders[f"{tenant_id}:{order_id}"] = order
     return {"ok": True, "order": public_order(order)}
 
 
@@ -284,6 +266,7 @@ async def accept_order(
     request: Request,
     token: Optional[str] = Query(None),
     x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
+    db: Session = Depends(get_db),
 ):
     if not valid_operator(request, x_master_api_key or token):
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -293,15 +276,22 @@ async def accept_order(
         tenant_id = request.query_params.get("tenant_id")
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id is required for confirmation")
-    order = orders.get(f"{tenant_id}:{order_id}")
-    if not order:
+    db_order = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter_by(
+        tenant_id=tenant_id, pedido_id=order_id
+    ).first()
+    if not db_order:
         raise HTTPException(status_code=404, detail="Order not found")
+    order = order_to_record(db_order)
+    orders[f"{tenant_id}:{order_id}"] = order
     if order["status"] != "pending":
         return {"ok": True, "duplicate": True, "order": public_order(order)}
 
     await accept_order_webhook(order_id, tenant_id)
 
-    order["status"] = "accepted"
+    db_order.status = "accepted"
+    db_order.accepted_at = utc_now()
+    db.commit()
+    order["status"] = db_order.status
     await broadcast("order_updated", order)
     return {"ok": True, "order": public_order(order)}
 
@@ -314,6 +304,7 @@ async def get_order_tts_alarm(
     request: Request,
     token: Optional[str] = Query(None),
     x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
+    db: Session = Depends(get_db),
 ):
     if not valid_operator(request, x_master_api_key or token):
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -322,6 +313,13 @@ async def get_order_tts_alarm(
     tenant_id = payload.get("tenant_id") if payload else request.query_params.get("tenant_id")
     
     order = orders.get(f"{tenant_id}:{order_id}")
+    if not order:
+        db_order = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter_by(
+            tenant_id=tenant_id, pedido_id=order_id
+        ).first()
+        order = order_to_record(db_order) if db_order else None
+        if order:
+            orders[f"{tenant_id}:{order_id}"] = order
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
         
