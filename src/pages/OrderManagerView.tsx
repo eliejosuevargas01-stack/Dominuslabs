@@ -33,6 +33,7 @@ interface Order {
 // Custom Hook for SSE Orders
 function useOrdersSSE() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [announcedOrderIds, setAnnouncedOrderIds] = useState<Set<string>>(new Set());
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
 
   useEffect(() => {
@@ -43,6 +44,21 @@ function useOrdersSSE() {
       setConnectionStatus('connecting');
       try {
         const token = localStorage.getItem('admin_token');
+        fetch(`${API_BASE}/orders?token=${encodeURIComponent(token || '')}`)
+          .then(response => {
+            if (!response.ok) throw new Error('Falha ao carregar pedidos persistidos');
+            return response.json();
+          })
+          .then(data => {
+            if (Array.isArray(data.orders)) {
+              setOrders(prev => {
+                const byId = new Map<string, Order>(data.orders.map((order: Order) => [order.id, order] as [string, Order]));
+                prev.forEach(order => byId.set(order.id, order));
+                return Array.from(byId.values());
+              });
+            }
+          })
+          .catch(error => console.error('Erro ao carregar pedidos persistidos:', error));
         // Usar EventSource nativo ou polyfill dependendo da necessidade de auth (EventSource nativo não suporta headers, então podemos precisar enviar token via query string se aplicável)
         // Por simplicidade na simulação:
         eventSource = new EventSource(`${API_BASE}/orders/events?token=${token}`);
@@ -56,6 +72,7 @@ function useOrdersSSE() {
           try {
             const data = JSON.parse(event.data);
             if (data.event === 'new_order' && data.order) {
+              setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
               setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
             } else if (data.event === 'order_updated' && data.order) {
               setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
@@ -88,17 +105,17 @@ function useOrdersSSE() {
     };
   }, []);
 
-  return { orders, setOrders, connectionStatus };
+  return { orders, setOrders, announcedOrderIds, connectionStatus };
 }
 
 export default function OrderManagerView() {
-  const { orders, setOrders, connectionStatus } = useOrdersSSE();
-  const activeAlarms = useRef<{ [orderId: string]: { audio?: HTMLAudioElement, interval?: any, blobUrl?: string, abortController?: AbortController } }>({});
+  const { orders, setOrders, announcedOrderIds, connectionStatus } = useOrdersSSE();
+  const activeAlarms = useRef<{ [orderId: string]: { audio?: HTMLAudioElement, interval?: any } }>({});
 
   useEffect(() => {
     // Check for new pending orders and start alarm
     orders.forEach(order => {
-      if (order.status === 'pending' && !activeAlarms.current[order.id]) {
+      if (order.status === 'pending' && announcedOrderIds.has(order.id) && !activeAlarms.current[order.id]) {
         playAlarm(order);
       }
     });
@@ -111,77 +128,36 @@ export default function OrderManagerView() {
       }
     });
 
-  }, [orders]);
+  }, [orders, announcedOrderIds]);
 
   const playAlarm = (order: Order) => {
     const token = localStorage.getItem('admin_token');
     const audioUrl = `${API_BASE}/orders/${encodeURIComponent(order.id)}/tts-alarm?token=${encodeURIComponent(token || '')}`;
+    const audio = new Audio(audioUrl);
     
-    const abortController = new AbortController();
-    activeAlarms.current[order.id] = { abortController };
+    const playNext = () => {
+      audio.play().catch(e => console.error("Erro ao tocar alarme neural:", e));
+    };
 
-    fetch(audioUrl, { signal: abortController.signal })
-      .then(async (res) => {
-        if (!res.ok) {
-          const errData = await res.json().catch(() => null);
-          console.error("Erro ao obter alarme neural. Servidor retornou:", res.status, errData);
-          delete activeAlarms.current[order.id];
-          return;
-        }
+    audio.onended = () => {
+      // Repete o alarme após 10 segundos de silêncio
+      const interval = setTimeout(playNext, 10000) as any;
+      if (activeAlarms.current[order.id]) {
+         activeAlarms.current[order.id].interval = interval;
+      }
+    };
 
-        const blob = await res.blob();
-
-        // Verifica se a requisição não foi cancelada enquanto esperava pelo blob
-        if (abortController.signal.aborted) {
-           return;
-        }
-
-        const blobUrl = URL.createObjectURL(blob);
-        const audio = new Audio(blobUrl);
-
-        const playNext = () => {
-          audio.play().catch(e => console.error("Erro ao tocar alarme neural:", e));
-        };
-
-        audio.onended = () => {
-          // Repete o alarme após 10 segundos de silêncio
-          const interval = setTimeout(playNext, 10000) as any;
-          if (activeAlarms.current[order.id]) {
-             activeAlarms.current[order.id].interval = interval;
-          }
-        };
-
-        playNext();
-        // Atualiza a referência apenas se não tiver sido limpa
-        if (activeAlarms.current[order.id]) {
-            activeAlarms.current[order.id] = { ...activeAlarms.current[order.id], audio, blobUrl };
-        } else {
-            // Foi cancelado de forma síncrona logo antes da atualização, então limpamos tudo
-            audio.pause();
-            URL.revokeObjectURL(blobUrl);
-        }
-      })
-      .catch(e => {
-        if (e.name !== 'AbortError') {
-          console.error("Erro de rede ao buscar alarme neural:", e);
-        }
-        delete activeAlarms.current[order.id];
-      });
+    playNext();
+    activeAlarms.current[order.id] = { audio };
   };
 
   const stopAlarm = (orderId: string) => {
     const alarm = activeAlarms.current[orderId] as any;
     if (alarm) {
-      if (alarm.abortController) {
-          alarm.abortController.abort();
-      }
       if (alarm.interval) clearTimeout(alarm.interval);
       if (alarm.audio) {
         alarm.audio.pause();
         alarm.audio.currentTime = 0;
-      }
-      if (alarm.blobUrl) {
-        URL.revokeObjectURL(alarm.blobUrl);
       }
       delete activeAlarms.current[orderId];
     }
