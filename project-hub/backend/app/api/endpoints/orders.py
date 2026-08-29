@@ -219,9 +219,6 @@ async def order_events(request: Request, token: Optional[str] = Query(None)):
     async def stream():
         try:
             yield ": connected\n\n"
-            for order in list(orders.values()):
-                if order["tenant_id"] == tenant_id and order["status"] == "pending":
-                    yield f"data: {json.dumps({'event': 'new_order', 'order': public_order(order)})}\n\n"
             while True:
                 if await request.is_disconnected():
                     break
@@ -233,6 +230,29 @@ async def order_events(request: Request, token: Optional[str] = Query(None)):
             listeners.get(tenant_id, set()).discard(queue)
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.get("")
+async def list_orders(
+    request: Request,
+    token: Optional[str] = Query(None),
+    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
+    db: Session = Depends(get_db),
+):
+    """Lista os pedidos que já foram oficialmente entregues ao Order Manager."""
+    if not valid_operator(request, x_master_api_key or token):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    payload = operator_payload(request, x_master_api_key or token)
+    tenant_id = payload.get("tenant_id") if payload else request.query_params.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id is required")
+
+    db_orders = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter(
+        OrderManagerOrder.tenant_id == tenant_id
+    ).order_by(OrderManagerOrder.created_at.desc()).all()
+    records = [order_to_record(db_order) for db_order in db_orders]
+    orders.update({f"{record['tenant_id']}:{record['id']}": record for record in records})
+    return {"ok": True, "orders": [public_order(record) for record in records]}
 
 
 @router.get("/{order_id}")
