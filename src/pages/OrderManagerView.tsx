@@ -116,7 +116,7 @@ export default function OrderManagerView() {
     const text = `Olá, o cliente ${order.customerName} fez um novo pedido ${orderItemsText} no valor de ${order.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} para entregar em ${order.address}, por favor aceite.`;
 
     const speak = () => {
-      if ('speechSynthesis' in window) {
+      if ('speechSynthesis' in window && window.speechSynthesis) {
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'pt-BR';
         utterance.rate = 1.0;
@@ -150,7 +150,7 @@ export default function OrderManagerView() {
       clearTimeout(alarm.timeout);
       delete activeAlarms.current[orderId];
       // Try to stop any currently playing speech, though this stops all speech queue
-      if ('speechSynthesis' in window) {
+      if ('speechSynthesis' in window && window.speechSynthesis) {
          window.speechSynthesis.cancel();
       }
     }
@@ -160,7 +160,7 @@ export default function OrderManagerView() {
   useEffect(() => {
     return () => {
       Object.keys(activeAlarms.current).forEach(stopAlarm);
-      if ('speechSynthesis' in window) {
+      if ('speechSynthesis' in window && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
     };
