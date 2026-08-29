@@ -26,9 +26,21 @@ interface Order {
   total: number;
   address: string;
   items: OrderItem[];
-  status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+  status: 'pending' | 'accepted' | 'ready_for_delivery' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled';
   createdAt: string;
 }
+
+type OperationalStatus = 'ready_for_delivery' | 'out_for_delivery' | 'delivered';
+
+const statusLabels: Record<Order['status'], string> = {
+  pending: 'Pendente',
+  accepted: 'Aceito',
+  ready_for_delivery: 'Pronto para entrega',
+  out_for_delivery: 'Saiu para entrega',
+  delivered: 'Entregue',
+  completed: 'Concluído',
+  cancelled: 'Cancelado',
+};
 
 // Custom Hook for SSE Orders
 function useOrdersSSE() {
@@ -187,6 +199,22 @@ export default function OrderManagerView() {
     }
   };
 
+  const handleStatusChange = async (orderId: string, nextStatus: OperationalStatus) => {
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/status?status=${nextStatus}&token=${encodeURIComponent(token || '')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) throw new Error('Falha ao atualizar status');
+      const data = await response.json();
+      setOrders(prev => prev.map(o => o.id === orderId ? data.order : o));
+      toast.success(`Pedido marcado como ${statusLabels[nextStatus].toLowerCase()}.`);
+    } catch {
+      toast.error('Não foi possível atualizar o status do pedido.');
+    }
+  };
+
   return (
     <div className="p-6 h-full flex flex-col bg-zinc-50">
       <div className="flex items-center justify-between mb-8">
@@ -231,7 +259,7 @@ export default function OrderManagerView() {
                     order.status === 'accepted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                     'bg-zinc-100 text-zinc-600 border-zinc-200'
                  }`}>
-                   {order.status === 'pending' ? 'Pendente' : order.status === 'accepted' ? 'Aceito' : order.status}
+                   {statusLabels[order.status] || order.status}
                  </span>
               </div>
 
@@ -279,6 +307,27 @@ export default function OrderManagerView() {
                   >
                     <Check className="w-4 h-4" />
                     Aceitar Pedido
+                  </button>
+                </div>
+              )}
+              {order.status === 'accepted' && (
+                <div className="p-4 bg-zinc-50 border-t border-zinc-100">
+                  <button onClick={() => handleStatusChange(order.id, 'ready_for_delivery')} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors cursor-pointer">
+                    Marcar pronto para entrega
+                  </button>
+                </div>
+              )}
+              {order.status === 'ready_for_delivery' && (
+                <div className="p-4 bg-zinc-50 border-t border-zinc-100">
+                  <button onClick={() => handleStatusChange(order.id, 'out_for_delivery')} className="w-full py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg shadow-sm transition-colors cursor-pointer">
+                    Marcar saiu para entrega
+                  </button>
+                </div>
+              )}
+              {order.status === 'out_for_delivery' && (
+                <div className="p-4 bg-zinc-50 border-t border-zinc-100">
+                  <button onClick={() => handleStatusChange(order.id, 'delivered')} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-sm transition-colors cursor-pointer">
+                    Marcar como entregue
                   </button>
                 </div>
               )}
