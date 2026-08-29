@@ -23,6 +23,12 @@ router = APIRouter()
 orders: Dict[str, Dict[str, Any]] = {}
 listeners: Dict[str, set[asyncio.Queue]] = {}
 WEBHOOK_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
+ORDER_STATUS_TRANSITIONS = {
+    "pending": {"accepted"},
+    "accepted": {"ready_for_delivery"},
+    "ready_for_delivery": {"out_for_delivery"},
+    "out_for_delivery": {"delivered"},
+}
 
 
 # --- N8N AI Agent Payload Schemas ---
@@ -57,8 +63,8 @@ def public_order(order: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def accept_order_webhook(pedido_id: str, tenant_id: str) -> None:
-    """Notifica o workflow externo somente após o aceite do operador."""
+async def notify_order_status(pedido_id: str, tenant_id: str, order_status: str) -> None:
+    """Notifica o workflow externo após uma mudança operacional de status."""
     try:
         async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT) as client:
             response = await client.post(
@@ -66,7 +72,7 @@ async def accept_order_webhook(pedido_id: str, tenant_id: str) -> None:
                 json={
                     "pedido_id": pedido_id,
                     "tenant_id": tenant_id,
-                    "status": "order_accepted",
+                    "status": order_status,
                 },
             )
             response.raise_for_status()
@@ -306,12 +312,54 @@ async def accept_order(
     if order["status"] != "pending":
         return {"ok": True, "duplicate": True, "order": public_order(order)}
 
-    await accept_order_webhook(order_id, tenant_id)
+    await notify_order_status(order_id, tenant_id, "order_accepted")
 
     db_order.status = "accepted"
     db_order.accepted_at = utc_now()
     db.commit()
     order["status"] = db_order.status
+    await broadcast("order_updated", order)
+    return {"ok": True, "order": public_order(order)}
+
+
+@router.post("/{order_id}/status")
+async def update_order_status(
+    order_id: str,
+    order_status: str = Query(..., alias="status"),
+    request: Request = None,
+    token: Optional[str] = Query(None),
+    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
+    db: Session = Depends(get_db),
+):
+    """Avança o pedido na operação da cozinha e notifica o workflow."""
+    if not valid_operator(request, x_master_api_key or token):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    payload = operator_payload(request, x_master_api_key or token)
+    tenant_id = payload.get("tenant_id") if payload else request.query_params.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id is required")
+
+    allowed_statuses = {"ready_for_delivery", "out_for_delivery", "delivered"}
+    if order_status not in allowed_statuses:
+        raise HTTPException(status_code=422, detail="Invalid order status")
+    db_order = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter_by(
+        tenant_id=tenant_id, pedido_id=order_id
+    ).first()
+    if not db_order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if db_order.status == order_status:
+        return {"ok": True, "duplicate": True, "order": public_order(order_to_record(db_order))}
+    if order_status not in ORDER_STATUS_TRANSITIONS.get(db_order.status, set()):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot change order status from {db_order.status} to {order_status}",
+        )
+
+    await notify_order_status(order_id, tenant_id, order_status)
+    db_order.status = order_status
+    db.commit()
+    order = order_to_record(db_order)
+    orders[f"{tenant_id}:{order_id}"] = order
     await broadcast("order_updated", order)
     return {"ok": True, "order": public_order(order)}
 
