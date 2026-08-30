@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,6 +23,7 @@ router = APIRouter()
 orders: Dict[str, Dict[str, Any]] = {}
 listeners: Dict[str, set[asyncio.Queue]] = {}
 WEBHOOK_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
+WEBHOOK_RETRY_DELAYS = (5, 15, 30, 60)
 ORDER_STATUS_TRANSITIONS = {
     "pending": {"accepted"},
     "accepted": {"ready_for_delivery"},
@@ -78,10 +79,18 @@ async def notify_order_status(pedido_id: str, tenant_id: str, order_status: str,
             )
             response.raise_for_status()
     except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Falha ao notificar o aceite do pedido.",
-        ) from exc
+        raise exc
+
+
+async def retry_order_status_webhook(pedido_id: str, tenant_id: str, order_status: str, client_jid: str) -> None:
+    for delay in (0, *WEBHOOK_RETRY_DELAYS):
+        if delay:
+            await asyncio.sleep(delay)
+        try:
+            await notify_order_status(pedido_id, tenant_id, order_status, client_jid)
+            return
+        except httpx.HTTPError:
+            continue
 
 
 def aggregate_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -133,6 +142,16 @@ def operator_payload(request: Request, token: Optional[str]) -> Optional[dict]:
 def valid_operator(request: Request, token: Optional[str]) -> bool:
     payload = operator_payload(request, token)
     return bool(payload and payload.get("sub"))
+
+
+def resolve_tenant_id(request: Request, payload: Optional[dict], credential: Optional[str]) -> Optional[str]:
+    tenant_id = payload.get("tenant_id") if payload else None
+    if tenant_id:
+        return tenant_id
+    master_credential = request.headers.get("X-Master-API-Key") or credential
+    if valid_master_key(master_credential):
+        return request.query_params.get("tenant_id")
+    return None
 
 
 async def broadcast(event: str, order: Dict[str, Any]) -> None:
@@ -250,9 +269,7 @@ async def list_orders(
     if not valid_operator(request, x_master_api_key or token):
         raise HTTPException(status_code=401, detail="Authentication required")
     payload = operator_payload(request, x_master_api_key or token)
-    tenant_id = payload.get("tenant_id") if payload else None
-    if not tenant_id:
-        tenant_id = request.query_params.get("tenant_id")
+    tenant_id = resolve_tenant_id(request, payload, x_master_api_key or token)
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id is required")
 
@@ -275,7 +292,7 @@ async def get_order(
     if not valid_operator(request, x_master_api_key or token):
         raise HTTPException(status_code=401, detail="Authentication required")
     payload = operator_payload(request, x_master_api_key or token)
-    tenant_id = payload.get("tenant_id") if payload else request.query_params.get("tenant_id")
+    tenant_id = resolve_tenant_id(request, payload, x_master_api_key or token)
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id is required")
 
@@ -293,6 +310,7 @@ async def get_order(
 async def accept_order(
     order_id: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     token: Optional[str] = Query(None),
     x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
     db: Session = Depends(get_db),
@@ -300,9 +318,7 @@ async def accept_order(
     if not valid_operator(request, x_master_api_key or token):
         raise HTTPException(status_code=401, detail="Authentication required")
     payload = operator_payload(request, x_master_api_key or token)
-    tenant_id = payload.get("tenant_id") if payload else None
-    if not tenant_id:
-        tenant_id = request.query_params.get("tenant_id")
+    tenant_id = resolve_tenant_id(request, payload, x_master_api_key or token)
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id is required for confirmation")
     db_order = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter_by(
@@ -315,21 +331,21 @@ async def accept_order(
     if order["status"] != "pending":
         return {"ok": True, "duplicate": True, "order": public_order(order)}
 
-    await notify_order_status(order_id, tenant_id, "order_accepted", db_order.client_jid or db_order.cliente_id)
-
     db_order.status = "accepted"
     db_order.accepted_at = utc_now()
     db.commit()
     order["status"] = db_order.status
     await broadcast("order_updated", order)
+    background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, "order_accepted", db_order.client_jid or db_order.cliente_id)
     return {"ok": True, "order": public_order(order)}
 
 
 @router.post("/{order_id}/status")
 async def update_order_status(
     order_id: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
     order_status: str = Query(..., alias="status"),
-    request: Request = None,
     token: Optional[str] = Query(None),
     x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
     db: Session = Depends(get_db),
@@ -338,7 +354,7 @@ async def update_order_status(
     if not valid_operator(request, x_master_api_key or token):
         raise HTTPException(status_code=401, detail="Authentication required")
     payload = operator_payload(request, x_master_api_key or token)
-    tenant_id = payload.get("tenant_id") if payload else request.query_params.get("tenant_id")
+    tenant_id = resolve_tenant_id(request, payload, x_master_api_key or token)
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id is required")
 
@@ -358,12 +374,12 @@ async def update_order_status(
             detail=f"Cannot change order status from {db_order.status} to {order_status}",
         )
 
-    await notify_order_status(order_id, tenant_id, order_status, db_order.client_jid or db_order.cliente_id)
     db_order.status = order_status
     db.commit()
     order = order_to_record(db_order)
     orders[f"{tenant_id}:{order_id}"] = order
     await broadcast("order_updated", order)
+    background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, order_status, db_order.client_jid or db_order.cliente_id)
     return {"ok": True, "order": public_order(order)}
 
 # --- TTS Logic ---
