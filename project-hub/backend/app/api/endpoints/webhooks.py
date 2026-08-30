@@ -791,21 +791,28 @@ async def n8n_outbound_whatsapp_send(
     x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
     db: Session = Depends(get_db)
 ):
-    """
-    Endpoint para envio de mensagens via N8N ou ferramentas externas.
-    O Dominus é responsável por gerar o JWT do Identity Provider e repassar à WhatsApp API.
-    """
-    master_key = x_master_api_key or payload.get("master_api_key") or payload.get("x_master_api_key")
-    if not master_key or master_key != settings.WHATSAPP_MASTER_SECRET:
+    if not x_master_api_key or x_master_api_key != settings.WHATSAPP_MASTER_SECRET:
         raise HTTPException(status_code=401, detail="Invalid or missing Master API Key")
 
     session_id = payload.get("session_id", "default")
-    phone = payload.get("phone") or payload.get("number")
+    phone = payload.get("phone") or payload.get("number") or payload.get("jid") or payload.get("contact_jid")
     message = payload.get("message") or payload.get("text")
+    media = payload.get("media")
+    base64_content = payload.get("base64_content")
+    
+    if base64_content and not media:
+        media = {
+            "data": base64_content,
+            "mimeType": payload.get("mimeType") or "application/pdf",
+            "fileName": payload.get("fileName") or "documento.pdf",
+            "kind": payload.get("kind") or "document"
+        }
+
     if not phone:
-        raise HTTPException(status_code=400, detail="Missing phone or number")
+        raise HTTPException(status_code=400, detail="Missing phone, number or jid")
 
     cleaned_phone = "".join(filter(str.isdigit, str(phone)))
+    final_jid = phone if "@" in str(phone) else f"{cleaned_phone}@s.whatsapp.net"
     
     from app.api.endpoints.whatsapp import make_whatsapp_api_request
     from app.services.identity_service import get_m2m_jwt
@@ -823,20 +830,24 @@ async def n8n_outbound_whatsapp_send(
     json_data = {
         "phone": cleaned_phone,
         "number": cleaned_phone,
-        "jid": f"{cleaned_phone}@s.whatsapp.net"
+        "jid": final_jid
     }
     if message:
         json_data["message"] = message
         json_data["text"] = message
+    if media:
+        json_data["media"] = media
+        
     for k, v in payload.items():
-        if k not in ["phone", "number", "message", "text", "session_id", "tenant_id", "jid", "master_api_key", "x_master_api_key"]:
+        if k not in ["phone", "number", "message", "text", "session_id", "tenant_id", "jid", "contact_jid", "master_api_key", "x_master_api_key", "base64_content", "media", "mimeType", "fileName", "kind"]:
             json_data[k] = v
-            
+
     res = await make_whatsapp_api_request(
         "POST",
         f"/api/sessions/{session_id}/messages/send",
         headers=headers,
-        json_data=json_data
+        json_data=json_data,
+        timeout=30.0
     )
     
     return JSONResponse(status_code=200, content=res)

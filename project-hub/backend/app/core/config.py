@@ -9,7 +9,10 @@ from dotenv import load_dotenv
 if os.path.exists(".env.example"):
     load_dotenv(".env.example")
 if os.path.exists(".env"):
-    load_dotenv(".env", override=True)
+    # Keep explicitly supplied environment variables authoritative. This lets
+    # local/dev runners select SQLite and service endpoints without rewriting
+    # the developer's .env file.
+    load_dotenv(".env", override=False)
 
 # Clean empty strings from os.environ so Pydantic defaults apply
 for k, v in list(os.environ.items()):
@@ -17,7 +20,7 @@ for k, v in list(os.environ.items()):
         del os.environ[k]
 
 from pydantic_settings import BaseSettings
-from typing import List, Union
+from typing import List, Optional, Union
 from pydantic import AnyHttpUrl, validator
 
 class Settings(BaseSettings):
@@ -40,6 +43,10 @@ class Settings(BaseSettings):
     VIEWER_USERNAME: str = os.getenv("VIEWER_USERNAME", "patrik182rodrigues@gmail.com")
     VIEWER_PASSWORD: str = os.getenv("VIEWER_PASSWORD", "")
     SECRET_KEY: str = os.getenv("JWT_SECRET", "")
+
+    # LiteLLM TTS
+    LITELLM_API_KEY: Optional[str] = os.getenv("LITELLM_API_KEY")
+    LITELLM_API_BASE: Optional[str] = os.getenv("LITELLM_API_BASE")
 
     # Uploads
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads"))
@@ -78,6 +85,7 @@ class Settings(BaseSettings):
     CRM_SEND_WHATSAPP_WEBHOOK_URL: str = os.getenv("CRM_SEND_WHATSAPP_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
     CRM_UPDATE_STATUS_WEBHOOK_URL: str = os.getenv("CRM_UPDATE_STATUS_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
     CRM_CREATE_ACTIVITY_WEBHOOK_URL: str = os.getenv("CRM_CREATE_ACTIVITY_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")
+    ACCEPT_ORDER_WEBHOOK_URL: str = os.getenv("ACCEPT_ORDER_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/accept_order")
     
     WHATSAPP_API_URL: str = os.getenv("WHATSAPP_API_URL", "http://localhost:3000")
     WHATSAPP_PUBLIC_URL: str = os.getenv("WHATSAPP_PUBLIC_URL", "https://dominuslabs.online")

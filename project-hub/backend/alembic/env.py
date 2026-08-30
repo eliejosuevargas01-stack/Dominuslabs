@@ -19,7 +19,14 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # import your models' MetaData object for "autogenerate"
-from app.core.database import Base  # correct Base import
+from app.core.config import settings
+from app.core.database import Base
+import app.models  # noqa: F401 - register every model on Base.metadata
+
+config.set_main_option(
+    "sqlalchemy.url",
+    str(settings.SQLALCHEMY_DATABASE_URI).replace("%", "%%"),
+)
 target_metadata = Base.metadata
 
 def run_migrations_offline():

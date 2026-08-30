@@ -4,6 +4,7 @@ Documentação do módulo whatsapp.py.
 O que faz: Implementa a lógica estrutural e funcional para o endpoint de API para whatsapp.
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para whatsapp funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
+from fastapi.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.orm import Session
 import httpx
@@ -26,7 +27,7 @@ async def get_user_m2m_headers(email: str, db: Session, scope: str = "whatsapp:s
     O que faz: Recuperação de dados cadastrados para get_user_m2m_headers recebendo os parâmetros (email, db, scope) no contexto de o endpoint de API para whatsapp.
     Impacto na regra de negócio: Assegura que o fluxo da operação get_user_m2m_headers seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
-    user = db.query(User).filter(User.email == email).first()
+    user = await run_in_threadpool(lambda: db.query(User).filter(User.email == email).first())
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -85,7 +86,7 @@ async def make_whatsapp_api_request(
     is_resolvable = False
     if parsed.hostname:
         try:
-            socket.gethostbyname(parsed.hostname)
+            await asyncio.get_running_loop().getaddrinfo(parsed.hostname, None)
             is_resolvable = True
         except Exception:
             is_resolvable = False
@@ -94,8 +95,8 @@ async def make_whatsapp_api_request(
     if not is_resolvable:
         import ssl
         ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        # ctx.check_hostname = False
+        # ctx.verify_mode = ssl.CERT_NONE
         
         async def check_ip(ip: str):
             """
@@ -491,28 +492,45 @@ async def send_session_message(
     """
     Send a WhatsApp message directly through a specific session.
     """
-    phone = payload.get("phone") or payload.get("number")
-    message = payload.get("message") or payload.get("text")
-    if not phone or not message:
+    phone = payload.get("phone") or payload.get("number") or payload.get("jid")
+    message = payload.get("message") or payload.get("text") or ""
+    media = payload.get("media")
+
+    if not phone:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Os campos 'phone' (ou 'number') e 'message' (ou 'text') são obrigatórios."
+            detail="O campo 'phone', 'number' ou 'jid' é obrigatório."
+        )
+        
+    if not message and not media:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="É obrigatório enviar 'message' ou 'media'."
         )
 
+    # Extrai só os digitos, mas preserva se o JID já vier no formato correto
     cleaned_phone = "".join(filter(str.isdigit, str(phone)))
+    final_jid = phone if "@" in str(phone) else f"{cleaned_phone}@s.whatsapp.net"
+    
     headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:messages:send")
+    
+    json_data = {
+        "phone": cleaned_phone,
+        "number": cleaned_phone,
+        "message": message,
+        "text": message,
+        "jid": final_jid
+    }
+    
+    if media:
+        json_data["media"] = media
+
     return await make_whatsapp_api_request(
         "POST",
         f"/api/sessions/{session_id}/messages/send",
         headers=headers,
-        json_data={
-            "phone": cleaned_phone,
-            "number": cleaned_phone,
-            "message": message,
-            "text": message,
-            "jid": f"{cleaned_phone}@s.whatsapp.net"
-        },
-        timeout=20.0
+        json_data=json_data,
+        timeout=30.0 # Timeout aumentado por causa do envio de mídia
     )
 
 # Instagram Proxy Routes

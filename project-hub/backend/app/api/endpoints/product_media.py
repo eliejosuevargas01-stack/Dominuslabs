@@ -20,7 +20,7 @@ router = APIRouter()
 
 @router.post("/", response_model=ProductMediaResponse)
 def upload_product_media(
-    product_id: str = Form(...),
+    product_id: uuid.UUID = Form(...),
     tenant_id: str = Form("default"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
