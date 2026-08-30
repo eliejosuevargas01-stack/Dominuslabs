@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ShoppingBag, Check, MapPin, DollarSign, Clock } from 'lucide-react';
 import { toast } from 'sonner';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 /**
  * Documentation-Driven Testing:
@@ -49,14 +50,13 @@ function useOrdersSSE() {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
 
   useEffect(() => {
-    let eventSource: EventSource | null = null;
-    let reconnectTimeout: ReturnType<typeof setTimeout>;
-
+    let eventController: AbortController | null = null;
     const connect = () => {
       setConnectionStatus('connecting');
       try {
         const token = localStorage.getItem('admin_token');
-        fetch(`${API_BASE}/orders?token=${encodeURIComponent(token || '')}`)
+        const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+        fetch(`${API_BASE}/orders`, { headers: authHeaders })
           .then(response => {
             if (!response.ok) throw new Error('Falha ao carregar pedidos persistidos');
             return response.json();
@@ -73,34 +73,33 @@ function useOrdersSSE() {
           .catch(error => console.error('Erro ao carregar pedidos persistidos:', error));
         // Usar EventSource nativo ou polyfill dependendo da necessidade de auth (EventSource nativo não suporta headers, então podemos precisar enviar token via query string se aplicável)
         // Por simplicidade na simulação:
-        eventSource = new EventSource(`${API_BASE}/orders/events?token=${token}`);
-
-        eventSource.onopen = () => {
-          setConnectionStatus('connected');
-          console.log('SSE Orders connected');
-        };
-
-        eventSource.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.event === 'new_order' && data.order) {
-              setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
-              setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
-            } else if (data.event === 'order_updated' && data.order) {
-              setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
-            }
-          } catch (e) {
-            console.error('Error parsing SSE event:', e);
-          }
-        };
-
-        eventSource.onerror = (error) => {
-          console.error('SSE Error:', error);
-          setConnectionStatus('disconnected');
-          eventSource?.close();
-          // Try to reconnect after 5s
-          reconnectTimeout = setTimeout(connect, 5000);
-        };
+        eventController = new AbortController();
+        fetchEventSource(`${API_BASE}/orders/events`, {
+          headers: authHeaders,
+          signal: eventController.signal,
+          onopen: async response => {
+            if (!response.ok) throw new Error(`SSE failed: ${response.status}`);
+            setConnectionStatus('connected');
+          },
+          onmessage: event => {
+            try {
+              const data = JSON.parse(event.data);
+              if (data.event === 'new_order' && data.order) {
+                setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
+                setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
+              } else if (data.event === 'order_updated' && data.order) {
+                setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
+              }
+            } catch (e) { console.error('Error parsing SSE event:', e); }
+          },
+          onclose: () => setConnectionStatus('disconnected'),
+          onerror: error => {
+            setConnectionStatus('disconnected');
+            throw error;
+          },
+        }).catch(error => {
+          if (!eventController?.signal.aborted) console.error('SSE Error:', error);
+        });
       } catch (error) {
         console.error('Failed to initialize SSE:', error);
         setConnectionStatus('disconnected');
@@ -110,10 +109,7 @@ function useOrdersSSE() {
     connect();
 
     return () => {
-      clearTimeout(reconnectTimeout);
-      if (eventSource) {
-        eventSource.close();
-      }
+      eventController?.abort();
     };
   }, []);
 
@@ -122,7 +118,7 @@ function useOrdersSSE() {
 
 export default function OrderManagerView() {
   const { orders, setOrders, announcedOrderIds, connectionStatus } = useOrdersSSE();
-  const activeAlarms = useRef<{ [orderId: string]: { audio?: HTMLAudioElement, interval?: any } }>({});
+  const activeAlarms = useRef<{ [orderId: string]: { audio?: HTMLAudioElement, interval?: any, blobUrl?: string } }>({});
 
   useEffect(() => {
     // Check for new pending orders and start alarm
@@ -144,11 +140,22 @@ export default function OrderManagerView() {
 
   const playAlarm = (order: Order) => {
     const token = localStorage.getItem('admin_token');
-    const audioUrl = `${API_BASE}/orders/${encodeURIComponent(order.id)}/tts-alarm?token=${encodeURIComponent(token || '')}`;
-    const audio = new Audio(audioUrl);
+    const audio = new Audio();
+    let blobUrl: string | undefined;
+    const loadAudio = async () => {
+      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(order.id)}/tts-alarm`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) throw new Error('Falha ao carregar TTS');
+      blobUrl = URL.createObjectURL(await response.blob());
+      if (activeAlarms.current[order.id]?.blobUrl) URL.revokeObjectURL(activeAlarms.current[order.id].blobUrl!);
+      if (activeAlarms.current[order.id]) activeAlarms.current[order.id].blobUrl = blobUrl;
+      audio.src = blobUrl;
+      await audio.play();
+    };
     
     const playNext = () => {
-      audio.play().catch(e => console.error("Erro ao tocar alarme neural:", e));
+      loadAudio().catch(e => console.error("Erro ao tocar alarme neural:", e));
     };
 
     audio.onended = () => {
@@ -171,6 +178,7 @@ export default function OrderManagerView() {
         alarm.audio.pause();
         alarm.audio.currentTime = 0;
       }
+      if (alarm.blobUrl) URL.revokeObjectURL(alarm.blobUrl);
       delete activeAlarms.current[orderId];
     }
   };
