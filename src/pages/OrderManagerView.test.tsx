@@ -30,11 +30,45 @@ class MockWebSocket {
   }
 }
 
+class MockAudio {
+  static instances: MockAudio[] = [];
+
+  src = '';
+  currentTime = 0;
+  onended: (() => void) | null = null;
+  play = vi.fn().mockResolvedValue(undefined);
+  pause = vi.fn();
+
+  constructor() {
+    MockAudio.instances.push(this);
+  }
+}
+
+class MockURL extends URL {
+  static createObjectURL = vi.fn(() => 'blob:order-alarm');
+  static revokeObjectURL = vi.fn();
+}
+
+const pendingOrder = {
+  id: 'pedido-pendente',
+  customerName: 'Cliente',
+  total: 74.97,
+  address: 'Rua A, 10',
+  items: [{ name: 'Brownie', quantity: 1 }],
+  status: 'pending' as const,
+  createdAt: '2026-08-31T14:48:07.915Z',
+};
+
 describe('OrderManagerView', () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
+    MockAudio.instances = [];
+    MockURL.createObjectURL.mockClear();
+    MockURL.revokeObjectURL.mockClear();
     localStorage.setItem('admin_token', 'fake_token');
     vi.stubGlobal('WebSocket', MockWebSocket);
+    vi.stubGlobal('Audio', MockAudio);
+    vi.stubGlobal('URL', MockURL);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ orders: [] }),
@@ -42,6 +76,7 @@ describe('OrderManagerView', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     localStorage.clear();
   });
@@ -90,5 +125,62 @@ describe('OrderManagerView', () => {
     unmount();
 
     expect(socket.isClosed).toBe(true);
+  });
+
+  it('downloads the TTS once and reuses the loaded audio on every alarm loop', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ orders: [] }) })
+      .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['audio']) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<OrderManagerView />);
+    const socket = MockWebSocket.instances[0];
+    act(() => socket.message({ event: 'new_order', order: pendingOrder }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const audio = MockAudio.instances[0];
+    expect(audio.play).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      audio.onended?.();
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(audio.play).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not start an alarm when a pending TTS request finishes after an order update', async () => {
+    let resolveBlob: (blob: Blob) => void = () => undefined;
+    const delayedBlob = new Promise<Blob>(resolve => {
+      resolveBlob = resolve;
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ orders: [] }) })
+      .mockResolvedValueOnce({ ok: true, blob: () => delayedBlob });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<OrderManagerView />);
+    const socket = MockWebSocket.instances[0];
+    act(() => socket.message({ event: 'new_order', order: pendingOrder }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const audio = MockAudio.instances[0];
+    act(() => socket.message({ event: 'order_updated', order: { ...pendingOrder, status: 'accepted' } }));
+    await act(async () => {
+      resolveBlob(new Blob(['audio']));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(audio.play).not.toHaveBeenCalled();
+    expect(MockURL.revokeObjectURL).toHaveBeenCalledWith('blob:order-alarm');
   });
 });

@@ -32,6 +32,13 @@ interface Order {
 
 type OperationalStatus = 'ready_for_delivery' | 'out_for_delivery' | 'delivered';
 
+type ActiveAlarm = {
+  audio: HTMLAudioElement;
+  abortController: AbortController;
+  interval?: ReturnType<typeof setTimeout>;
+  blobUrl?: string;
+};
+
 function buildWazeNavigationUrl(address: string): string | null {
   const normalizedAddress = address.trim().replace(/\s+/g, ' ');
   if (!normalizedAddress) return null;
@@ -127,7 +134,7 @@ function useOrdersWebSocket() {
 
 export default function OrderManagerView() {
   const { orders, setOrders, announcedOrderIds, connectionStatus } = useOrdersWebSocket();
-  const activeAlarms = useRef<{ [orderId: string]: { audio?: HTMLAudioElement, interval?: any, blobUrl?: string } }>({});
+  const activeAlarms = useRef<Record<string, ActiveAlarm>>({});
 
   useEffect(() => {
     // Check for new pending orders and start alarm
@@ -150,46 +157,63 @@ export default function OrderManagerView() {
   const playAlarm = (order: Order) => {
     const token = localStorage.getItem('admin_token');
     const audio = new Audio();
-    let blobUrl: string | undefined;
-    const loadAudio = async () => {
-      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(order.id)}/tts-alarm`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!response.ok) throw new Error('Falha ao carregar TTS');
-      blobUrl = URL.createObjectURL(await response.blob());
-      if (activeAlarms.current[order.id]?.blobUrl) URL.revokeObjectURL(activeAlarms.current[order.id].blobUrl!);
-      if (activeAlarms.current[order.id]) activeAlarms.current[order.id].blobUrl = blobUrl;
-      audio.src = blobUrl;
-      await audio.play();
-    };
-    
-    const playNext = () => {
-      loadAudio().catch(e => console.error("Erro ao tocar alarme neural:", e));
+    const abortController = new AbortController();
+    activeAlarms.current[order.id] = { audio, abortController };
+
+    const replay = () => {
+      const alarm = activeAlarms.current[order.id];
+      if (!alarm || alarm.audio !== audio) return;
+
+      audio.currentTime = 0;
+      void audio.play().catch(error => console.error('Erro ao repetir alarme neural:', error));
     };
 
     audio.onended = () => {
       // Repete o alarme após 10 segundos de silêncio
-      const interval = setTimeout(playNext, 10000) as any;
-      if (activeAlarms.current[order.id]) {
-         activeAlarms.current[order.id].interval = interval;
-      }
+      const alarm = activeAlarms.current[order.id];
+      if (!alarm || alarm.audio !== audio) return;
+      alarm.interval = setTimeout(replay, 10000);
     };
 
-    playNext();
-    activeAlarms.current[order.id] = { audio };
+    void (async () => {
+      try {
+        const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(order.id)}/tts-alarm`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          signal: abortController.signal,
+        });
+        if (!response.ok) throw new Error('Falha ao carregar TTS');
+
+        const blobUrl = URL.createObjectURL(await response.blob());
+        const alarm = activeAlarms.current[order.id];
+        if (abortController.signal.aborted || !alarm || alarm.audio !== audio) {
+          URL.revokeObjectURL(blobUrl);
+          return;
+        }
+
+        alarm.blobUrl = blobUrl;
+        audio.src = blobUrl;
+        await audio.play();
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          console.error('Erro ao tocar alarme neural:', error);
+        }
+      }
+    })();
   };
 
   const stopAlarm = (orderId: string) => {
-    const alarm = activeAlarms.current[orderId] as any;
-    if (alarm) {
-      if (alarm.interval) clearTimeout(alarm.interval);
-      if (alarm.audio) {
-        alarm.audio.pause();
-        alarm.audio.currentTime = 0;
-      }
-      if (alarm.blobUrl) URL.revokeObjectURL(alarm.blobUrl);
-      delete activeAlarms.current[orderId];
-    }
+    const alarm = activeAlarms.current[orderId];
+    if (!alarm) return;
+
+    // Remove primeiro para que uma requisição TTS que termine em paralelo não
+    // consiga iniciar um alarme depois de o pedido já ter sido aceito.
+    delete activeAlarms.current[orderId];
+    alarm.abortController.abort();
+    if (alarm.interval) clearTimeout(alarm.interval);
+    alarm.audio.onended = null;
+    alarm.audio.pause();
+    alarm.audio.currentTime = 0;
+    if (alarm.blobUrl) URL.revokeObjectURL(alarm.blobUrl);
   };
 
   // Cleanup all on unmount
