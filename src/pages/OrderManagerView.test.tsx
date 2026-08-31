@@ -12,6 +12,7 @@ class MockWebSocket {
   onerror: (() => void) | null = null;
   onclose: (() => void) | null = null;
   isClosed = false;
+  sentMessages: string[] = [];
 
   constructor(public url: string) {
     MockWebSocket.instances.push(this);
@@ -19,6 +20,10 @@ class MockWebSocket {
 
   close() {
     this.isClosed = true;
+  }
+
+  send(data: string) {
+    this.sentMessages.push(data);
   }
 
   open() {
@@ -125,6 +130,16 @@ describe('OrderManagerView', () => {
     unmount();
 
     expect(socket.isClosed).toBe(true);
+  });
+
+  it('answers the server heartbeat without treating it as an order event', () => {
+    render(<OrderManagerView />);
+    const socket = MockWebSocket.instances[0];
+
+    act(() => socket.message({ event: 'ping' }));
+
+    expect(socket.sentMessages).toEqual([JSON.stringify({ event: 'pong' })]);
+    expect(screen.getByText('Nenhum pedido no momento.')).toBeInTheDocument();
   });
 
   it('downloads the TTS once and reuses the loaded audio on every alarm loop', async () => {

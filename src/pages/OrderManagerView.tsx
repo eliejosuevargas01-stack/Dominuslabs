@@ -98,7 +98,9 @@ function useOrdersWebSocket() {
         websocket.onmessage = event => {
           try {
             const data = JSON.parse(event.data);
-            if (data.event === 'new_order' && data.order) {
+            if (data.event === 'ping') {
+              websocket?.send(JSON.stringify({ event: 'pong' }));
+            } else if (data.event === 'new_order' && data.order) {
               setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
               setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
             } else if (data.event === 'order_updated' && data.order) {
@@ -192,7 +194,16 @@ export default function OrderManagerView() {
 
         alarm.blobUrl = blobUrl;
         audio.src = blobUrl;
-        await audio.play();
+        try {
+          await audio.play();
+        } catch (error) {
+          const errorName = typeof error === 'object' && error !== null && 'name' in error
+            ? String(error.name)
+            : '';
+          if (!abortController.signal.aborted && errorName !== 'AbortError' && errorName !== 'NotAllowedError') {
+            console.error('Erro ao iniciar alarme neural:', error);
+          }
+        }
       } catch (error) {
         if (!abortController.signal.aborted) {
           console.error('Erro ao tocar alarme neural:', error);
