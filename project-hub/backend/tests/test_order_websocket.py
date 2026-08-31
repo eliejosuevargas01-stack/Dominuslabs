@@ -16,6 +16,21 @@ class DisconnectedWebSocket:
         raise RuntimeError("socket closed")
 
 
+class HeartbeatWebSocket:
+    def __init__(self):
+        self.messages = []
+
+    async def accept(self):
+        pass
+
+    async def receive(self):
+        await asyncio.sleep(1)
+
+    async def send_json(self, payload):
+        self.messages.append(payload)
+        raise RuntimeError("socket closed")
+
+
 def test_broadcast_sends_order_event_to_websocket_and_sse_listener():
     tenant_id = "tenant-realtime"
     queue = asyncio.Queue()
@@ -121,4 +136,16 @@ def test_broadcast_removes_a_disconnected_websocket():
 
     asyncio.run(orders.broadcast("new_order", order))
 
+    assert tenant_id not in orders.websocket_listeners
+
+
+def test_websocket_heartbeat_removes_a_half_open_connection(monkeypatch):
+    tenant_id = "tenant-heartbeat"
+    websocket = HeartbeatWebSocket()
+    monkeypatch.setattr(orders, "WEBSOCKET_HEARTBEAT_SECONDS", 0.001)
+    monkeypatch.setattr(orders, "decode_access_token", lambda _: {"sub": "operator", "tenant_id": tenant_id})
+
+    asyncio.run(orders.order_websocket(websocket, token="valid-token"))
+
+    assert websocket.messages == [{"event": "ping"}]
     assert tenant_id not in orders.websocket_listeners

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.user import User
-from app.services.whatsapp_service import send_whatsapp_message, get_oauth_token, invalidate_token, check_token_validity
+from app.services.whatsapp_service import send_whatsapp_message, get_oauth_token, invalidate_token, check_token_validity, get_tenant_id_for_user
 
 router = APIRouter()
 
@@ -330,6 +330,7 @@ async def send_crm_whatsapp_message(
             detail="Telefone/JID do destinatário é obrigatório."
         )
     try:
+        tenant_id = await get_tenant_id_for_user(user, db)
         res = await send_whatsapp_message(
             user=user,
             db=db,
@@ -363,6 +364,7 @@ async def send_crm_whatsapp_message(
             sender="user",
             messages=[outbound_message],
             session_id=session_id,
+            tenant_id=tenant_id,
         )
 
         return Message(
@@ -420,7 +422,6 @@ async def send_crm_whatsapp_media(
     target_jid = payload.contact_jid
     media_text = payload.text or payload.caption or ""
 
-    from app.services.whatsapp_service import get_tenant_id_for_user
     tenant_id = await get_tenant_id_for_user(user, db)
     from app.services.identity_service import get_m2m_jwt
     jwt_token = await get_m2m_jwt(tenant_id=tenant_id, scope="whatsapp:messages:send")
@@ -476,6 +477,7 @@ async def send_crm_whatsapp_media(
         sender="user",
         messages=[outbound_message],
         session_id=active_session,
+        tenant_id=tenant_id,
     )
 
     return {

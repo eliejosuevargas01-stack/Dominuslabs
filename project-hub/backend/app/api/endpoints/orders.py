@@ -25,6 +25,7 @@ ORDER_CACHE_MAXSIZE = 10_000
 ORDER_CACHE_TTL_SECONDS = 60 * 60
 TTS_CACHE_MAX_BYTES = 32 * 1024 * 1024
 TTS_CACHE_TTL_SECONDS = 10 * 60
+WEBSOCKET_HEARTBEAT_SECONDS = 30
 
 # These caches optimize reads only; PostgreSQL remains the source of truth.
 orders: TTLCache = TTLCache(maxsize=ORDER_CACHE_MAXSIZE, ttl=ORDER_CACHE_TTL_SECONDS)
@@ -304,11 +305,14 @@ async def order_websocket(websocket: WebSocket, token: Optional[str] = Query(Non
     await websocket.accept()
     websocket_listeners.setdefault(tenant_id, set()).add(websocket)
     try:
-        # Mantém a conexão ativa e detecta fechamentos pelo cliente. As mensagens
-        # operacionais são sempre publicadas pelo servidor via broadcast().
+        # The application heartbeat detects half-open mobile connections. The
+        # client answers with a harmless pong; a failed ping reaches finally.
         while True:
-            await websocket.receive()
-    except WebSocketDisconnect:
+            try:
+                await asyncio.wait_for(websocket.receive(), timeout=WEBSOCKET_HEARTBEAT_SECONDS)
+            except asyncio.TimeoutError:
+                await websocket.send_json({"event": "ping"})
+    except (RuntimeError, WebSocketDisconnect):
         pass
     finally:
         tenant_sockets = websocket_listeners.get(tenant_id)
@@ -387,14 +391,15 @@ async def accept_order(
     if not db_order:
         raise HTTPException(status_code=404, detail="Order not found")
     order = order_to_record(db_order)
-    orders[f"{tenant_id}:{order_id}"] = order
     if order["status"] != "pending":
+        orders[f"{tenant_id}:{order_id}"] = order
         return {"ok": True, "duplicate": True, "order": public_order(order)}
 
     db_order.status = "accepted"
     db_order.accepted_at = utc_now()
     db.commit()
-    order["status"] = db_order.status
+    order = order_to_record(db_order)
+    orders[f"{tenant_id}:{order_id}"] = order
     await broadcast("order_updated", order)
     background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, "order_accepted", db_order.client_jid or db_order.cliente_id)
     return {"ok": True, "order": public_order(order)}

@@ -74,12 +74,14 @@ def test_get_chat_history(mock_get_messages, mock_db):
 
 @patch("app.api.endpoints.webhooks.notify_lead_listeners", new_callable=AsyncMock)
 @patch("app.api.endpoints.webhooks.notify_crm_chat_listeners", new_callable=AsyncMock)
+@patch("app.api.endpoints.crm.get_tenant_id_for_user", new_callable=AsyncMock)
 @patch("app.api.endpoints.crm.send_whatsapp_message", new_callable=AsyncMock)
-def test_send_message(mock_send_whatsapp_message, mock_notify_crm, mock_notify_lead, mock_db):
+def test_send_message(mock_send_whatsapp_message, mock_get_tenant_id, mock_notify_crm, mock_notify_lead, mock_db):
     app.dependency_overrides[get_db] = lambda: mock_db
     app.dependency_overrides[check_crm_permission] = lambda: "test@dominuslabs.online"
     # mock_send_whatsapp_message must return what crm.py expects
     mock_send_whatsapp_message.return_value = {"message": {"id": "msg1"}}
+    mock_get_tenant_id.return_value = "admin"
 
     payload = {
         "lead_id": "lead_123",
@@ -96,6 +98,7 @@ def test_send_message(mock_send_whatsapp_message, mock_notify_crm, mock_notify_l
     mock_notify_lead.assert_awaited_once_with("5511999999999@s.whatsapp.net", "reload")
     mock_notify_crm.assert_awaited_once()
     event = mock_notify_crm.await_args.kwargs
+    assert event["tenant_id"] == "admin"
     assert event["session_id"] == "session1"
     assert event["messages"][0]["session_id"] == "session1"
     assert event["messages"][0]["is_from_me"] is True

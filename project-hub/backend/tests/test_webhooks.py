@@ -104,16 +104,21 @@ def test_outbound_whatsapp_send_rejects_master_key_in_body(mocker, client):
     assert response.status_code == 401
 
 
-def test_crm_chat_event_keeps_the_session_identifier():
-    tenant_queue = asyncio.Queue()
-    listener = ("operator@dominuslabs.online", tenant_queue)
-    webhooks.crm_chat_listeners.append(listener)
+def test_crm_chat_event_is_scoped_to_its_tenant_and_session():
+    tenant_a_queue = asyncio.Queue()
+    tenant_b_queue = asyncio.Queue()
+    tenant_a_listener = ("operator-a@dominuslabs.online", tenant_a_queue)
+    tenant_b_listener = ("operator-b@dominuslabs.online", tenant_b_queue)
+    webhooks.crm_chat_listeners.clear()
+    webhooks.crm_chat_listeners["tenant-a"] = [tenant_a_listener]
+    webhooks.crm_chat_listeners["tenant-b"] = [tenant_b_listener]
     try:
         asyncio.run(webhooks.notify_crm_chat_listeners(
             "5511999999999@s.whatsapp.net",
             is_from_me=True,
             sender="user",
             session_id="session-a",
+            tenant_id="tenant-a",
             messages=[{
                 "id": "message-a",
                 "contact_jid": "5511999999999@s.whatsapp.net",
@@ -123,9 +128,16 @@ def test_crm_chat_event_keeps_the_session_identifier():
             }],
         ))
 
-        payload = json.loads(tenant_queue.get_nowait())
+        payload = json.loads(tenant_a_queue.get_nowait())
+        assert payload["tenant_id"] == "tenant-a"
         assert payload["session_id"] == "session-a"
         assert payload["messages"][0]["session_id"] == "session-a"
+        assert tenant_b_queue.empty()
     finally:
-        if listener in webhooks.crm_chat_listeners:
-            webhooks.crm_chat_listeners.remove(listener)
+        webhooks.crm_chat_listeners.clear()
+
+
+def test_crm_chat_event_stream_requires_an_authenticated_tenant():
+    response = client.get("/api/v1/webhooks/events/crm-chats")
+
+    assert response.status_code == 401
