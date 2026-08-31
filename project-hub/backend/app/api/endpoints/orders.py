@@ -49,10 +49,16 @@ ORDER_STATUS_TRANSITIONS = {
 # --- N8N AI Agent Payload Schemas ---
 
 class AgentOrderItem(BaseModel):
+    id: str = Field(min_length=1)
+    tenant_id: str = Field(min_length=1)
+    pedido_id: str = Field(min_length=1)
     produto_id: str = Field(min_length=1)
     nome_produto: str = Field(min_length=1)
     quantidade: int = Field(gt=0)
+    preco_unitario: Decimal = Field(ge=0)
     subtotal: Decimal = Field(ge=0)
+    observacoes: Optional[str] = None
+    created_at: datetime
 
 
 class AgentDeliveryAddress(BaseModel):
@@ -123,30 +129,23 @@ async def retry_order_status_webhook(pedido_id: str, tenant_id: str, order_statu
             continue
 
 
-def aggregate_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Consolida linhas repetidas do mesmo produto para o frontend."""
-    aggregated: Dict[str, Dict[str, Any]] = {}
-    for item in items:
-        key = item["codigo"]
-        if key not in aggregated:
-            aggregated[key] = {**item}
-        else:
-            aggregated[key]["quantidade"] += item["quantidade"]
-            aggregated[key]["subtotal"] += item["subtotal"]
-    return list(aggregated.values())
-
-
 def record_from_agent_payload(payload: AgentOrderPayload) -> Dict[str, Any]:
     """Converte o contrato do n8n no formato público do Order Manager."""
-    canonical_items = aggregate_items([
+    canonical_items = [
         {
+            "id": item.id,
+            "tenant_id": item.tenant_id,
+            "pedido_id": item.pedido_id,
             "codigo": item.produto_id,
             "nome": item.nome_produto,
             "quantidade": item.quantidade,
+            "preco_unitario": float(item.preco_unitario),
             "subtotal": float(item.subtotal),
+            "observacoes": item.observacoes,
+            "created_at": item.created_at.astimezone(timezone.utc).replace(tzinfo=None),
         }
         for item in payload.itens
-    ])
+    ]
     return {
         "id": payload.pedido.id,
         "tenant_id": payload.pedido.tenant_id,
@@ -154,7 +153,12 @@ def record_from_agent_payload(payload: AgentOrderPayload) -> Dict[str, Any]:
         "total": float(payload.pedido.valor_total),
         "address": payload.pedido.endereco_entrega.endereco_completo,
         "items": [
-            {"name": item["nome"], "quantity": item["quantidade"], "codigo": item["codigo"]}
+            {
+                "id": item["id"], "tenant_id": item["tenant_id"], "pedido_id": item["pedido_id"],
+                "name": item["nome"], "quantity": item["quantidade"], "codigo": item["codigo"],
+                "preco_unitario": item["preco_unitario"], "subtotal": item["subtotal"],
+                "observacoes": item["observacoes"], "created_at": item["created_at"].replace(tzinfo=timezone.utc).isoformat()
+            }
             for item in canonical_items
         ],
         # O status recebido (ex.: "ativo") é do pedido no n8n. O fluxo da
@@ -169,7 +173,12 @@ def record_from_agent_payload(payload: AgentOrderPayload) -> Dict[str, Any]:
 
 def order_to_record(db_order: OrderManagerOrder) -> Dict[str, Any]:
     items = [
-        {"codigo": item.codigo, "nome": item.nome, "quantidade": item.quantidade, "subtotal": float(item.subtotal)}
+        {
+            "id": str(item.id), "tenant_id": item.tenant_id, "pedido_id": item.pedido_id,
+            "codigo": item.codigo, "nome": item.nome, "quantidade": item.quantidade,
+            "preco_unitario": float(item.preco_unitario), "subtotal": float(item.subtotal),
+            "observacoes": item.observacoes, "created_at": item.created_at
+        }
         for item in db_order.items
     ]
     return {
@@ -178,7 +187,15 @@ def order_to_record(db_order: OrderManagerOrder) -> Dict[str, Any]:
         "customer_name": db_order.cliente_id,
         "total": float(db_order.total),
         "address": db_order.address,
-        "items": [{"name": item["nome"], "quantity": item["quantidade"], "codigo": item["codigo"]} for item in items],
+        "items": [
+            {
+                "id": item["id"], "tenant_id": item["tenant_id"], "pedido_id": item["pedido_id"],
+                "name": item["nome"], "quantity": item["quantidade"], "codigo": item["codigo"],
+                "preco_unitario": item["preco_unitario"], "subtotal": item["subtotal"],
+                "observacoes": item["observacoes"], "created_at": item["created_at"].replace(tzinfo=timezone.utc).isoformat()
+            }
+            for item in items
+        ],
         "status": db_order.status,
         "created_at": db_order.created_at.replace(tzinfo=timezone.utc).isoformat(),
         "content_jid": db_order.content_jid,
@@ -250,14 +267,31 @@ async def receive_order(
         orders[storage_id] = record
         return {"ok": True, "duplicate": True, "order": public_order(record)}
 
+    for item in payload.itens:
+        if item.tenant_id != payload.pedido.tenant_id or item.pedido_id != payload.pedido.id:
+            raise HTTPException(status_code=400, detail="Scope inconsistency: item tenant_id or pedido_id does not match the parent order.")
+
     record = record_from_agent_payload(payload)
     
     db_order = OrderManagerOrder(
         tenant_id=record["tenant_id"], pedido_id=record["id"],
         cliente_id=record["cliente_id"], client_jid=record["cliente_id"], content_jid=record["content_jid"],
         address=record["address"], total=record["total"], status=record["status"],
-        created_at=payload.pedido.created_at.replace(tzinfo=None),
-        items=[OrderManagerOrderItem(codigo=item["codigo"], nome=item["nome"], quantidade=item["quantidade"], subtotal=item["subtotal"]) for item in record["items_source"]],
+        created_at=payload.pedido.created_at.astimezone(timezone.utc).replace(tzinfo=None),
+        items=[
+            OrderManagerOrderItem(
+                id=item["id"],
+                tenant_id=item["tenant_id"],
+                pedido_id=item["pedido_id"],
+                codigo=item["codigo"],
+                nome=item["nome"],
+                quantidade=item["quantidade"],
+                preco_unitario=item["preco_unitario"],
+                subtotal=item["subtotal"],
+                observacoes=item["observacoes"],
+                created_at=item["created_at"],
+            ) for item in record["items_source"]
+        ],
     )
     db.add(db_order)
     db.commit()
@@ -485,7 +519,7 @@ async def get_order_tts_alarm(
     # Construir o texto
     items_text = ", ".join([f"{item['quantity']} {item['name']}" for item in order.get("items", [])])
     total_brl = f"R$ {order.get('total', 0):.2f}".replace(".", ",")
-    text = f"Olá, o cliente {order.get('customer_name')} fez um novo pedido {items_text} no valor de {total_brl} para entregar em {order.get('address')}, por favor aceite."
+    text = f"Olá, um novo pedido {items_text} no valor de {total_brl} para entregar em {order.get('address')}, por favor aceite."
 
     async with httpx.AsyncClient() as client:
         try:

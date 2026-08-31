@@ -86,9 +86,24 @@ def test_n8n_order_envelope_maps_to_order_manager_record():
             "updated_at": "2026-08-31T14:48:07.916Z",
         },
         "itens": [
-            {"produto_id": "fatia-especial-dois-amores", "nome_produto": "Fatia Especial Dois Amores", "quantidade": 1, "subtotal": "20.00"},
-            {"produto_id": "sonho-especial", "nome_produto": "Sonho Especial", "quantidade": 2, "subtotal": "20.00"},
-            {"produto_id": "brownie-recheado", "nome_produto": "Brownie Recheado", "quantidade": 1, "subtotal": "30.00"},
+            {
+                "id": "item-1", "tenant_id": "admin", "pedido_id": "0848aa1a-8b98-49f7-ba32-9902c710c28e",
+                "produto_id": "fatia-especial-dois-amores", "nome_produto": "Fatia Especial Dois Amores",
+                "quantidade": 1, "preco_unitario": "20.00", "subtotal": "20.00", "observacoes": "Sem açúcar",
+                "created_at": "2026-08-31T14:48:07.915Z"
+            },
+            {
+                "id": "item-2", "tenant_id": "admin", "pedido_id": "0848aa1a-8b98-49f7-ba32-9902c710c28e",
+                "produto_id": "sonho-especial", "nome_produto": "Sonho Especial",
+                "quantidade": 1, "preco_unitario": "10.00", "subtotal": "10.00", "observacoes": None,
+                "created_at": "2026-08-31T14:48:07.915Z"
+            },
+            {
+                "id": "item-3", "tenant_id": "admin", "pedido_id": "0848aa1a-8b98-49f7-ba32-9902c710c28e",
+                "produto_id": "sonho-especial", "nome_produto": "Sonho Especial",
+                "quantidade": 1, "preco_unitario": "10.00", "subtotal": "10.00", "observacoes": "Com mais recheio",
+                "created_at": "2026-08-31T14:48:07.915Z"
+            },
         ],
     })
 
@@ -101,10 +116,98 @@ def test_n8n_order_envelope_maps_to_order_manager_record():
     assert record["total"] == 0.0
     assert record["status"] == "pending"
     assert record["items"] == [
-        {"name": "Fatia Especial Dois Amores", "quantity": 1, "codigo": "fatia-especial-dois-amores"},
-        {"name": "Sonho Especial", "quantity": 2, "codigo": "sonho-especial"},
-        {"name": "Brownie Recheado", "quantity": 1, "codigo": "brownie-recheado"},
+        {
+            "id": "item-1", "tenant_id": "admin", "pedido_id": "0848aa1a-8b98-49f7-ba32-9902c710c28e",
+            "name": "Fatia Especial Dois Amores", "quantity": 1, "codigo": "fatia-especial-dois-amores",
+            "preco_unitario": 20.0, "subtotal": 20.0, "observacoes": "Sem açúcar", "created_at": "2026-08-31T14:48:07.915000+00:00"
+        },
+        {
+            "id": "item-2", "tenant_id": "admin", "pedido_id": "0848aa1a-8b98-49f7-ba32-9902c710c28e",
+            "name": "Sonho Especial", "quantity": 1, "codigo": "sonho-especial",
+            "preco_unitario": 10.0, "subtotal": 10.0, "observacoes": None, "created_at": "2026-08-31T14:48:07.915000+00:00"
+        },
+        {
+            "id": "item-3", "tenant_id": "admin", "pedido_id": "0848aa1a-8b98-49f7-ba32-9902c710c28e",
+            "name": "Sonho Especial", "quantity": 1, "codigo": "sonho-especial",
+            "preco_unitario": 10.0, "subtotal": 10.0, "observacoes": "Com mais recheio", "created_at": "2026-08-31T14:48:07.915000+00:00"
+        },
     ]
+
+
+def test_reject_inconsistent_tenant_id_or_pedido_id_in_items(client, monkeypatch):
+    from app.core.config import settings
+    import secrets
+
+    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
+
+    payload = {
+        "pedido": {
+            "id": "order-123",
+            "tenant_id": "admin",
+            "cliente_id": "125203162075156@lid",
+            "status": "ativo",
+            "metodo_pagamento": "padrao",
+            "tipo_entrega": "padrao",
+            "endereco_entrega": {"endereco_completo": "rua 1"},
+            "taxa_entrega": "0.00",
+            "subtotal": "0.00",
+            "valor_total": "0.00",
+            "created_at": "2026-08-31T14:48:07.915Z",
+            "updated_at": "2026-08-31T14:48:07.916Z",
+        },
+        "itens": [
+            {
+                "id": "item-1", "tenant_id": "wrong-tenant", "pedido_id": "order-123",
+                "produto_id": "prod-1", "nome_produto": "Produto 1",
+                "quantidade": 1, "preco_unitario": "10.00", "subtotal": "10.00", "observacoes": None,
+                "created_at": "2026-08-31T14:48:07.915Z"
+            }
+        ],
+    }
+
+    response = client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"})
+    assert response.status_code == 400
+    assert "Scope inconsistency" in response.json()["detail"]
+
+
+def test_receive_real_order_with_valid_contract(client, monkeypatch):
+    from app.core.config import settings
+    import secrets
+
+    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
+
+    payload = {
+        "pedido": {
+            "id": "order-456",
+            "tenant_id": "admin",
+            "cliente_id": "125203162075156@lid",
+            "status": "ativo",
+            "metodo_pagamento": "padrao",
+            "tipo_entrega": "padrao",
+            "endereco_entrega": {"endereco_completo": "rua 2"},
+            "taxa_entrega": "0.00",
+            "subtotal": "20.00",
+            "valor_total": "20.00",
+            "created_at": "2026-08-31T14:48:07.915Z",
+            "updated_at": "2026-08-31T14:48:07.916Z",
+        },
+        "itens": [
+            {
+                "id": "5221319f-b98a-4467-93e1-d4cb178bf780", "tenant_id": "admin", "pedido_id": "order-456",
+                "produto_id": "prod-2", "nome_produto": "Produto 2",
+                "quantidade": 2, "preco_unitario": "10.00", "subtotal": "20.00", "observacoes": "Sem cebola",
+                "created_at": "2026-08-31T14:48:07.915Z"
+            }
+        ],
+    }
+
+    response = client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"})
+    assert response.status_code == 201
+    data = response.json()
+    assert data["ok"] is True
+    assert data["order"]["id"] == "order-456"
+    assert len(data["order"]["items"]) == 1
+    assert data["order"]["items"][0]["observacoes"] == "Sem cebola"
 
 
 def test_tts_cache_is_bounded_and_isolated_by_tenant():
