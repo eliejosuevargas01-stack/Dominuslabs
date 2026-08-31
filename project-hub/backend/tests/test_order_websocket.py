@@ -11,6 +11,11 @@ class FakeWebSocket:
         self.messages.append(payload)
 
 
+class DisconnectedWebSocket:
+    async def send_json(self, payload):
+        raise RuntimeError("socket closed")
+
+
 def test_broadcast_sends_order_event_to_websocket_and_sse_listener():
     tenant_id = "tenant-realtime"
     queue = asyncio.Queue()
@@ -85,3 +90,35 @@ def test_n8n_order_envelope_maps_to_order_manager_record():
         {"name": "Sonho Especial", "quantity": 2, "codigo": "sonho-especial"},
         {"name": "Brownie Recheado", "quantity": 1, "codigo": "brownie-recheado"},
     ]
+
+
+def test_tts_cache_is_bounded_and_isolated_by_tenant():
+    orders.tts_cache.clear()
+    try:
+        orders.tts_cache[("tenant-a", "pedido-1")] = b"audio-a"
+        orders.tts_cache[("tenant-b", "pedido-1")] = b"audio-b"
+
+        assert orders.tts_cache.maxsize == orders.TTS_CACHE_MAX_BYTES
+        assert orders.tts_cache[("tenant-a", "pedido-1")] == b"audio-a"
+        assert orders.tts_cache[("tenant-b", "pedido-1")] == b"audio-b"
+    finally:
+        orders.tts_cache.clear()
+
+
+def test_broadcast_removes_a_disconnected_websocket():
+    tenant_id = "tenant-disconnected"
+    orders.websocket_listeners[tenant_id] = {DisconnectedWebSocket()}
+    order = {
+        "id": "pedido-2",
+        "tenant_id": tenant_id,
+        "customer_name": "Cliente",
+        "total": 42.5,
+        "address": "Rua B, 20",
+        "items": [],
+        "status": "pending",
+        "created_at": "2026-08-31T12:00:00+00:00",
+    }
+
+    asyncio.run(orders.broadcast("new_order", order))
+
+    assert tenant_id not in orders.websocket_listeners

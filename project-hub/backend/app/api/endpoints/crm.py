@@ -340,6 +340,31 @@ async def send_crm_whatsapp_message(
         default_id = res.get("message", {}).get("id") or f"msg_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}"
         default_ts = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
 
+        # Inform other Omnichannel screens with the full conversation scope.
+        # Without session_id, a contact present in two sessions looks like one
+        # shared inbox and an outgoing message can be rendered as incoming.
+        from app.api.endpoints.webhooks import notify_crm_chat_listeners, notify_lead_listeners
+        outbound_message = {
+            "id": default_id,
+            "message_id": default_id,
+            "contact_jid": to_phone,
+            "session_id": session_id,
+            "is_from_me": True,
+            "sender": "user",
+            "content": payload.message,
+            "message": payload.message,
+            "message_timestamp": default_ts,
+            "status": "sent",
+        }
+        await notify_lead_listeners(to_phone, "reload")
+        await notify_crm_chat_listeners(
+            to_phone,
+            is_from_me=True,
+            sender="user",
+            messages=[outbound_message],
+            session_id=session_id,
+        )
+
         return Message(
             id=default_id,
             sender="user",
@@ -428,8 +453,30 @@ async def send_crm_whatsapp_media(
         print(f"[SEND-MEDIA-BASE64] Transmissão para Whats API falhou: {e}", flush=True)
 
     from app.api.endpoints.webhooks import notify_lead_listeners, notify_crm_chat_listeners
+    response_message = res.get("message", {}) if isinstance(res, dict) else {}
+    message_id = response_message.get("id") or f"msg_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}"
+    timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
+    outbound_message = {
+        "id": message_id,
+        "message_id": message_id,
+        "contact_jid": target_jid,
+        "session_id": active_session,
+        "is_from_me": True,
+        "sender": "user",
+        "content": media_text,
+        "message": media_text,
+        "message_type": payload.media.kind,
+        "message_timestamp": timestamp,
+        "status": "sent",
+    }
     await notify_lead_listeners(target_jid, "reload")
-    await notify_crm_chat_listeners(target_jid, is_from_me=True, sender="user")
+    await notify_crm_chat_listeners(
+        target_jid,
+        is_from_me=True,
+        sender="user",
+        messages=[outbound_message],
+        session_id=active_session,
+    )
 
     return {
         "status": "success",

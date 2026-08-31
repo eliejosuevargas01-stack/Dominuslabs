@@ -8,9 +8,10 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import httpx
+from cachetools import TTLCache
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi.responses import Response, StreamingResponse
+from pydantic import BaseModel, Field
 
 from app.core.auth import decode_access_token
 from app.core.config import settings
@@ -20,7 +21,18 @@ from sqlalchemy.orm import Session, joinedload
 
 router = APIRouter()
 
-orders: Dict[str, Dict[str, Any]] = {}
+ORDER_CACHE_MAXSIZE = 10_000
+ORDER_CACHE_TTL_SECONDS = 60 * 60
+TTS_CACHE_MAX_BYTES = 32 * 1024 * 1024
+TTS_CACHE_TTL_SECONDS = 10 * 60
+
+# These caches optimize reads only; PostgreSQL remains the source of truth.
+orders: TTLCache = TTLCache(maxsize=ORDER_CACHE_MAXSIZE, ttl=ORDER_CACHE_TTL_SECONDS)
+tts_cache: TTLCache = TTLCache(
+    maxsize=TTS_CACHE_MAX_BYTES,
+    ttl=TTS_CACHE_TTL_SECONDS,
+    getsizeof=len,
+)
 listeners: Dict[str, set[asyncio.Queue]] = {}
 websocket_listeners: Dict[str, set[WebSocket]] = {}
 WEBHOOK_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
@@ -211,7 +223,11 @@ async def broadcast(event: str, order: Dict[str, Any]) -> None:
         try:
             await websocket.send_json(payload)
         except (RuntimeError, WebSocketDisconnect):
-            websocket_listeners.get(order["tenant_id"], set()).discard(websocket)
+            tenant_sockets = websocket_listeners.get(order["tenant_id"])
+            if tenant_sockets is not None:
+                tenant_sockets.discard(websocket)
+                if not tenant_sockets:
+                    websocket_listeners.pop(order["tenant_id"], None)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -365,9 +381,9 @@ async def accept_order(
     tenant_id = resolve_tenant_id(request, payload, x_master_api_key or token)
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id is required for confirmation")
-    db_order = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter_by(
+    db_order = db.query(OrderManagerOrder).filter_by(
         tenant_id=tenant_id, pedido_id=order_id
-    ).first()
+    ).with_for_update().first()
     if not db_order:
         raise HTTPException(status_code=404, detail="Order not found")
     order = order_to_record(db_order)
@@ -405,9 +421,9 @@ async def update_order_status(
     allowed_statuses = {"ready_for_delivery", "out_for_delivery", "delivered"}
     if order_status not in allowed_statuses:
         raise HTTPException(status_code=422, detail="Invalid order status")
-    db_order = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter_by(
+    db_order = db.query(OrderManagerOrder).filter_by(
         tenant_id=tenant_id, pedido_id=order_id
-    ).first()
+    ).with_for_update().first()
     if not db_order:
         raise HTTPException(status_code=404, detail="Order not found")
     if db_order.status == order_status:
@@ -426,9 +442,6 @@ async def update_order_status(
     background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, order_status, db_order.client_jid or db_order.cliente_id)
     return {"ok": True, "order": public_order(order)}
 
-# --- TTS Logic ---
-tts_cache: Dict[str, bytes] = {}
-
 @router.get("/{order_id}/tts-alarm")
 async def get_order_tts_alarm(
     order_id: str,
@@ -441,7 +454,9 @@ async def get_order_tts_alarm(
         raise HTTPException(status_code=401, detail="Authentication required")
         
     payload = operator_payload(request, x_master_api_key or token)
-    tenant_id = payload.get("tenant_id") if payload else request.query_params.get("tenant_id")
+    tenant_id = resolve_tenant_id(request, payload, x_master_api_key or token)
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id is required")
     
     order = orders.get(f"{tenant_id}:{order_id}")
     if not order:
@@ -454,10 +469,10 @@ async def get_order_tts_alarm(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
         
-    if order["id"] in tts_cache:
-        def iterfile():
-            yield tts_cache[order["id"]]
-        return StreamingResponse(iterfile(), media_type="audio/mpeg")
+    cache_key = (tenant_id, order["id"])
+    cached_audio = tts_cache.get(cache_key)
+    if cached_audio is not None:
+        return Response(content=cached_audio, media_type="audio/mpeg")
         
     if not settings.LITELLM_API_KEY or not settings.LITELLM_API_BASE:
         raise HTTPException(status_code=500, detail="TTS not configured in backend")
@@ -481,11 +496,8 @@ async def get_order_tts_alarm(
             )
             resp.raise_for_status()
             audio_bytes = resp.content
-            tts_cache[order["id"]] = audio_bytes
-            
-            def iterfile_new():
-                yield audio_bytes
-                
-            return StreamingResponse(iterfile_new(), media_type="audio/mpeg")
+            if len(audio_bytes) <= TTS_CACHE_MAX_BYTES:
+                tts_cache[cache_key] = audio_bytes
+            return Response(content=audio_bytes, media_type="audio/mpeg")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"TTS generation failed: {str(e)}")

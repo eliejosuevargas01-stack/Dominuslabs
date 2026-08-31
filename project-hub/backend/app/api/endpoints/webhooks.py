@@ -44,7 +44,13 @@ async def notify_lead_listeners(lead_id: str, event: str = "reload"):
         for user_email, queue in list(lead_listeners[lead_id]):
             await queue.put(event)
 
-async def notify_crm_chat_listeners(lead_id: str, is_from_me: bool = False, sender: str = "lead", messages: Optional[List[Dict[str, Any]]] = None):
+async def notify_crm_chat_listeners(
+    lead_id: str,
+    is_from_me: bool = False,
+    sender: str = "lead",
+    messages: Optional[List[Dict[str, Any]]] = None,
+    session_id: Optional[str] = None,
+):
     """
     Função/Método notify_crm_chat_listeners.
 
@@ -63,6 +69,14 @@ async def notify_crm_chat_listeners(lead_id: str, is_from_me: bool = False, send
                             all_jids.append(val)
 
     primary_jid = all_jids[0] if all_jids else lead_id
+    resolved_session_id = session_id
+    if not resolved_session_id and messages:
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            resolved_session_id = msg.get("session_id") or msg.get("session") or msg.get("whatsapp_instance")
+            if resolved_session_id:
+                break
 
     payload = json.dumps({
         "lead_id": primary_jid,
@@ -70,6 +84,7 @@ async def notify_crm_chat_listeners(lead_id: str, is_from_me: bool = False, send
         "all_jids": all_jids,
         "is_from_me": is_from_me,
         "sender": sender,
+        "session_id": resolved_session_id,
         "action": "new_message",
         "event": "new_message",
         "messages": messages or []
@@ -235,7 +250,13 @@ async def _process_update_chat(
     final_sender = explicit_sender or ("user" if final_is_from_me else "lead")
 
     await notify_lead_listeners(resolved_contact_id, "reload")
-    await notify_crm_chat_listeners(resolved_contact_id, is_from_me=final_is_from_me, sender=final_sender, messages=messages_list)
+    await notify_crm_chat_listeners(
+        resolved_contact_id,
+        is_from_me=final_is_from_me,
+        sender=final_sender,
+        messages=messages_list,
+        session_id=resolved_session_id,
+    )
 
     notified_count = len(lead_listeners.get(resolved_contact_id, [])) + len(crm_chat_listeners)
     return {
