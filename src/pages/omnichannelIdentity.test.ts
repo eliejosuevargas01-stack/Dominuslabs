@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { messageBelongsToConversation, scopedHistoryMessages, sessionsMatch } from './omnichannelIdentity';
+import {
+  MAX_KNOWN_MESSAGE_IDS,
+  messageBelongsToConversation,
+  rememberKnownMessageId,
+  scopedHistoryMessages,
+  sessionsMatch,
+} from './omnichannelIdentity';
 
 describe('omnichannel conversation identity', () => {
   it('requires the WhatsApp session as well as the contact JID', () => {
@@ -54,5 +60,19 @@ describe('omnichannel conversation identity', () => {
 
     expect(messages).toHaveLength(1);
     expect(messages[0]).toMatchObject({ id: 'a-1', session_id: 'sessao-a' });
+  });
+
+  it('keeps the real-time message deduplication cache bounded', () => {
+    const ids = new Set<string>();
+    const limit = 3;
+
+    expect(rememberKnownMessageId(ids, 'first', limit)).toBe(true);
+    expect(rememberKnownMessageId(ids, 'second', limit)).toBe(true);
+    expect(rememberKnownMessageId(ids, 'third', limit)).toBe(true);
+    expect(rememberKnownMessageId(ids, 'first', limit)).toBe(false);
+    expect(rememberKnownMessageId(ids, 'fourth', limit)).toBe(true);
+
+    expect(ids).toEqual(new Set(['second', 'third', 'fourth']));
+    expect(MAX_KNOWN_MESSAGE_IDS).toBeGreaterThan(limit);
   });
 });

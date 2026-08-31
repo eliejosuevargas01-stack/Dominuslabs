@@ -23,7 +23,12 @@ import {
   fetchWhatsappSessions,
   API_BASE
 } from '../services/api';
-import { messageBelongsToConversation, scopedHistoryMessages, sessionsMatch } from './omnichannelIdentity';
+import {
+  messageBelongsToConversation,
+  rememberKnownMessageId,
+  scopedHistoryMessages,
+  sessionsMatch,
+} from './omnichannelIdentity';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -724,6 +729,23 @@ export default function OmnichannelView() {
     analyserRef.current = null;
   };
 
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      stopMicAnalyser();
+
+      const recorder = mediaRecorderRef.current;
+      if (!recorder) return;
+      recorder.onstop = null;
+      if (recorder.state !== 'inactive') recorder.stop();
+      recorder.stream?.getTracks().forEach((track) => track.stop());
+      mediaRecorderRef.current = null;
+    };
+  }, []);
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1156,8 +1178,7 @@ function playOutgoingSound() {
             
             if (hasMediaOrText) {
               if (msgId) {
-                if (!knownMessageIds.current.has(msgId)) {
-                  knownMessageIds.current.add(msgId);
+                if (rememberKnownMessageId(knownMessageIds.current, msgId)) {
                   isNewMessageWithContent = true;
                 }
               } else {
@@ -1416,7 +1437,7 @@ function playOutgoingSound() {
           setChatMessages(msgsList);
           msgsList.forEach((m: any) => {
              const id = String(m.message_id || m.id || m.key?.id || '');
-             if (id) knownMessageIds.current.add(id);
+             if (id) rememberKnownMessageId(knownMessageIds.current, id);
           });
         })
         .catch((err) => {
@@ -1494,7 +1515,7 @@ function playOutgoingSound() {
       });
 
       const realId = res.id || res.message_id || res.key?.id;
-      if (realId) knownMessageIds.current.add(String(realId));
+      if (realId) rememberKnownMessageId(knownMessageIds.current, realId);
 
       setChatMessages(prev => prev.map(m => {
         if (m.message_id === tempMessage.message_id) {

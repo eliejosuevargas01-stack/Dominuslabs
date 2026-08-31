@@ -16,6 +16,26 @@ type SessionScopedRecord = {
   mensagens?: unknown;
 };
 
+export const MAX_KNOWN_MESSAGE_IDS = 500;
+
+/** Stores each real-time ID once without retaining an unbounded history. */
+export function rememberKnownMessageId(
+  knownMessageIds: Set<string>,
+  messageId: unknown,
+  limit = MAX_KNOWN_MESSAGE_IDS,
+): boolean {
+  const normalizedId = String(messageId ?? '').trim();
+  if (!normalizedId || knownMessageIds.has(normalizedId)) return false;
+
+  knownMessageIds.add(normalizedId);
+  while (knownMessageIds.size > limit) {
+    const oldestId = knownMessageIds.values().next().value as string | undefined;
+    if (!oldestId) break;
+    knownMessageIds.delete(oldestId);
+  }
+  return true;
+}
+
 function sessionValue(record: SessionScopedRecord): unknown {
   const session = record.session;
   return record.session_id
