@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,6 +22,7 @@ router = APIRouter()
 
 orders: Dict[str, Dict[str, Any]] = {}
 listeners: Dict[str, set[asyncio.Queue]] = {}
+websocket_listeners: Dict[str, set[WebSocket]] = {}
 WEBHOOK_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 WEBHOOK_RETRY_DELAYS = (5, 15, 30, 60)
 ORDER_STATUS_TRANSITIONS = {
@@ -35,18 +36,34 @@ ORDER_STATUS_TRANSITIONS = {
 # --- N8N AI Agent Payload Schemas ---
 
 class AgentOrderItem(BaseModel):
-    codigo: str = Field(min_length=1)
-    nome: str = Field(min_length=1)
+    produto_id: str = Field(min_length=1)
+    nome_produto: str = Field(min_length=1)
     quantidade: int = Field(gt=0)
     subtotal: Decimal = Field(ge=0)
 
-class AgentOrderPayload(BaseModel):
+
+class AgentDeliveryAddress(BaseModel):
+    endereco_completo: str = Field(min_length=1)
+
+
+class AgentOrder(BaseModel):
+    id: str = Field(min_length=1)
     tenant_id: str = Field(min_length=1)
-    pedido_id: str = Field(min_length=1)
-    content_jid: str = Field(min_length=1)
-    localização: Any
-    items: List[AgentOrderItem]
     cliente_id: str = Field(min_length=1)
+    status: str = Field(min_length=1)
+    metodo_pagamento: str = Field(min_length=1)
+    tipo_entrega: str = Field(min_length=1)
+    endereco_entrega: AgentDeliveryAddress
+    taxa_entrega: Decimal = Field(ge=0)
+    subtotal: Decimal = Field(ge=0)
+    valor_total: Decimal = Field(ge=0)
+    created_at: datetime
+    updated_at: datetime
+
+
+class AgentOrderPayload(BaseModel):
+    pedido: AgentOrder
+    itens: List[AgentOrderItem] = Field(min_length=1)
 
 # ------------------------------------
 
@@ -106,6 +123,37 @@ def aggregate_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return list(aggregated.values())
 
 
+def record_from_agent_payload(payload: AgentOrderPayload) -> Dict[str, Any]:
+    """Converte o contrato do n8n no formato público do Order Manager."""
+    canonical_items = aggregate_items([
+        {
+            "codigo": item.produto_id,
+            "nome": item.nome_produto,
+            "quantidade": item.quantidade,
+            "subtotal": float(item.subtotal),
+        }
+        for item in payload.itens
+    ])
+    return {
+        "id": payload.pedido.id,
+        "tenant_id": payload.pedido.tenant_id,
+        "customer_name": payload.pedido.cliente_id,
+        "total": float(payload.pedido.valor_total),
+        "address": payload.pedido.endereco_entrega.endereco_completo,
+        "items": [
+            {"name": item["nome"], "quantity": item["quantidade"], "codigo": item["codigo"]}
+            for item in canonical_items
+        ],
+        # O status recebido (ex.: "ativo") é do pedido no n8n. O fluxo da
+        # operação começa localmente como pendente até o operador aceitá-lo.
+        "status": "pending",
+        "created_at": payload.pedido.created_at.isoformat(),
+        "content_jid": payload.pedido.cliente_id,
+        "cliente_id": payload.pedido.cliente_id,
+        "items_source": canonical_items,
+    }
+
+
 def order_to_record(db_order: OrderManagerOrder) -> Dict[str, Any]:
     items = [
         {"codigo": item.codigo, "nome": item.nome, "quantidade": item.quantidade, "subtotal": float(item.subtotal)}
@@ -155,9 +203,15 @@ def resolve_tenant_id(request: Request, payload: Optional[dict], credential: Opt
 
 
 async def broadcast(event: str, order: Dict[str, Any]) -> None:
-    message = f"data: {json.dumps({'event': event, 'order': public_order(order)})}\n\n"
+    payload = {'event': event, 'order': public_order(order)}
+    message = f"data: {json.dumps(payload)}\n\n"
     for queue in list(listeners.get(order["tenant_id"], set())):
         await queue.put(message)
+    for websocket in list(websocket_listeners.get(order["tenant_id"], set())):
+        try:
+            await websocket.send_json(payload)
+        except (RuntimeError, WebSocketDisconnect):
+            websocket_listeners.get(order["tenant_id"], set()).discard(websocket)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -170,59 +224,23 @@ async def receive_order(
     if not valid_master_key(x_master_api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing Master API Key")
         
-    storage_id = f"{payload.tenant_id}:{payload.pedido_id}"
+    storage_id = f"{payload.pedido.tenant_id}:{payload.pedido.id}"
     existing = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter_by(
-        tenant_id=payload.tenant_id, pedido_id=payload.pedido_id
+        tenant_id=payload.pedido.tenant_id, pedido_id=payload.pedido.id
     ).first()
     if existing:
         record = order_to_record(existing)
         orders[storage_id] = record
         return {"ok": True, "duplicate": True, "order": public_order(record)}
 
-    canonical_items = aggregate_items([
-        {
-            "codigo": item.codigo,
-            "nome": item.nome,
-            "quantidade": item.quantidade,
-            "subtotal": float(item.subtotal),
-        }
-        for item in payload.items
-    ])
-
-    total_calc = sum(item["subtotal"] for item in canonical_items)
-            
-    # Mapeando os itens
-    frontend_items = [
-        {"name": item["nome"], "quantity": item["quantidade"], "codigo": item["codigo"]}
-        for item in canonical_items
-    ]
-    
-    # Tratando a localização que a IA pode mandar como objeto ou string
-    address_str = ""
-    if isinstance(payload.localização, dict):
-        address_str = payload.localização.get("endereco_completo", str(payload.localização))
-    else:
-        address_str = str(payload.localização)
-        
-    record = {
-        "id": payload.pedido_id, 
-        "tenant_id": payload.tenant_id,
-        "customer_name": payload.cliente_id, 
-        "total": total_calc, 
-        "address": address_str,
-        "items": frontend_items,
-        "status": "pending", 
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "content_jid": payload.content_jid,
-        "cliente_id": payload.cliente_id,
-        "items_source": canonical_items,
-    }
+    record = record_from_agent_payload(payload)
     
     db_order = OrderManagerOrder(
-        tenant_id=payload.tenant_id, pedido_id=payload.pedido_id,
-        cliente_id=payload.cliente_id, client_jid=payload.cliente_id, content_jid=payload.content_jid,
-        address=address_str, total=total_calc, status="pending",
-        items=[OrderManagerOrderItem(codigo=item["codigo"], nome=item["nome"], quantidade=item["quantidade"], subtotal=item["subtotal"]) for item in canonical_items],
+        tenant_id=record["tenant_id"], pedido_id=record["id"],
+        cliente_id=record["cliente_id"], client_jid=record["cliente_id"], content_jid=record["content_jid"],
+        address=record["address"], total=record["total"], status=record["status"],
+        created_at=payload.pedido.created_at.replace(tzinfo=None),
+        items=[OrderManagerOrderItem(codigo=item["codigo"], nome=item["nome"], quantidade=item["quantidade"], subtotal=item["subtotal"]) for item in record["items_source"]],
     )
     db.add(db_order)
     db.commit()
@@ -256,6 +274,32 @@ async def order_events(request: Request, token: Optional[str] = Query(None)):
             listeners.get(tenant_id, set()).discard(queue)
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.websocket("/ws")
+async def order_websocket(websocket: WebSocket, token: Optional[str] = Query(None)):
+    """Envia atualizações do Order Manager para todas as telas do mesmo tenant."""
+    payload = decode_access_token(token) if token else None
+    tenant_id = payload.get("tenant_id") if payload else None
+    if not payload or not payload.get("sub") or not tenant_id:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await websocket.accept()
+    websocket_listeners.setdefault(tenant_id, set()).add(websocket)
+    try:
+        # Mantém a conexão ativa e detecta fechamentos pelo cliente. As mensagens
+        # operacionais são sempre publicadas pelo servidor via broadcast().
+        while True:
+            await websocket.receive()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        tenant_sockets = websocket_listeners.get(tenant_id)
+        if tenant_sockets:
+            tenant_sockets.discard(websocket)
+            if not tenant_sockets:
+                websocket_listeners.pop(tenant_id, None)
 
 
 @router.get("")
