@@ -144,6 +144,15 @@ async def _maybe_provision(user: User, db: Session) -> None:
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _resolved_token_tenant(user: User) -> str:
+    """Keeps the JWT/SSE tenant claim aligned with the WhatsApp service rule."""
+    if user.role == "admin" or user.email == settings.ADMIN_USERNAME:
+        return settings.ADMIN_TENANT_ID
+    if not user.tenant_id:
+        user.tenant_id = f"tenant_{user.id}"
+    return user.tenant_id
+
+
 def _build_token_data(user: User) -> dict:
     """
     Função/Método _build_token_data.
@@ -161,7 +170,7 @@ def _build_token_data(user: User) -> dict:
         "can_edit_projects": getattr(user, "can_edit_projects", None) if getattr(user, "can_edit_projects", None) is not None else (is_admin or "write" in perms),
         "can_manage_crm": getattr(user, "can_manage_crm", None) if getattr(user, "can_manage_crm", None) is not None else True,
         "can_use_scrapper": getattr(user, "can_use_scrapper", None) if getattr(user, "can_use_scrapper", None) is not None else True,
-        "tenant_id": user.tenant_id or "default",
+        "tenant_id": _resolved_token_tenant(user),
     }
 
 

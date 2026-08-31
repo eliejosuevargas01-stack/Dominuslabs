@@ -82,12 +82,18 @@ def test_outbound_whatsapp_send_accepts_master_api_key_without_bearer_token(mock
     response = client.post(
         "/api/v1/webhooks/outbound/whatsapp/send",
         headers={"X-Master-Api-Key": "test-master-key"},
-        json={"phone": "5511999999999", "message": "Ola"},
+        json={
+            "phone": "5511999999999",
+            "message": "Ola",
+            "tenant_id": "tenant-a",
+            "session_id": "session-a",
+        },
     )
 
     assert response.status_code == 200
     assert response.json() == {"status": "success"}
     assert mock_request.call_args.kwargs["headers"]["X-Master-API-Key"] == "test-master-key"
+    assert mock_request.call_args.kwargs["headers"]["x-tenant-id"] == "tenant-a"
 
 
 def test_outbound_whatsapp_send_rejects_master_key_in_body(mocker, client):
@@ -137,7 +143,71 @@ def test_crm_chat_event_is_scoped_to_its_tenant_and_session():
         webhooks.crm_chat_listeners.clear()
 
 
+def test_legacy_lead_event_is_scoped_to_tenant_session_and_contact():
+    contact_jid = "5511999999999@s.whatsapp.net"
+    queue_a = asyncio.Queue()
+    queue_b = asyncio.Queue()
+    key_a = webhooks._lead_listener_key(contact_jid, "session-a", "tenant-a")
+    key_b = webhooks._lead_listener_key(contact_jid, "session-b", "tenant-b")
+    webhooks.lead_listeners.clear()
+    webhooks.lead_listeners[key_a] = [("operator-a@example.com", queue_a)]
+    webhooks.lead_listeners[key_b] = [("operator-b@example.com", queue_b)]
+    try:
+        asyncio.run(webhooks.notify_lead_listeners(
+            contact_jid,
+            "reload",
+            session_id="session-a",
+            tenant_id="tenant-a",
+        ))
+
+        assert queue_a.get_nowait() == "reload"
+        assert queue_b.empty()
+    finally:
+        webhooks.lead_listeners.clear()
+
+
 def test_crm_chat_event_stream_requires_an_authenticated_tenant():
     response = client.get("/api/v1/webhooks/events/crm-chats")
 
     assert response.status_code == 401
+
+
+def test_crm_update_chat_notifies_each_tenant_and_session_separately(client):
+    tenant_a_queue = asyncio.Queue()
+    tenant_b_queue = asyncio.Queue()
+    webhooks.crm_chat_listeners.clear()
+    webhooks.crm_chat_listeners["tenant-a"] = [("operator-a@example.com", tenant_a_queue)]
+    webhooks.crm_chat_listeners["tenant-b"] = [("operator-b@example.com", tenant_b_queue)]
+    try:
+        response = client.post("/api/v1/webhooks/crm/update-chat", json=[
+            {
+                "message_id": "a-1",
+                "contact_jid": "5511999999999@s.whatsapp.net",
+                "session_id": "session-a",
+                "tenant_id": "tenant-a",
+                "is_from_me": False,
+                "content": "Mensagem da sessão A",
+            },
+            {
+                "message_id": "b-1",
+                "contact_jid": "5511999999999@s.whatsapp.net",
+                "session_id": "session-b",
+                "tenant_id": "tenant-b",
+                "is_from_me": True,
+                "content": "Mensagem da sessão B",
+            },
+        ])
+
+        assert response.status_code == 200
+        assert response.json()["notified_tenants"] == ["tenant-a", "tenant-b"]
+
+        event_a = json.loads(tenant_a_queue.get_nowait())
+        event_b = json.loads(tenant_b_queue.get_nowait())
+        assert event_a["tenant_id"] == "tenant-a"
+        assert event_a["session_id"] == "session-a"
+        assert [message["message_id"] for message in event_a["messages"]] == ["a-1"]
+        assert event_b["tenant_id"] == "tenant-b"
+        assert event_b["session_id"] == "session-b"
+        assert [message["message_id"] for message in event_b["messages"]] == ["b-1"]
+    finally:
+        webhooks.crm_chat_listeners.clear()

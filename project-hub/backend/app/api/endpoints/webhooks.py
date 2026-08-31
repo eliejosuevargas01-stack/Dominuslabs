@@ -9,10 +9,13 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 import json
 import asyncio
+import uuid
 
 from app.core.database import get_db
 from app.core.config import settings
 from app.services.webhook_service import webhook_service
+from app.models.user import User
+from app.services.whatsapp_service import get_tenant_id_for_user
 
 router = APIRouter()
 
@@ -30,18 +33,54 @@ class LeadChatUpdateRequest(BaseModel):
 # In-memory queues for Server-Sent Events (SSE)
 project_listeners = {}  # {public_token: [asyncio.Queue]}
 global_listeners = []   # [asyncio.Queue]
-lead_listeners = {}     # {lead_id: [(user_email, queue)]}
+lead_listeners: Dict[tuple[str, str, str], List[tuple[str, asyncio.Queue]]] = {}
+# {(tenant_id, session_id, contact_jid): [(user_email, queue)]}
 crm_chat_listeners: Dict[str, List[tuple[str, asyncio.Queue]]] = {}  # {tenant_id: [(user_email, queue)]}
 
-async def notify_lead_listeners(lead_id: str, event: str = "reload"):
+
+def _lead_listener_key(
+    lead_id: Optional[str],
+    session_id: Optional[str],
+    tenant_id: Optional[str],
+) -> Optional[tuple[str, str, str]]:
+    """The legacy lead stream must never fall back to a shared contact key."""
+    contact_jid = str(lead_id or "").split("___", 1)[0].strip()
+    resolved_session = str(session_id or "").strip()
+    resolved_tenant = str(tenant_id or "").strip()
+    if not contact_jid or not resolved_session or not resolved_tenant:
+        return None
+    return resolved_tenant, resolved_session, contact_jid
+
+
+async def _tenant_for_sse_subscriber(payload: Dict[str, Any], db: Session) -> tuple[str, str]:
+    """Uses the current database assignment instead of a possibly stale JWT claim."""
+    user_email = str(payload.get("sub") or "").strip()
+    if not user_email:
+        raise HTTPException(status_code=401, detail="Authentication with a user is required")
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Authenticated user was not found")
+    return user_email, await get_tenant_id_for_user(user, db)
+
+
+async def notify_lead_listeners(
+    lead_id: str,
+    event: str = "reload",
+    *,
+    session_id: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+):
     """
     Função/Método notify_lead_listeners.
 
     O que faz: Processa notify_lead_listeners recebendo os parâmetros (lead_id, event) no contexto de o endpoint de API para webhooks.
     Impacto na regra de negócio: Assegura que o fluxo da operação notify_lead_listeners seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
-    if lead_id in lead_listeners:
-        for user_email, queue in list(lead_listeners[lead_id]):
+    listener_key = _lead_listener_key(lead_id, session_id, tenant_id)
+    if listener_key is None:
+        return
+    if listener_key in lead_listeners:
+        for user_email, queue in list(lead_listeners[listener_key]):
             await queue.put(event)
 
 async def notify_crm_chat_listeners(
@@ -83,6 +122,8 @@ async def notify_crm_chat_listeners(
             resolved_session_id = msg.get("session_id") or msg.get("session") or msg.get("whatsapp_instance")
             if resolved_session_id:
                 break
+    if not resolved_session_id:
+        return
 
     payload = json.dumps({
         "lead_id": primary_jid,
@@ -100,7 +141,13 @@ async def notify_crm_chat_listeners(
         await queue.put(payload)
 
 @router.get("/events/leads/{lead_id}")
-async def lead_events(lead_id: str, token: str, request: Request):
+async def lead_events(
+    lead_id: str,
+    token: str,
+    request: Request,
+    session_id: str,
+    db: Session = Depends(get_db),
+):
     """
     Função/Método lead_events.
 
@@ -112,11 +159,12 @@ async def lead_events(lead_id: str, token: str, request: Request):
     if not payload:
         raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
     
-    user_email = payload.get("sub", "unknown")
+    user_email, tenant_id = await _tenant_for_sse_subscriber(payload, db)
+    listener_key = _lead_listener_key(lead_id, session_id, tenant_id)
+    if listener_key is None:
+        raise HTTPException(status_code=400, detail="session_id is required")
     queue = asyncio.Queue()
-    if lead_id not in lead_listeners:
-        lead_listeners[lead_id] = []
-    lead_listeners[lead_id].append((user_email, queue))
+    lead_listeners.setdefault(listener_key, []).append((user_email, queue))
     
     async def event_generator():
         """
@@ -138,15 +186,20 @@ async def lead_events(lead_id: str, token: str, request: Request):
         except asyncio.CancelledError:
             pass
         finally:
-            if lead_id in lead_listeners:
-                lead_listeners[lead_id] = [item for item in lead_listeners[lead_id] if item[1] != queue]
-                if not lead_listeners[lead_id]:
-                    del lead_listeners[lead_id]
+            listeners = lead_listeners.get(listener_key, [])
+            if listener in listeners:
+                listeners.remove(listener)
+            if not listeners:
+                lead_listeners.pop(listener_key, None)
                     
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.get("/events/crm-chats")
-async def crm_chats_events(request: Request, token: Optional[str] = None):
+async def crm_chats_events(
+    request: Request,
+    token: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
     """
     Função/Método crm_chats_events.
 
@@ -155,10 +208,9 @@ async def crm_chats_events(request: Request, token: Optional[str] = None):
     """
     from app.core.auth import decode_access_token
     payload = decode_access_token(token) if token else None
-    tenant_id = payload.get("tenant_id") if payload else None
-    user_email = payload.get("sub") if payload else None
-    if not tenant_id or not user_email:
+    if not payload:
         raise HTTPException(status_code=401, detail="Authentication with a tenant is required")
+    user_email, tenant_id = await _tenant_for_sse_subscriber(payload, db)
 
     queue = asyncio.Queue()
     listener = (user_email, queue)
@@ -192,6 +244,83 @@ async def crm_chats_events(request: Request, token: Optional[str] = None):
                     
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+def _event_text(value: Any) -> str:
+    return str(value).strip() if value is not None else ""
+
+
+def _event_session_id(value: Any) -> str:
+    if isinstance(value, dict):
+        value = value.get("id") or value.get("session_id")
+    return _event_text(value)
+
+
+def _event_bool(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "sim"}
+    return bool(value)
+
+
+def _normalize_chat_event_message(
+    raw_message: Dict[str, Any],
+    *,
+    contact_id: Optional[str] = None,
+    lead_id: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    message_id: Optional[str] = None,
+    jid: Optional[str] = None,
+    phone: Optional[str] = None,
+    is_from_me: Optional[bool] = None,
+    sender: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Validates the n8n event scope before it is delivered to an operator."""
+    message = dict(raw_message)
+    key = message.get("key") if isinstance(message.get("key"), dict) else {}
+    resolved_message_id = _event_text(
+        message.get("message_id") or message.get("id") or key.get("id") or message_id
+    )
+    resolved_contact_id = _event_text(
+        message.get("contact_jid")
+        or message.get("contact_id")
+        or message.get("chat_jid")
+        or message.get("jid")
+        or message.get("remoteJid")
+        or key.get("remoteJid")
+        or contact_id
+        or lead_id
+        or jid
+        or phone
+    )
+    resolved_session_id = _event_session_id(
+        message.get("session_id") or message.get("session") or message.get("whatsapp_instance") or session_id
+    )
+    resolved_tenant_id = _event_text(message.get("tenant_id") or message.get("tenant") or tenant_id)
+    if not resolved_message_id:
+        raise ValueError("message_id is required")
+    if not resolved_contact_id:
+        raise ValueError("contact_jid is required")
+    if not resolved_session_id:
+        raise ValueError("session_id is required")
+    if not resolved_tenant_id:
+        raise ValueError("tenant_id is required")
+
+    from_me = _event_bool(
+        message.get("is_from_me", message.get("from_me", message.get("fromMe", is_from_me or False)))
+    )
+    raw_sender = _event_text(message.get("sender") or sender).lower()
+    normalized_sender = "user" if from_me or raw_sender in {"user", "me", "operator"} else "lead"
+    message.update({
+        "id": message.get("id") or resolved_message_id,
+        "message_id": resolved_message_id,
+        "contact_jid": resolved_contact_id,
+        "session_id": resolved_session_id,
+        "tenant_id": resolved_tenant_id,
+        "is_from_me": normalized_sender == "user",
+        "sender": normalized_sender,
+    })
+    return message
+
+
 async def _process_update_chat(
     request: Request,
     contact_id: Optional[str] = None,
@@ -218,68 +347,82 @@ async def _process_update_chat(
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
     if not isinstance(raw_body, list):
         raise HTTPException(status_code=400, detail="Payload must be a JSON array of message objects.")
+    messages_list: List[Dict[str, Any]] = []
     for item in raw_body:
         if not isinstance(item, dict):
             raise HTTPException(status_code=400, detail="Each item in the payload array must be a JSON object.")
-        if "is_from_me" not in item:
-            item["is_from_me"] = item.get("fromMe", item.get("from_me", False))
-        if "message_id" not in item and "id" in item:
-            item["message_id"] = item["id"]
-        if "contact_jid" not in item and "contact_id" in item:
-            item["contact_jid"] = item["contact_id"]
-        if "session_id" not in item and "session" in item:
-            item["session_id"] = item["session"]
-        if "tenant_id" not in item and "tenant" in item:
-            item["tenant_id"] = item["tenant"]
-        if "message_id" not in item:
-            raise HTTPException(status_code=400, detail=f"Missing required field: message_id. Received keys: {list(item.keys())} - Item: {item}")
-        if "contact_jid" not in item:
-            raise HTTPException(status_code=400, detail=f"Missing required field: contact_jid. Received keys: {list(item.keys())}")
-        if "session_id" not in item:
-            raise HTTPException(status_code=400, detail=f"Missing required field: session_id. Received keys: {list(item.keys())}")
-        if "tenant_id" not in item:
-            raise HTTPException(status_code=400, detail=f"Missing required field: tenant_id. Received keys: {list(item.keys())}")
+        try:
+            messages_list.append(_normalize_chat_event_message(
+                item,
+                contact_id=contact_id,
+                lead_id=lead_id,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                message_id=id,
+                jid=jid,
+                phone=phone,
+                is_from_me=is_from_me,
+                sender=sender,
+            ))
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=f"Invalid CRM message payload: {error}") from error
 
-    messages_list = raw_body
-    
-    resolved_contact_id = messages_list[0].get("contact_jid") if messages_list else contact_id
-    resolved_tenant_id = messages_list[0].get("tenant_id") if messages_list else tenant_id
-    resolved_session_id = messages_list[0].get("session_id") if messages_list else session_id
-    if not resolved_contact_id:
-        raise HTTPException(status_code=400, detail="Missing contact_id or contact_jid parameter")
-
-    explicit_from_me = messages_list[0].get("is_from_me", False) if messages_list else (is_from_me or False)
-    explicit_sender = messages_list[0].get("participant_pushname", "lead") if messages_list else (sender or "lead")
+    if not messages_list:
+        raise HTTPException(status_code=400, detail="At least one CRM message is required.")
 
     from app.services.n8n_service import n8n_service
     n8n_service.invalidate_leads_cache()
 
-    final_is_from_me = explicit_from_me if explicit_from_me is not None else False
-    final_sender = explicit_sender or ("user" if final_is_from_me else "lead")
+    message_groups: Dict[tuple, List[Dict[str, Any]]] = {}
+    for message in messages_list:
+        group_key = (
+            message["tenant_id"],
+            message["session_id"],
+            message["contact_jid"],
+            message["is_from_me"],
+            message["sender"],
+        )
+        message_groups.setdefault(group_key, []).append(message)
 
-    await notify_lead_listeners(resolved_contact_id, "reload")
-    await notify_crm_chat_listeners(
-        resolved_contact_id,
-        is_from_me=final_is_from_me,
-        sender=final_sender,
-        messages=messages_list,
-        session_id=resolved_session_id,
-        tenant_id=resolved_tenant_id,
-    )
+    notified_lead_scopes = set()
+    notified_tenants = set()
+    tenant_listener_count = 0
+    for (message_tenant, message_session, message_contact, message_is_from_me, message_sender), grouped_messages in message_groups.items():
+        lead_scope = _lead_listener_key(message_contact, message_session, message_tenant)
+        if lead_scope and lead_scope not in notified_lead_scopes:
+            await notify_lead_listeners(
+                message_contact,
+                "reload",
+                session_id=message_session,
+                tenant_id=message_tenant,
+            )
+            notified_lead_scopes.add(lead_scope)
+        await notify_crm_chat_listeners(
+            message_contact,
+            is_from_me=message_is_from_me,
+            sender=message_sender,
+            messages=grouped_messages,
+            session_id=message_session,
+            tenant_id=message_tenant,
+        )
+        if message_tenant not in notified_tenants:
+            notified_tenants.add(message_tenant)
+            tenant_listener_count += len(crm_chat_listeners.get(message_tenant, []))
 
-    tenant_listener_count = len(crm_chat_listeners.get(resolved_tenant_id, []))
-    notified_count = len(lead_listeners.get(resolved_contact_id, [])) + tenant_listener_count
+    first_message = messages_list[0]
+    notified_count = sum(len(lead_listeners.get(scope, [])) for scope in notified_lead_scopes) + tenant_listener_count
     return {
         "status": "success",
-        "contact_id": resolved_contact_id,
-        "lead_id": resolved_contact_id,
-        "tenant_id": resolved_tenant_id,
-        "session_id": resolved_session_id,
-        "is_from_me": final_is_from_me,
-        "sender": final_sender,
+        "contact_id": first_message["contact_jid"],
+        "lead_id": first_message["contact_jid"],
+        "tenant_id": first_message["tenant_id"],
+        "session_id": first_message["session_id"],
+        "is_from_me": first_message["is_from_me"],
+        "sender": first_message["sender"],
         "messages_received": len(messages_list),
         "notified_sessions": notified_count,
-        "active_clients_connected": tenant_listener_count
+        "active_clients_connected": tenant_listener_count,
+        "notified_tenants": sorted(notified_tenants),
     }
 
 @router.post("/crm/update-chat")
@@ -687,12 +830,8 @@ async def deploy_webhook(request: Request, db: Session = Depends(get_db)):
 
     return {"status": "success"}
 
-@router.post("/inbound/whatsapp")
-async def whatsapp_inbound_webhook(request: Request):
-    """
-    Inbound webhook for WhatsApp messages.
-    Receives message payload and appends to in-memory conversation list.
-    """
+async def _process_legacy_inbound_message(request: Request, channel: str):
+    """Publishes a scoped event after the n8n workflow persisted the message."""
     signature = request.headers.get("X-Signature")
     if hasattr(settings, "WEBHOOK_SECRET") and settings.WEBHOOK_SECRET:
         import hmac
@@ -710,106 +849,63 @@ async def whatsapp_inbound_webhook(request: Request):
     session_id = payload.get("session_id") or payload.get("session")
     if not lead_id or not message_text:
         return {"status": "ignored", "reason": "missing lead_id or message"}
-        
-    from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS, n8n_service
-    n8n_service.invalidate_leads_cache()
-    
-    new_msg = {
-        "id": f"msg_in_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}",
-        "sender": sender,
-        "message": message_text,
-        "channel": "whatsapp",
-        "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
-        "contact_jid": lead_id,
-        "tenant_id": tenant_id,
-        "session_id": session_id,
-    }
-    if lead_id not in MOCK_CONVERSATIONS:
-        MOCK_CONVERSATIONS[lead_id] = []
-    MOCK_CONVERSATIONS[lead_id].append(new_msg)
-    
-    # Update last interaction timestamp on lead
-    for lead in MOCK_LEADS:
-        if lead["id"] == lead_id:
-            lead["last_interaction"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
-            if sender == "lead":
-                lead["status"] = "RESPONDED" # Toggle status to responded
-            break
-            
-    # Notify listeners in real time
-    await notify_lead_listeners(lead_id, "reload")
-    await notify_crm_chat_listeners(
-        lead_id,
-        is_from_me=sender == "user",
-        sender=sender,
-        messages=[new_msg],
-        session_id=session_id,
-        tenant_id=tenant_id,
+    if not tenant_id or not session_id:
+        return {"status": "ignored", "reason": "missing tenant_id or session_id"}
+
+    message_id = (
+        payload.get("message_id")
+        or payload.get("id")
+        or (payload.get("key") or {}).get("id")
+        or f"inbound_{uuid.uuid4().hex}"
     )
-            
+    try:
+        new_msg = _normalize_chat_event_message({
+            "id": message_id,
+            "message_id": message_id,
+            "sender": sender,
+            "is_from_me": payload.get("is_from_me", payload.get("from_me", payload.get("fromMe", False))),
+            "message": message_text,
+            "content": message_text,
+            "channel": channel,
+            "message_type": payload.get("message_type") or payload.get("type"),
+            "status": payload.get("status"),
+            "message_timestamp": payload.get("message_timestamp") or payload.get("timestamp") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
+            "contact_jid": lead_id,
+            "tenant_id": tenant_id,
+            "session_id": session_id,
+        })
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=f"Invalid inbound message: {error}") from error
+
+    from app.services.n8n_service import n8n_service
+    n8n_service.invalidate_leads_cache()
+
+    await notify_lead_listeners(
+        new_msg["contact_jid"],
+        "reload",
+        session_id=new_msg["session_id"],
+        tenant_id=new_msg["tenant_id"],
+    )
+    await notify_crm_chat_listeners(
+        new_msg["contact_jid"],
+        is_from_me=new_msg["is_from_me"],
+        sender=new_msg["sender"],
+        messages=[new_msg],
+        session_id=new_msg["session_id"],
+        tenant_id=new_msg["tenant_id"],
+    )
     return {"status": "success", "message": new_msg}
+
+
+@router.post("/inbound/whatsapp")
+async def whatsapp_inbound_webhook(request: Request):
+    """Inbound WhatsApp notification after persistence by n8n."""
+    return await _process_legacy_inbound_message(request, channel="whatsapp")
 
 @router.post("/inbound/instagram")
 async def instagram_inbound_webhook(request: Request):
-    """
-    Inbound webhook for Instagram messages.
-    Receives message payload and appends to in-memory conversation list.
-    """
-    signature = request.headers.get("X-Signature")
-    if hasattr(settings, "WEBHOOK_SECRET") and settings.WEBHOOK_SECRET:
-        import hmac
-        import hashlib
-        body = await request.body()
-        expected_signature = hmac.new(settings.WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
-        if not signature or not hmac.compare_digest(signature, expected_signature):
-            return {"status": "ignored", "reason": "invalid signature"}
-
-    payload = await request.json()
-    lead_id = payload.get("lead_id")
-    message_text = payload.get("message")
-    sender = payload.get("sender", "lead")
-    tenant_id = payload.get("tenant_id") or payload.get("tenant")
-    session_id = payload.get("session_id") or payload.get("session")
-    if not lead_id or not message_text:
-        return {"status": "ignored", "reason": "missing lead_id or message"}
-        
-    from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS, n8n_service
-    n8n_service.invalidate_leads_cache()
-    
-    new_msg = {
-        "id": f"msg_in_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}",
-        "sender": sender,
-        "message": message_text,
-        "channel": "instagram",
-        "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
-        "contact_jid": lead_id,
-        "tenant_id": tenant_id,
-        "session_id": session_id,
-    }
-    if lead_id not in MOCK_CONVERSATIONS:
-        MOCK_CONVERSATIONS[lead_id] = []
-    MOCK_CONVERSATIONS[lead_id].append(new_msg)
-    
-    # Update last interaction timestamp on lead
-    for lead in MOCK_LEADS:
-        if lead["id"] == lead_id:
-            lead["last_interaction"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
-            if sender == "lead":
-                lead["status"] = "RESPONDED"
-            break
-            
-    # Notify listeners in real time
-    await notify_lead_listeners(lead_id, "reload")
-    await notify_crm_chat_listeners(
-        lead_id,
-        is_from_me=sender == "user",
-        sender=sender,
-        messages=[new_msg],
-        session_id=session_id,
-        tenant_id=tenant_id,
-    )
-            
-    return {"status": "success", "message": new_msg}
+    """Inbound Instagram notification after persistence by n8n."""
+    return await _process_legacy_inbound_message(request, channel="instagram")
 @router.post("/waha/session-status")
 async def waha_session_status_webhook(request: Request):
     """
@@ -851,7 +947,7 @@ async def n8n_outbound_whatsapp_send(
     if not x_master_api_key or x_master_api_key != settings.WHATSAPP_MASTER_SECRET:
         raise HTTPException(status_code=401, detail="Invalid or missing Master API Key")
 
-    session_id = payload.get("session_id", "default")
+    session_id = payload.get("session_id")
     phone = payload.get("phone") or payload.get("number") or payload.get("jid") or payload.get("contact_jid")
     message = payload.get("message") or payload.get("text")
     media = payload.get("media")
@@ -867,6 +963,8 @@ async def n8n_outbound_whatsapp_send(
 
     if not phone:
         raise HTTPException(status_code=400, detail="Missing phone, number or jid")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Missing session_id")
 
     cleaned_phone = "".join(filter(str.isdigit, str(phone)))
     final_jid = phone if "@" in str(phone) else f"{cleaned_phone}@s.whatsapp.net"
@@ -874,7 +972,9 @@ async def n8n_outbound_whatsapp_send(
     from app.api.endpoints.whatsapp import make_whatsapp_api_request
     from app.services.identity_service import get_m2m_jwt
     
-    tenant_id = payload.get("tenant_id") or getattr(settings, "ADMIN_TENANT_ID", "admin") or "admin"
+    tenant_id = payload.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="Missing tenant_id")
     jwt_token = await get_m2m_jwt(tenant_id=tenant_id, scope="whatsapp:messages:send")
     
     headers = {

@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 import secrets
 
 from app.main import app
+from app.core.auth import decode_access_token
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User
 
@@ -44,6 +46,7 @@ def test_login_success(mock_db):
             assert response.status_code == 200
             assert "access_token" in response.json()
             assert "refresh_token" in response.json()
+            assert decode_access_token(response.json()["access_token"])["tenant_id"] == settings.ADMIN_TENANT_ID
 
 def test_login_invalid_credentials(mock_db):
     with patch("app.api.endpoints.auth.get_db", return_value=mock_db):

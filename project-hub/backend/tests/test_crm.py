@@ -95,7 +95,12 @@ def test_send_message(mock_send_whatsapp_message, mock_get_tenant_id, mock_notif
     assert response.json()["message"] == "Test message"
     assert "msg1" in response.json()["id"] or "msg_" in response.json()["id"]
     mock_send_whatsapp_message.assert_called_once()
-    mock_notify_lead.assert_awaited_once_with("5511999999999@s.whatsapp.net", "reload")
+    mock_notify_lead.assert_awaited_once_with(
+        "5511999999999@s.whatsapp.net",
+        "reload",
+        session_id="session1",
+        tenant_id="admin",
+    )
     mock_notify_crm.assert_awaited_once()
     event = mock_notify_crm.await_args.kwargs
     assert event["tenant_id"] == "admin"
