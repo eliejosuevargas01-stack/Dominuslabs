@@ -388,3 +388,27 @@ def test_websocket_heartbeat_removes_a_half_open_connection(monkeypatch):
 
     assert websocket.messages == [{"event": "ping"}]
     assert tenant_id not in orders.websocket_listeners
+
+def test_total_derived_when_subtotals_are_zero(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
+    payload = {
+        "pedido": {
+            "id": "order-zero-totals", "tenant_id": "admin", "cliente_id": "client@lid",
+            "status": "ativo", "metodo_pagamento": "padrao", "tipo_entrega": "padrao",
+            "endereco_entrega": {"endereco_completo": "rua 1"}, "taxa_entrega": "5.00",
+            "subtotal": "0.00", "valor_total": "0.00",
+            "created_at": "2026-08-31T14:48:07.915Z", "updated_at": "2026-08-31T14:48:07.916Z",
+        },
+        "itens": [
+            {"id": "item-1", "tenant_id": "admin", "pedido_id": "order-zero-totals", "produto_id": "prod-1", "nome_produto": "Produto 1", "quantidade": 2, "preco_unitario": "15.00", "subtotal": "30.00", "observacoes": None, "created_at": "2026-08-31T14:48:07.915Z"},
+            {"id": "item-2", "tenant_id": "admin", "pedido_id": "order-zero-totals", "produto_id": "prod-2", "nome_produto": "Produto 2", "quantidade": 1, "preco_unitario": "10.00", "subtotal": "10.00", "observacoes": None, "created_at": "2026-08-31T14:48:07.915Z"},
+        ],
+    }
+    response = client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"})
+    assert response.status_code == 201
+
+    data = response.json()
+    # 2 * 15.00 + 1 * 10.00 + 5.00 (taxa) = 45.00
+    assert data["order"]["total"] == 45.0
