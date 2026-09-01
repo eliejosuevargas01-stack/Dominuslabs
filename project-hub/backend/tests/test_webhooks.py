@@ -211,3 +211,47 @@ def test_crm_update_chat_notifies_each_tenant_and_session_separately(client):
         assert [message["message_id"] for message in event_b["messages"]] == ["b-1"]
     finally:
         webhooks.crm_chat_listeners.clear()
+
+def test_normalize_chat_event_message_prioritizes_remote_contact_for_outbound():
+    from app.api.endpoints.webhooks import _normalize_chat_event_message
+
+    # 1. Outbound message from Evolution API where local JID might be in `contact_jid` but recipient is in `participant`/`remoteJid`
+    raw_message = {
+        "id": "msg-123",
+        "session_id": "session-1",
+        "tenant_id": "tenant-1",
+        "is_from_me": True,
+        "contact_jid": "local_jid@s.whatsapp.net",  # Might incorrectly contain local JID
+        "participant": "remote_jid@s.whatsapp.net",
+        "key": {
+            "remoteJid": "remote_jid@s.whatsapp.net"
+        }
+    }
+
+    normalized = _normalize_chat_event_message(
+        raw_message,
+        contact_id="local_jid@s.whatsapp.net"
+    )
+
+    assert normalized["is_from_me"] is True
+    assert normalized["sender"] == "user"
+    assert normalized["contact_jid"] == "remote_jid@s.whatsapp.net", "Outbound message should prioritize remote contact as contact_jid, not the local JID"
+
+def test_normalize_chat_event_message_uses_contact_jid_for_inbound():
+    from app.api.endpoints.webhooks import _normalize_chat_event_message
+
+    # 2. Inbound message where remote contact is typically in contact_jid
+    raw_message = {
+        "id": "msg-456",
+        "session_id": "session-1",
+        "tenant_id": "tenant-1",
+        "is_from_me": False,
+        "contact_jid": "remote_jid@s.whatsapp.net",
+        "participant": "remote_jid@s.whatsapp.net",
+    }
+
+    normalized = _normalize_chat_event_message(raw_message)
+
+    assert normalized["is_from_me"] is False
+    assert normalized["sender"] == "lead"
+    assert normalized["contact_jid"] == "remote_jid@s.whatsapp.net"

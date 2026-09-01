@@ -1950,6 +1950,8 @@ class N8NService:
             "message": message_text,
             "lead_id": lead_id,
             "contact_jid": contact_jid,
+            "is_from_me": True,
+            "sender": "user",
         }
         if lid:
             outgoing_payload["lid"] = lid

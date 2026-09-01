@@ -11,6 +11,10 @@ type SessionScopedRecord = {
   remoteJid?: unknown;
   to?: unknown;
   recipient?: unknown;
+  participant?: unknown;
+  is_from_me?: unknown;
+  from_me?: unknown;
+  fromMe?: unknown;
   key?: { remoteJid?: unknown };
   messages?: unknown;
   mensagens?: unknown;
@@ -78,6 +82,25 @@ export function jidsMatch(first: unknown, second: unknown): boolean {
 }
 
 function contactJids(record: SessionScopedRecord): unknown[] {
+  const isFromMe = record.is_from_me || record.from_me || record.fromMe;
+
+  if (isFromMe) {
+    // For outbound messages, the local JID might be in 'jid' or 'contact_jid' depending on backend payload
+    // We must prioritize the remote recipient to avoid matching our own session JID
+    return [
+      record.key?.remoteJid,
+      record.participant,
+      record.to,
+      record.recipient,
+      record.contact_jid,
+      record.remoteJid,
+      record.jid,
+      record.chat_jid,
+      record.group_jid,
+      record.phone,
+    ].filter(Boolean);
+  }
+
   return [
     record.contact_jid,
     record.chat_jid,
@@ -86,6 +109,7 @@ function contactJids(record: SessionScopedRecord): unknown[] {
     record.phone,
     record.remoteJid,
     record.key?.remoteJid,
+    record.participant,
     record.to,
     record.recipient,
   ].filter(Boolean);
