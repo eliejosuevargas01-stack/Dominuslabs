@@ -1,0 +1,165 @@
+# QA Report
+## Commands Executed
+- \`cd project-hub/backend && pip install -r requirements.txt\`
+- \`cd project-hub/backend && pip install pytest pytest-asyncio pytest-mock pytest-cov PyJWT\`
+- \`cd project-hub/backend && python -m pytest --cov=app --cov-report=term-missing\`
+
+## Results
+- 71 tests collected and executed
+- All tests passed successfully
+- Coverage: Overall backend coverage is at 51%, with significant room for improvement in `app/api/endpoints/whatsapp.py` (27% coverage) and `app/services/n8n_service.py` (11% coverage).
+
+## Failures
+- No tests failed during execution.
+
+## Limitations
+- We attempted to run tests on the frontend side in the \`src\` directory using Vitest, however the environment could not be set up successfully without significant modifications or changes to existing dependencies, which violates the constraint of "Não altere o código nem crie uma implementação".
+
+## Pytest Raw Output (Summary)
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: /app/project-hub/backend
+plugins: mock-3.15.1, cov-7.1.0, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 71 items
+
+tests/test_auth.py .......                                               [  9%]
+tests/test_company_settings.py .                                         [ 11%]
+tests/test_crm.py .....                                                  [ 18%]
+tests/test_e2e_jwt_flow.py .                                             [ 19%]
+tests/test_health.py .                                                   [ 21%]
+tests/test_n8n_scoping.py ...                                            [ 25%]
+tests/test_order_websocket.py ...........                                [ 40%]
+tests/test_product_media.py ...                                          [ 45%]
+tests/test_products.py ......                                            [ 53%]
+tests/test_projects.py ........                                          [ 64%]
+tests/test_uploads.py ....                                               [ 70%]
+tests/test_users.py ......                                               [ 78%]
+tests/test_webhooks.py ........                                          [ 90%]
+tests/test_whatsapp.py .......                                           [100%]
+
+=============================== warnings summary ===============================
+../../../home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+app/core/config.py:26
+  /app/project-hub/backend/app/core/config.py:26: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class Settings(BaseSettings):
+
+app/schemas/project.py:53
+  /app/project-hub/backend/app/schemas/project.py:53: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ProjectInDBBase(ProjectBase):
+
+app/schemas/task.py:43
+  /app/project-hub/backend/app/schemas/task.py:43: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ProjectTask(ProjectTaskBase):
+
+app/schemas/asset.py:31
+  /app/project-hub/backend/app/schemas/asset.py:31: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ProjectAsset(ProjectAssetBase):
+
+app/schemas/logs.py:32
+  /app/project-hub/backend/app/schemas/logs.py:32: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class CommitLog(CommitLogBase):
+
+app/schemas/logs.py:72
+  /app/project-hub/backend/app/schemas/logs.py:72: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class DeployLog(DeployLogBase):
+
+app/api/endpoints/projects.py:24
+  /app/project-hub/backend/app/api/endpoints/projects.py:24: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class PublicProjectDetail(BaseModel):
+
+app/schemas/feedback.py:33
+  /app/project-hub/backend/app/schemas/feedback.py:33: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class Feedback(FeedbackBase):
+
+app/api/endpoints/projects.py:212
+  /app/project-hub/backend/app/api/endpoints/projects.py:212: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ShowcaseProject(BaseModel):
+
+app/schemas/user.py:45
+  /app/project-hub/backend/app/schemas/user.py:45: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class UserResponse(UserBase):
+
+app/schemas/company_setting.py:89
+  /app/project-hub/backend/app/schemas/company_setting.py:89: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class CompanySettingResponse(CompanySettingBase):
+
+app/schemas/product_media.py:31
+  /app/project-hub/backend/app/schemas/product_media.py:31: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ProductMediaResponse(ProductMediaBase):
+
+app/schemas/product.py:50
+  /app/project-hub/backend/app/schemas/product.py:50: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class ProductResponse(ProductBase):
+
+../../../home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/pydantic/_internal/_config.py:386
+  /home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/pydantic/_internal/_config.py:386: UserWarning: Valid config keys have changed in V2:
+  * 'orm_mode' has been renamed to 'from_attributes'
+    warnings.warn(message, UserWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.13-final-0 _______________
+
+Name                                       Stmts   Miss  Cover   Missing
+------------------------------------------------------------------------
+app/api/endpoints/auth.py                    131     32    76%   70-118, 139-140, 259, 261
+app/api/endpoints/company_setting.py          13      0   100%
+app/api/endpoints/crm.py                     263    155    41%   27, 33-47, 62-67, 78-83, 95-102, 113-115, 135, 145-147, 163-187, 219-247, 261-310, 325-336, 357-360, 369-374, 391, 395, 402, 456-457, 493-567, 581-598, 633-634, 646-647
+app/api/endpoints/health.py                    8      0   100%
+app/api/endpoints/orders.py                  347    154    56%   107-120, 124-131, 291-295, 299-300, 304-310, 337, 344, 399, 409-433, 442-443, 473-485, 496-510, 522-545, 559-588, 598-648
+app/api/endpoints/product_media.py            32      0   100%
+app/api/endpoints/products.py                 60      0   100%
+app/api/endpoints/projects.py                139     14    90%   92, 105, 114, 156, 167-176, 187, 207, 268
+app/api/endpoints/uploads.py                  45      4    91%   33-36, 54
+app/api/endpoints/users.py                    54      5    91%   39, 55, 62, 78, 102
+app/api/endpoints/webhooks.py                483    262    46%   51, 57-63, 81, 103, 114, 119-124, 126, 157-195, 213-245, 253, 259, 299, 301, 303, 305, 345-347, 349, 353, 367-368, 371, 479, 501-502, 505, 515-546, 556-582, 593-600, 604-605, 619, 625-653, 665, 670-671, 687-708, 723-764, 774-793, 811, 814-815, 835-897, 903, 908, 915-939, 957, 965, 967, 977, 996, 1000
+app/api/endpoints/whatsapp.py                338    246    27%   30-51, 63-64, 79-247, 265-281, 297-342, 375-376, 393-394, 443-444, 460-461, 477-478, 495-528, 546-555, 572-573, 610, 616, 639, 647-669, 688, 709-752, 761-765
+app/api/router.py                             15      0   100%
+app/core/auth.py                             109     17    84%   70, 81, 85, 88-89, 100, 103, 105, 111, 114, 129, 133, 140, 143, 147, 186, 223
+app/core/config.py                            60      6    90%   10, 15, 68-71
+app/core/crypto.py                           133    104    22%   35-76, 82, 84, 88-90, 101-147, 155-220
+app/core/database.py                          17      2    88%   20-21
+app/core/http_client.py                       25      8    68%   47-55
+app/core/limiter.py                            3      0   100%
+app/core/middleware.py                        83     20    76%   40, 45, 68, 70, 72-86, 96, 98-100, 137-138, 164-171
+app/core/security.py                          13      2    85%   32-33
+app/main.py                                  213    105    51%   52, 54, 56, 58, 60, 62, 64, 66, 70, 72-97, 120-127, 130, 135, 139-146, 149, 152-154, 205-247, 266-312, 324, 346-350, 358-385, 395
+app/models/asset.py                           14      0   100%
+app/models/company_setting.py                 39      0   100%
+app/models/feedback.py                        16      0   100%
+app/models/logs.py                            22      0   100%
+app/models/order_manager.py                   39      1    97%   14
+app/models/product.py                         19      0   100%
+app/models/product_media.py                   11      0   100%
+app/models/project.py                         33      0   100%
+app/models/task.py                            19      0   100%
+app/models/user.py                            22      0   100%
+app/models/whatsapp_account.py                12      0   100%
+app/repositories/asset_repo.py                13      1    92%   25
+app/repositories/company_setting_repo.py      28      4    86%   43-46
+app/repositories/log_repo.py                  24      8    67%   47-54
+app/repositories/project_repo.py              32      0   100%
+app/repositories/task_repo.py                 27     12    56%   48-61
+app/repositories/user_repo.py                 38     12    68%   27, 45, 75-87
+app/schemas/asset.py                          15      0   100%
+app/schemas/company_setting.py                53      0   100%
+app/schemas/crm.py                           100      0   100%
+app/schemas/feedback.py                       17      0   100%
+app/schemas/logs.py                           27      0   100%
+app/schemas/product.py                        27      0   100%
+app/schemas/product_media.py                  15      0   100%
+app/schemas/project.py                        36      0   100%
+app/schemas/task.py                           21      0   100%
+app/schemas/user.py                           21      0   100%
+app/services/identity_service.py              90     34    62%   29, 37, 46-47, 63-64, 86-89, 101-108, 119-121, 129-146, 154-155
+app/services/n8n_service.py                 1226   1091    11%   38-42, 77-86, 93-383, 392-396, 403-413, 422-439, 448-603, 611-850, 856-877, 886-888, 897-1023, 1056-1058, 1068-1088, 1098-1113, 1130, 1236-1270, 1285-1289, 1291-1292, 1303-1310, 1316-1339, 1346-1412, 1419, 1430-1473, 1495-1610, 1620-1652, 1662-1839, 1849-1878, 1888-2029, 2044-2056, 2066-2068
+app/services/project_service.py               13      3    77%   30-33
+app/services/webhook_service.py               28      2    93%   68-75
+app/services/whatsapp_service.py              59     29    51%   37-43, 50-70, 77-78, 83-84
+------------------------------------------------------------------------
+TOTAL                                       4740   2333    51%
+======================= 71 passed, 15 warnings in 12.81s =======================
