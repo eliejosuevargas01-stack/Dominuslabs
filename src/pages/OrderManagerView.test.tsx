@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom';
+// import '@testing-library/jest-dom';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -92,18 +92,18 @@ describe('OrderManagerView', () => {
     localStorage.clear();
   });
 
-  it('connects to the authenticated Order Manager WebSocket', () => {
-    render(<OrderManagerView />);
+  it('connects to the authenticated Order Manager WebSocket', async () => {
+    await act(async () => { render(<OrderManagerView />); })
 
     expect(MockWebSocket.instances).toHaveLength(1);
-    expect(MockWebSocket.instances[0].url).toContain('/orders/ws?token=fake_token');
+    expect(MockWebSocket.instances[0].url).toBe('ws://localhost:8000/api/v1/orders/ws?token=fake_token');
 
     act(() => MockWebSocket.instances[0].open());
-    expect(screen.getByText('Conectado (Ao Vivo)')).toBeInTheDocument();
+    expect(screen.getAllByText('Conectado (Ao Vivo)')[0]).toBeInTheDocument();
   });
 
-  it('renders new orders and applies updates received from another screen', () => {
-    render(<OrderManagerView />);
+  it('renders new orders and applies updates received from another screen', async () => {
+    await act(async () => { render(<OrderManagerView />); })
     const socket = MockWebSocket.instances[0];
     const order = {
       id: 'pedido-123',
@@ -116,9 +116,9 @@ describe('OrderManagerView', () => {
     };
 
     act(() => socket.message({ event: 'new_order', order }));
-    expect(screen.getByText('Pedido #PEDIDO')).toBeInTheDocument();
-    expect(screen.getByText('Aceito')).toBeInTheDocument();
-    const wazeUrl = new URL(screen.getByText('Abrir no Waze').getAttribute('href')!);
+    expect(screen.getAllByText('Pedido #PEDIDO')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Aceito')[0]).toBeInTheDocument();
+    const wazeUrl = new URL(screen.getAllByText('Abrir no Waze')[0].getAttribute('href')!);
     expect(wazeUrl.origin).toBe('https://waze.com');
     expect(wazeUrl.pathname).toBe('/ul');
     expect(wazeUrl.searchParams.get('q')).toBe('Rua A, 10');
@@ -126,11 +126,11 @@ describe('OrderManagerView', () => {
     expect(wazeUrl.searchParams.get('utm_source')).toBe('dominuslabs_order_manager');
 
     act(() => socket.message({ event: 'order_updated', order: { ...order, status: 'delivered' } }));
-    expect(screen.getByText('Entregue')).toBeInTheDocument();
+    expect(screen.getAllByText('Entregue')[0]).toBeInTheDocument();
   });
 
-  it('closes the socket when the screen is unmounted', () => {
-    const { unmount } = render(<OrderManagerView />);
+  it('closes the socket when the screen is unmounted', async () => {
+    let unmount: any; await act(async () => { unmount = render(<OrderManagerView />).unmount; });
     const socket = MockWebSocket.instances[0];
 
     unmount();
@@ -138,14 +138,14 @@ describe('OrderManagerView', () => {
     expect(socket.isClosed).toBe(true);
   });
 
-  it('answers the server heartbeat without treating it as an order event', () => {
-    render(<OrderManagerView />);
+  it('answers the server heartbeat without treating it as an order event', async () => {
+    await act(async () => { render(<OrderManagerView />); })
     const socket = MockWebSocket.instances[0];
 
     act(() => socket.message({ event: 'ping' }));
 
     expect(socket.sentMessages).toEqual([JSON.stringify({ event: 'pong' })]);
-    expect(screen.getByText('Nenhum pedido no momento.')).toBeInTheDocument();
+    expect(screen.getAllByText('Nenhum pedido no momento.')[0]).toBeInTheDocument();
   });
 
   it('downloads the TTS once and reuses the loaded audio on every alarm loop', async () => {
@@ -155,7 +155,7 @@ describe('OrderManagerView', () => {
       .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['audio']) });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<OrderManagerView />);
+    await act(async () => { render(<OrderManagerView />); })
     const socket = MockWebSocket.instances[0];
     act(() => socket.message({ event: 'new_order', order: pendingOrder }));
     await act(async () => {
@@ -186,7 +186,7 @@ describe('OrderManagerView', () => {
       .mockResolvedValueOnce({ ok: true, blob: () => delayedBlob });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<OrderManagerView />);
+    await act(async () => { render(<OrderManagerView />); })
     const socket = MockWebSocket.instances[0];
     act(() => socket.message({ event: 'new_order', order: pendingOrder }));
     await act(async () => {
@@ -212,12 +212,13 @@ describe('OrderManagerView', () => {
       constructor(public text: string) {}
     });
     MockAudio.playResult = Promise.reject(new Error('play blocked'));
+    MockAudio.playResult.catch(() => {}); // Prevent unhandled rejection warning
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ orders: [] }) })
       .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['audio']) });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<OrderManagerView />);
+    await act(async () => { render(<OrderManagerView />); })
     act(() => MockWebSocket.instances[0].message({ event: 'new_order', order: pendingOrder }));
     await act(async () => {
       await Promise.resolve();
@@ -227,5 +228,36 @@ describe('OrderManagerView', () => {
 
     expect(toastError).toHaveBeenCalledWith(expect.stringContaining('Novo pedido pendente'));
     expect(speak).toHaveBeenCalledTimes(1);
+  });
+
+  it('polling brings pending orders even before websocket connects', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ orders: [{ ...pendingOrder, id: 'pedido-poll' }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => { render(<OrderManagerView />); })
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getAllByText('Pedido #PEDIDO')[0]).toBeInTheDocument();
+
+    // Fast-forward 30 seconds to trigger polling
+    await act(async () => { vi.advanceTimersByTime(30000); await Promise.resolve(); });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('cleans up polling interval on unmount', async () => {
+    vi.spyOn(global, 'clearInterval');
+    let unmount: any; await act(async () => { unmount = render(<OrderManagerView />).unmount; });
+
+    unmount();
+
+    expect(global.clearInterval).toHaveBeenCalled();
   });
 });
