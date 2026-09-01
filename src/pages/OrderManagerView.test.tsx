@@ -1,5 +1,5 @@
-// import '@testing-library/jest-dom';
-import { act, render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
@@ -158,21 +158,24 @@ describe('OrderManagerView', () => {
     await act(async () => { render(<OrderManagerView />); })
     const socket = MockWebSocket.instances[0];
     act(() => socket.message({ event: 'new_order', order: pendingOrder }));
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
     const audio = MockAudio.instances[0];
-    expect(audio.play).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(audio.play).toHaveBeenCalledTimes(1);
+    });
 
     act(() => {
       audio.onended?.();
       vi.advanceTimersByTime(10_000);
     });
 
-    expect(audio.play).toHaveBeenCalledTimes(2);
+    await waitFor(() => {
+      expect(audio.play).toHaveBeenCalledTimes(2);
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -189,20 +192,21 @@ describe('OrderManagerView', () => {
     await act(async () => { render(<OrderManagerView />); })
     const socket = MockWebSocket.instances[0];
     act(() => socket.message({ event: 'new_order', order: pendingOrder }));
-    await act(async () => {
-      await Promise.resolve();
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
     const audio = MockAudio.instances[0];
     act(() => socket.message({ event: 'order_updated', order: { ...pendingOrder, status: 'accepted' } }));
-    await act(async () => {
-      resolveBlob(new Blob(['audio']));
-      await Promise.resolve();
-      await Promise.resolve();
+
+    act(() => resolveBlob(new Blob(['audio'])));
+
+    await waitFor(() => {
+      expect(MockURL.revokeObjectURL).toHaveBeenCalledWith('blob:order-alarm');
     });
 
     expect(audio.play).not.toHaveBeenCalled();
-    expect(MockURL.revokeObjectURL).toHaveBeenCalledWith('blob:order-alarm');
   });
 
   it('uses visible and spoken fallback when browser audio is blocked', async () => {
@@ -220,14 +224,12 @@ describe('OrderManagerView', () => {
 
     await act(async () => { render(<OrderManagerView />); })
     act(() => MockWebSocket.instances[0].message({ event: 'new_order', order: pendingOrder }));
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+
+    await waitFor(() => {
+      expect(speak).toHaveBeenCalledTimes(1);
     });
 
     expect(toastError).toHaveBeenCalledWith(expect.stringContaining('Novo pedido pendente'));
-    expect(speak).toHaveBeenCalledTimes(1);
   });
 
   it('polling brings pending orders even before websocket connects', async () => {
@@ -240,16 +242,16 @@ describe('OrderManagerView', () => {
 
     await act(async () => { render(<OrderManagerView />); })
 
-    await act(async () => {
-      await Promise.resolve();
+    await waitFor(() => {
+      expect(screen.getAllByText('Pedido #PEDIDO')[0]).toBeInTheDocument();
     });
 
-    expect(screen.getAllByText('Pedido #PEDIDO')[0]).toBeInTheDocument();
-
     // Fast-forward 30 seconds to trigger polling
-    await act(async () => { vi.advanceTimersByTime(30000); await Promise.resolve(); });
+    act(() => vi.advanceTimersByTime(30000));
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('cleans up polling interval on unmount', async () => {
