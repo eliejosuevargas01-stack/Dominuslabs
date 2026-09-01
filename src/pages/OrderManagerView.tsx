@@ -1,15 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { ShoppingBag, Check, MapPin, DollarSign, Clock } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 /**
  * Documentation-Driven Testing:
  * O comportamento esperado para OrderManagerView.tsx:
- * - `useOrdersSSE`: Conecta via EventSource à `/api/v1/orders/events`. Recebe eventos `new_order`.
+ * - `useOrdersWebSocket`: Conecta via WebSocket à `/api/v1/orders/ws`. Recebe eventos `new_order` e `order_updated`.
  * - `Card de Pedido`: Exibe detalhes do pedido (nome, valor, endereço, itens).
  * - `Botão Aceitar`: Para o loop de áudio e atualiza o status do pedido localmente ou via API.
- * - `Link Waze`: Abre a URL `https://waze.com/ul?q=endereco_encode` em nova aba.
+ * - `Link Waze`: Abre uma rota de navegação HTTPS com endereço codificado.
  * - `Áudio TTS`: Toca em loop "Olá..." a cada 15s até aceitar o pedido.
  */
 
@@ -33,6 +32,24 @@ interface Order {
 
 type OperationalStatus = 'ready_for_delivery' | 'out_for_delivery' | 'delivered';
 
+type ActiveAlarm = {
+  audio: HTMLAudioElement;
+  abortController: AbortController;
+  interval?: ReturnType<typeof setTimeout>;
+  blobUrl?: string;
+};
+
+function buildWazeNavigationUrl(address: string): string | null {
+  const normalizedAddress = address.trim().replace(/\s+/g, ' ');
+  if (!normalizedAddress) return null;
+
+  const url = new URL('https://waze.com/ul');
+  url.searchParams.set('q', normalizedAddress);
+  url.searchParams.set('navigate', 'yes');
+  url.searchParams.set('utm_source', 'dominuslabs_order_manager');
+  return url.toString();
+}
+
 const statusLabels: Record<Order['status'], string> = {
   pending: 'Pendente',
   accepted: 'Aceito',
@@ -43,17 +60,19 @@ const statusLabels: Record<Order['status'], string> = {
   cancelled: 'Cancelado',
 };
 
-// Custom Hook for SSE Orders
-function useOrdersSSE() {
+// Custom Hook for real-time Orders
+function useOrdersWebSocket() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [announcedOrderIds, setAnnouncedOrderIds] = useState<Set<string>>(new Set());
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
 
   useEffect(() => {
-    let eventController: AbortController | null = null;
-    const connect = () => {
-      setConnectionStatus('connecting');
-      try {
+    let websocket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let pollingTimer: ReturnType<typeof setInterval> | null = null;
+    let disposed = false;
+
+    const fetchOrders = () => {
         const token = localStorage.getItem('admin_token');
         const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
         fetch(`${API_BASE}/orders`, { headers: authHeaders })
@@ -63,53 +82,82 @@ function useOrdersSSE() {
           })
           .then(data => {
             if (Array.isArray(data.orders)) {
+              let newIds: string[] = [];
               setOrders(prev => {
-                const byId = new Map<string, Order>(data.orders.map((order: Order) => [order.id, order] as [string, Order]));
-                prev.forEach(order => byId.set(order.id, order));
+                const byId = new Map<string, Order>(prev.map(order => [order.id, order] as [string, Order]));
+                data.orders.forEach((incoming: Order) => {
+                  if (!byId.has(incoming.id) && incoming.status === 'pending') {
+                    newIds.push(incoming.id);
+                  }
+                  byId.set(incoming.id, incoming);
+                });
                 return Array.from(byId.values());
               });
+              if (newIds.length > 0) {
+                setAnnouncedOrderIds(prev => {
+                  const newSet = new Set(prev);
+                  newIds.forEach(id => newSet.add(id));
+                  return newSet;
+                });
+              }
             }
           })
           .catch(error => console.error('Erro ao carregar pedidos persistidos:', error));
-        // Usar EventSource nativo ou polyfill dependendo da necessidade de auth (EventSource nativo não suporta headers, então podemos precisar enviar token via query string se aplicável)
-        // Por simplicidade na simulação:
-        eventController = new AbortController();
-        fetchEventSource(`${API_BASE}/orders/events`, {
-          headers: authHeaders,
-          signal: eventController.signal,
-          onopen: async response => {
-            if (!response.ok) throw new Error(`SSE failed: ${response.status}`);
-            setConnectionStatus('connected');
-          },
-          onmessage: event => {
-            try {
-              const data = JSON.parse(event.data);
-              if (data.event === 'new_order' && data.order) {
-                setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
-                setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
-              } else if (data.event === 'order_updated' && data.order) {
-                setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
+    };
+
+    const connect = () => {
+      setConnectionStatus('connecting');
+      try {
+        const token = localStorage.getItem('admin_token');
+        const websocketBase = API_BASE.replace(/^http/, 'ws');
+        websocket = new WebSocket(`${websocketBase}/orders/ws?token=${encodeURIComponent(token || '')}`);
+        websocket.onopen = () => setConnectionStatus('connected');
+        websocket.onmessage = event => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.event === 'ping') {
+              websocket?.send(JSON.stringify({ event: 'pong' }));
+            } else if (data.event === 'new_order' && data.order) {
+              setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
+              setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
+            } else if (data.event === 'order_updated' && data.order) {
+              if (data.order.status !== 'pending') {
+                setAnnouncedOrderIds(prev => {
+                  const newSet = new Set(prev);
+                  newSet.delete(data.order.id);
+                  return newSet;
+                });
               }
-            } catch (e) { console.error('Error parsing SSE event:', e); }
-          },
-          onclose: () => setConnectionStatus('disconnected'),
-          onerror: error => {
-            setConnectionStatus('disconnected');
-            throw error;
-          },
-        }).catch(error => {
-          if (!eventController?.signal.aborted) console.error('SSE Error:', error);
-        });
+              setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
+            }
+          } catch (error) {
+            console.error('Erro ao processar mensagem do WebSocket:', error);
+          }
+        };
+        websocket.onerror = () => websocket?.close();
+        websocket.onclose = () => {
+          if (disposed) return;
+          setConnectionStatus('disconnected');
+          reconnectTimer = setTimeout(connect, 5000);
+        };
       } catch (error) {
-        console.error('Failed to initialize SSE:', error);
+        console.error('Falha ao iniciar WebSocket:', error);
         setConnectionStatus('disconnected');
       }
     };
 
+    // The database is the durable source of truth. This reconciliation keeps
+    // the screen current even when a WebSocket is connected to another app
+    // worker than the one which received the n8n webhook.
+    fetchOrders();
+    pollingTimer = setInterval(fetchOrders, 120000);
     connect();
 
     return () => {
-      eventController?.abort();
+      disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (pollingTimer) clearInterval(pollingTimer);
+      websocket?.close();
     };
   }, []);
 
@@ -117,8 +165,17 @@ function useOrdersSSE() {
 }
 
 export default function OrderManagerView() {
-  const { orders, setOrders, announcedOrderIds, connectionStatus } = useOrdersSSE();
-  const activeAlarms = useRef<{ [orderId: string]: { audio?: HTMLAudioElement, interval?: any, blobUrl?: string } }>({});
+  const { orders, setOrders, announcedOrderIds, connectionStatus } = useOrdersWebSocket();
+  const activeAlarms = useRef<Record<string, ActiveAlarm>>({});
+
+  const announceAudioFallback = (order: Order) => {
+    const message = `Novo pedido pendente ${order.id}. Ative o som desta tela.`;
+    toast.error(message);
+    if ('speechSynthesis' in window && 'SpeechSynthesisUtterance' in window) {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(message));
+    }
+  };
 
   useEffect(() => {
     // Check for new pending orders and start alarm
@@ -141,46 +198,74 @@ export default function OrderManagerView() {
   const playAlarm = (order: Order) => {
     const token = localStorage.getItem('admin_token');
     const audio = new Audio();
-    let blobUrl: string | undefined;
-    const loadAudio = async () => {
-      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(order.id)}/tts-alarm`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!response.ok) throw new Error('Falha ao carregar TTS');
-      blobUrl = URL.createObjectURL(await response.blob());
-      if (activeAlarms.current[order.id]?.blobUrl) URL.revokeObjectURL(activeAlarms.current[order.id].blobUrl!);
-      if (activeAlarms.current[order.id]) activeAlarms.current[order.id].blobUrl = blobUrl;
-      audio.src = blobUrl;
-      await audio.play();
-    };
-    
-    const playNext = () => {
-      loadAudio().catch(e => console.error("Erro ao tocar alarme neural:", e));
+    const abortController = new AbortController();
+    activeAlarms.current[order.id] = { audio, abortController };
+
+    const replay = () => {
+      const alarm = activeAlarms.current[order.id];
+      if (!alarm || alarm.audio !== audio) return;
+
+      audio.currentTime = 0;
+      void audio.play().catch(() => announceAudioFallback(order));
     };
 
     audio.onended = () => {
       // Repete o alarme após 10 segundos de silêncio
-      const interval = setTimeout(playNext, 10000) as any;
-      if (activeAlarms.current[order.id]) {
-         activeAlarms.current[order.id].interval = interval;
-      }
+      const alarm = activeAlarms.current[order.id];
+      if (!alarm || alarm.audio !== audio) return;
+      alarm.interval = setTimeout(replay, 10000);
     };
 
-    playNext();
-    activeAlarms.current[order.id] = { audio };
+    void (async () => {
+      try {
+        const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(order.id)}/tts-alarm`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          signal: abortController.signal,
+        });
+        if (!response.ok) throw new Error('Falha ao carregar TTS');
+
+        const blobUrl = URL.createObjectURL(await response.blob());
+        const alarm = activeAlarms.current[order.id];
+        if (abortController.signal.aborted || !alarm || alarm.audio !== audio) {
+          URL.revokeObjectURL(blobUrl);
+          return;
+        }
+
+        alarm.blobUrl = blobUrl;
+        audio.src = blobUrl;
+        try {
+          await audio.play();
+        } catch (error) {
+          const errorName = typeof error === 'object' && error !== null && 'name' in error
+            ? String(error.name)
+            : '';
+          if (!abortController.signal.aborted && errorName !== 'AbortError') {
+            console.error('Erro ao iniciar alarme neural:', error);
+            announceAudioFallback(order);
+          }
+        }
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          console.error('Erro ao tocar alarme neural:', error);
+          announceAudioFallback(order);
+        }
+      }
+    })();
   };
 
   const stopAlarm = (orderId: string) => {
-    const alarm = activeAlarms.current[orderId] as any;
-    if (alarm) {
-      if (alarm.interval) clearTimeout(alarm.interval);
-      if (alarm.audio) {
-        alarm.audio.pause();
-        alarm.audio.currentTime = 0;
-      }
-      if (alarm.blobUrl) URL.revokeObjectURL(alarm.blobUrl);
-      delete activeAlarms.current[orderId];
-    }
+    const alarm = activeAlarms.current[orderId];
+    if (!alarm) return;
+
+    // Remove primeiro para que uma requisição TTS que termine em paralelo não
+    // consiga iniciar um alarme depois de o pedido já ter sido aceito.
+    delete activeAlarms.current[orderId];
+    alarm.abortController.abort();
+    if (alarm.interval) clearTimeout(alarm.interval);
+    alarm.audio.onended = null;
+    alarm.audio.pause();
+    alarm.audio.currentTime = 0;
+    if (alarm.blobUrl) URL.revokeObjectURL(alarm.blobUrl);
   };
 
   // Cleanup all on unmount
@@ -278,16 +363,22 @@ export default function OrderManagerView() {
                 </div>
 
                 <div>
+                   {/** HTTPS permite fallback para a versão web quando o app não estiver instalado. */}
+                   {(() => {
+                     const wazeUrl = buildWazeNavigationUrl(order.address);
+                     return <>
                    <p className="text-sm font-medium text-zinc-500 uppercase tracking-wider mb-1 flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/> Endereço</p>
                    <p className="text-sm text-zinc-700">{order.address}</p>
-                   <a
-                     href={`https://waze.com/ul?q=${encodeURIComponent(order.address)}`}
+                   {wazeUrl && <a
+                     href={wazeUrl}
                      target="_blank"
                      rel="noopener noreferrer"
                      className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 mt-2 hover:underline"
                    >
                      Abrir no Waze
-                   </a>
+                   </a>}
+                     </>;
+                   })()}
                 </div>
 
                 <div>
