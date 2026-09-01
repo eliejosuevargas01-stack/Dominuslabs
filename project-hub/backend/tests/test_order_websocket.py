@@ -373,9 +373,12 @@ def test_broadcast_removes_a_disconnected_websocket():
         "created_at": "2026-08-31T12:00:00+00:00",
     }
 
-    asyncio.run(orders.broadcast("new_order", order))
+    try:
+        asyncio.run(orders.broadcast("new_order", order))
 
-    assert tenant_id not in orders.websocket_listeners
+        assert tenant_id not in orders.websocket_listeners
+    finally:
+        orders.websocket_listeners.pop(tenant_id, None)
 
 
 def test_websocket_heartbeat_removes_a_half_open_connection(monkeypatch):
@@ -384,10 +387,13 @@ def test_websocket_heartbeat_removes_a_half_open_connection(monkeypatch):
     monkeypatch.setattr(orders, "WEBSOCKET_HEARTBEAT_SECONDS", 0.001)
     monkeypatch.setattr(orders, "decode_access_token", lambda _: {"sub": "operator", "tenant_id": tenant_id})
 
-    asyncio.run(orders.order_websocket(websocket, token="valid-token"))
+    try:
+        asyncio.run(orders.order_websocket(websocket, token="valid-token"))
 
-    assert websocket.messages == [{"event": "ping"}]
-    assert tenant_id not in orders.websocket_listeners
+        assert websocket.messages == [{"event": "ping"}]
+        assert tenant_id not in orders.websocket_listeners
+    finally:
+        orders.websocket_listeners.pop(tenant_id, None)
 
 def test_total_derived_when_subtotals_are_zero(client, monkeypatch):
     from app.core.config import settings
