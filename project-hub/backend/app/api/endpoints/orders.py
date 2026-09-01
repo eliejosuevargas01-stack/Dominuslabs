@@ -280,8 +280,43 @@ async def receive_order(
         tenant_id=payload.pedido.tenant_id, pedido_id=payload.pedido.id
     ).first()
     if existing:
+        record_data = record_from_agent_payload(payload)
+        existing.total = record_data["total"]
+        existing.address = record_data["address"]
+        existing.status = record_data["status"] if existing.status == "pending" else existing.status
+
+        # Merge items based on external_item_id
+        existing_items = {item.external_item_id: item for item in existing.items}
+        for item_data in record_data["items_source"]:
+            ext_id = item_data["external_item_id"]
+            if ext_id in existing_items:
+                ex_item = existing_items[ext_id]
+                ex_item.codigo = item_data["codigo"]
+                ex_item.nome = item_data["nome"]
+                ex_item.quantidade = item_data["quantidade"]
+                ex_item.preco_unitario = item_data["preco_unitario"]
+                ex_item.subtotal = item_data["subtotal"]
+                ex_item.observacoes = item_data["observacoes"]
+            else:
+                existing.items.append(
+                    OrderManagerOrderItem(
+                        external_item_id=ext_id,
+                        tenant_id=item_data["tenant_id"],
+                        pedido_id=item_data["pedido_id"],
+                        codigo=item_data["codigo"],
+                        nome=item_data["nome"],
+                        quantidade=item_data["quantidade"],
+                        preco_unitario=item_data["preco_unitario"],
+                        subtotal=item_data["subtotal"],
+                        observacoes=item_data["observacoes"],
+                        created_at=item_data["created_at"],
+                    )
+                )
+        db.commit()
+        db.refresh(existing)
         record = order_to_record(existing)
         orders[storage_id] = record
+        await broadcast("order_updated", record)
         return {"ok": True, "duplicate": True, "order": public_order(record)}
 
     external_item_ids = set()
@@ -325,6 +360,38 @@ async def receive_order(
             tenant_id=payload.pedido.tenant_id, pedido_id=payload.pedido.id
         ).first()
         if existing:
+            record_data = record_from_agent_payload(payload)
+            existing.total = record_data["total"]
+            existing.address = record_data["address"]
+            existing.status = record_data["status"] if existing.status == "pending" else existing.status
+            existing_items = {item.external_item_id: item for item in existing.items}
+            for item_data in record_data["items_source"]:
+                ext_id = item_data["external_item_id"]
+                if ext_id in existing_items:
+                    ex_item = existing_items[ext_id]
+                    ex_item.codigo = item_data["codigo"]
+                    ex_item.nome = item_data["nome"]
+                    ex_item.quantidade = item_data["quantidade"]
+                    ex_item.preco_unitario = item_data["preco_unitario"]
+                    ex_item.subtotal = item_data["subtotal"]
+                    ex_item.observacoes = item_data["observacoes"]
+                else:
+                    existing.items.append(
+                        OrderManagerOrderItem(
+                            external_item_id=ext_id,
+                            tenant_id=item_data["tenant_id"],
+                            pedido_id=item_data["pedido_id"],
+                            codigo=item_data["codigo"],
+                            nome=item_data["nome"],
+                            quantidade=item_data["quantidade"],
+                            preco_unitario=item_data["preco_unitario"],
+                            subtotal=item_data["subtotal"],
+                            observacoes=item_data["observacoes"],
+                            created_at=item_data["created_at"],
+                        )
+                    )
+            db.commit()
+            db.refresh(existing)
             record = order_to_record(existing)
             orders[storage_id] = record
             return {"ok": True, "duplicate": True, "order": public_order(record)}

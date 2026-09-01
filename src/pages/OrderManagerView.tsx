@@ -69,11 +69,10 @@ function useOrdersWebSocket() {
   useEffect(() => {
     let websocket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let pollingTimer: ReturnType<typeof setInterval> | null = null;
     let disposed = false;
 
-    const connect = () => {
-      setConnectionStatus('connecting');
-      try {
+    const fetchOrders = () => {
         const token = localStorage.getItem('admin_token');
         const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
         fetch(`${API_BASE}/orders`, { headers: authHeaders })
@@ -83,14 +82,35 @@ function useOrdersWebSocket() {
           })
           .then(data => {
             if (Array.isArray(data.orders)) {
+              let newIds: string[] = [];
               setOrders(prev => {
-                const byId = new Map<string, Order>(data.orders.map((order: Order) => [order.id, order] as [string, Order]));
-                prev.forEach(order => byId.set(order.id, order));
+                const byId = new Map<string, Order>(prev.map(order => [order.id, order] as [string, Order]));
+                data.orders.forEach((incoming: Order) => {
+                  if (!byId.has(incoming.id) && incoming.status === 'pending') {
+                    newIds.push(incoming.id);
+                  }
+                  byId.set(incoming.id, incoming);
+                });
                 return Array.from(byId.values());
               });
+              if (newIds.length > 0) {
+                setAnnouncedOrderIds(prev => {
+                  const newSet = new Set(prev);
+                  newIds.forEach(id => newSet.add(id));
+                  return newSet;
+                });
+              }
             }
           })
           .catch(error => console.error('Erro ao carregar pedidos persistidos:', error));
+    };
+
+    const connect = () => {
+      setConnectionStatus('connecting');
+      try {
+        const token = localStorage.getItem('admin_token');
+        fetchOrders();
+        pollingTimer = setInterval(fetchOrders, 30000);
 
         const websocketBase = API_BASE.replace(/^http/, 'ws');
         websocket = new WebSocket(`${websocketBase}/orders/ws?token=${encodeURIComponent(token || '')}`);
@@ -104,6 +124,13 @@ function useOrdersWebSocket() {
               setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
               setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
             } else if (data.event === 'order_updated' && data.order) {
+              if (data.order.status !== 'pending') {
+                setAnnouncedOrderIds(prev => {
+                  const newSet = new Set(prev);
+                  newSet.delete(data.order.id);
+                  return newSet;
+                });
+              }
               setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
             }
           } catch (error) {

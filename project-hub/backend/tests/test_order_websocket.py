@@ -206,12 +206,18 @@ def test_receive_order_returns_duplicate_after_a_concurrent_integrity_error(monk
         def filter_by(self, **_):
             return self
 
+        def with_for_update(self):
+            return self
+
         def first(self):
             return persisted_order if self.db.rolled_back else None
 
     class DuplicateOnCommitDb:
         def __init__(self):
             self.rolled_back = False
+
+        def refresh(self, obj):
+            pass
 
         def query(self, *_):
             return FakeQuery(self)
@@ -220,7 +226,9 @@ def test_receive_order_returns_duplicate_after_a_concurrent_integrity_error(monk
             pass
 
         def commit(self):
-            raise orders.IntegrityError("insert", {}, Exception("duplicate"))
+            if not self.rolled_back:
+                raise orders.IntegrityError("insert", {}, Exception("duplicate"))
+            pass
 
         def rollback(self):
             self.rolled_back = True
