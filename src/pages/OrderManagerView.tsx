@@ -109,9 +109,6 @@ function useOrdersWebSocket() {
       setConnectionStatus('connecting');
       try {
         const token = localStorage.getItem('admin_token');
-        fetchOrders();
-        pollingTimer = setInterval(fetchOrders, 30000);
-
         const websocketBase = API_BASE.replace(/^http/, 'ws');
         websocket = new WebSocket(`${websocketBase}/orders/ws?token=${encodeURIComponent(token || '')}`);
         websocket.onopen = () => setConnectionStatus('connected');
@@ -149,11 +146,17 @@ function useOrdersWebSocket() {
       }
     };
 
+    // The database is the durable source of truth. This reconciliation keeps
+    // the screen current even when a WebSocket is connected to another app
+    // worker than the one which received the n8n webhook.
+    fetchOrders();
+    pollingTimer = setInterval(fetchOrders, 30000);
     connect();
 
     return () => {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (pollingTimer) clearInterval(pollingTimer);
       websocket?.close();
     };
   }, []);
@@ -164,6 +167,15 @@ function useOrdersWebSocket() {
 export default function OrderManagerView() {
   const { orders, setOrders, announcedOrderIds, connectionStatus } = useOrdersWebSocket();
   const activeAlarms = useRef<Record<string, ActiveAlarm>>({});
+
+  const announceAudioFallback = (order: Order) => {
+    const message = `Novo pedido pendente ${order.id}. Ative o som desta tela.`;
+    toast.error(message);
+    if ('speechSynthesis' in window && 'SpeechSynthesisUtterance' in window) {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(message));
+    }
+  };
 
   useEffect(() => {
     // Check for new pending orders and start alarm
@@ -194,7 +206,7 @@ export default function OrderManagerView() {
       if (!alarm || alarm.audio !== audio) return;
 
       audio.currentTime = 0;
-      void audio.play().catch(error => console.error('Erro ao repetir alarme neural:', error));
+      void audio.play().catch(() => announceAudioFallback(order));
     };
 
     audio.onended = () => {
@@ -227,13 +239,15 @@ export default function OrderManagerView() {
           const errorName = typeof error === 'object' && error !== null && 'name' in error
             ? String(error.name)
             : '';
-          if (!abortController.signal.aborted && errorName !== 'AbortError' && errorName !== 'NotAllowedError') {
+          if (!abortController.signal.aborted && errorName !== 'AbortError') {
             console.error('Erro ao iniciar alarme neural:', error);
+            announceAudioFallback(order);
           }
         }
       } catch (error) {
         if (!abortController.signal.aborted) {
           console.error('Erro ao tocar alarme neural:', error);
+          announceAudioFallback(order);
         }
       }
     })();
