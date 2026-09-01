@@ -35,7 +35,7 @@ project_listeners = {}  # {public_token: [asyncio.Queue]}
 global_listeners = []   # [asyncio.Queue]
 lead_listeners: Dict[tuple[str, str, str], List[tuple[str, asyncio.Queue]]] = {}
 # {(tenant_id, session_id, contact_jid): [(user_email, queue)]}
-crm_chat_listeners: Dict[str, List[tuple[str, asyncio.Queue]]] = {}  # {tenant_id: [(user_email, queue)]}
+crm_chat_listeners: Dict[str, List[tuple[str, asyncio.Queue, str]]] = {}  # {tenant_id: [(user_email, queue, session_id)]}
 
 
 def _lead_listener_key(
@@ -137,7 +137,9 @@ async def notify_crm_chat_listeners(
         "event": "new_message",
         "messages": messages or []
     })
-    for user_email, queue in list(crm_chat_listeners.get(tenant_id, [])):
+    for user_email, queue, listener_session_id in list(crm_chat_listeners.get(tenant_id, [])):
+        if listener_session_id and listener_session_id != resolved_session_id:
+            continue
         await queue.put(payload)
 
 @router.get("/events/leads/{lead_id}")
@@ -197,6 +199,7 @@ async def lead_events(
 @router.get("/events/crm-chats")
 async def crm_chats_events(
     request: Request,
+    session_id: Optional[str] = None,
     token: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
@@ -213,7 +216,7 @@ async def crm_chats_events(
     user_email, tenant_id = await _tenant_for_sse_subscriber(payload, db)
 
     queue = asyncio.Queue()
-    listener = (user_email, queue)
+    listener = (user_email, queue, session_id or "")
     crm_chat_listeners.setdefault(tenant_id, []).append(listener)
     
     async def event_generator():
