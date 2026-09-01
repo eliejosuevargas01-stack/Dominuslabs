@@ -1,0 +1,28 @@
+QA report:
+Backend testing:
+- Successfully ran backend tests using pytest with coverage plugin.
+- Commands used:
+  pip install -r project-hub/backend/requirements.txt pytest pytest-cov pytest-asyncio httpx pytest-mock pyjwt
+  python -m pytest project-hub/backend/tests --cov=app --cov-report=term-missing
+- Results: 70 tests passed, 15 warnings.
+- Total backend coverage is 51% (2333 lines missed out of 4740).
+- Some deprecated functionalities were observed related to Pydantic (using class-based 'config' instead of ConfigDict) and testclient usage (using 'httpx' instead of 'httpx2').
+
+Frontend testing:
+- Checked for a package.json file to run frontend tests.
+- The frontend package.json seems to be missing from the standard locations (root or project-hub/).
+- Resulting limitation: Cannot execute frontend tests (like vitest or Playwright) due to missing package.json/dependencies configuration in the expected directories.
+Frontend testing update:
+- Since the standard vite environment was missing its configuration/dependencies, a vitest environment using jsdom with react and lucide-react was configured.
+- Executed: pnpm exec vitest run --coverage
+- Results: 12 frontend tests passed (from 2 suites: OrderManagerView.test.tsx and omnichannelIdentity.test.ts).
+- There were warnings related to React state updates not being wrapped in act(...).
+- Global frontend coverage is 75.1%.
+
+Summary of Limitations/Issues found:
+- Backend: Deprecated functionalities in pydantic and fastapi/starlette testclient need to be resolved.
+- Frontend: Missing package.json in the root directory (or expected frontend directories), so required minimal vitest configuration and installation to run tests on src/pages.
+- Frontend test warnings: State updates not wrapped in act() in OrderManagerView tests.
+- Total backend coverage is ~51%, and frontend coverage is ~75%.
+Testing completeness check:
+- Did not find any Playwright End-to-End (E2E) test files or configuration in the repository.
