@@ -35,12 +35,26 @@ class OrderManagerOrder(Base):
 
 class OrderManagerOrderItem(Base):
     __tablename__ = "order_manager_order_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "pedido_id",
+            "external_item_id",
+            name="uq_order_manager_item_scope_external",
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String(255), nullable=False, index=True)
+    pedido_id = Column(String(255), nullable=False, index=True)
+    external_item_id = Column(String(255), nullable=False)
     order_id = Column(UUID(as_uuid=True), ForeignKey("order_manager_orders.id", ondelete="CASCADE"), nullable=False, index=True)
     codigo = Column(String(255), nullable=False)
     nome = Column(String, nullable=False)
     quantidade = Column(Integer, nullable=False)
+    preco_unitario = Column(Numeric(12, 2), nullable=False)
     subtotal = Column(Numeric(12, 2), nullable=False)
+    observacoes = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
 
     order = relationship("OrderManagerOrder", back_populates="items")
