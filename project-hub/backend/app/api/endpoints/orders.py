@@ -10,8 +10,10 @@ from typing import Any, Dict, List, Optional
 import httpx
 from cachetools import TTLCache
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 
 from app.core.auth import decode_access_token
 from app.core.config import settings
@@ -133,38 +135,40 @@ def record_from_agent_payload(payload: AgentOrderPayload) -> Dict[str, Any]:
     """Converte o contrato do n8n no formato público do Order Manager."""
     canonical_items = [
         {
-            "id": item.id,
+            "external_item_id": item.id,
             "tenant_id": item.tenant_id,
             "pedido_id": item.pedido_id,
             "codigo": item.produto_id,
             "nome": item.nome_produto,
             "quantidade": item.quantidade,
-            "preco_unitario": float(item.preco_unitario),
-            "subtotal": float(item.subtotal),
+            "preco_unitario": item.preco_unitario,
+            "subtotal": item.subtotal,
             "observacoes": item.observacoes,
-            "created_at": item.created_at.astimezone(timezone.utc).replace(tzinfo=None),
+            "created_at": to_utc_naive(item.created_at),
         }
         for item in payload.itens
     ]
     return {
         "id": payload.pedido.id,
         "tenant_id": payload.pedido.tenant_id,
-        "customer_name": payload.pedido.cliente_id,
-        "total": float(payload.pedido.valor_total),
+        # The exact n8n contract has no customer name. Keep the WhatsApp JID
+        # only in internal fields and never present it as a display name.
+        "customer_name": "Cliente",
+        "total": payload.pedido.valor_total,
         "address": payload.pedido.endereco_entrega.endereco_completo,
         "items": [
             {
-                "id": item["id"], "tenant_id": item["tenant_id"], "pedido_id": item["pedido_id"],
+                "id": item["external_item_id"], "tenant_id": item["tenant_id"], "pedido_id": item["pedido_id"],
                 "name": item["nome"], "quantity": item["quantidade"], "codigo": item["codigo"],
                 "preco_unitario": item["preco_unitario"], "subtotal": item["subtotal"],
-                "observacoes": item["observacoes"], "created_at": item["created_at"].replace(tzinfo=timezone.utc).isoformat()
+                "observacoes": item["observacoes"], "created_at": to_utc_iso(item["created_at"])
             }
             for item in canonical_items
         ],
         # O status recebido (ex.: "ativo") é do pedido no n8n. O fluxo da
         # operação começa localmente como pendente até o operador aceitá-lo.
         "status": "pending",
-        "created_at": payload.pedido.created_at.isoformat(),
+        "created_at": to_utc_iso(payload.pedido.created_at),
         "content_jid": payload.pedido.cliente_id,
         "cliente_id": payload.pedido.cliente_id,
         "items_source": canonical_items,
@@ -174,9 +178,11 @@ def record_from_agent_payload(payload: AgentOrderPayload) -> Dict[str, Any]:
 def order_to_record(db_order: OrderManagerOrder) -> Dict[str, Any]:
     items = [
         {
-            "id": str(item.id), "tenant_id": item.tenant_id, "pedido_id": item.pedido_id,
+            "external_item_id": item.external_item_id,
+            "tenant_id": item.tenant_id,
+            "pedido_id": item.pedido_id,
             "codigo": item.codigo, "nome": item.nome, "quantidade": item.quantidade,
-            "preco_unitario": float(item.preco_unitario), "subtotal": float(item.subtotal),
+            "preco_unitario": item.preco_unitario, "subtotal": item.subtotal,
             "observacoes": item.observacoes, "created_at": item.created_at
         }
         for item in db_order.items
@@ -184,24 +190,35 @@ def order_to_record(db_order: OrderManagerOrder) -> Dict[str, Any]:
     return {
         "id": db_order.pedido_id,
         "tenant_id": db_order.tenant_id,
-        "customer_name": db_order.cliente_id,
-        "total": float(db_order.total),
+        "customer_name": "Cliente",
+        "total": db_order.total,
         "address": db_order.address,
         "items": [
             {
-                "id": item["id"], "tenant_id": item["tenant_id"], "pedido_id": item["pedido_id"],
+                "id": item["external_item_id"], "tenant_id": item["tenant_id"], "pedido_id": item["pedido_id"],
                 "name": item["nome"], "quantity": item["quantidade"], "codigo": item["codigo"],
                 "preco_unitario": item["preco_unitario"], "subtotal": item["subtotal"],
-                "observacoes": item["observacoes"], "created_at": item["created_at"].replace(tzinfo=timezone.utc).isoformat()
+                "observacoes": item["observacoes"], "created_at": to_utc_iso(item["created_at"])
             }
             for item in items
         ],
         "status": db_order.status,
-        "created_at": db_order.created_at.replace(tzinfo=timezone.utc).isoformat(),
+        "created_at": to_utc_iso(db_order.created_at),
         "content_jid": db_order.content_jid,
         "cliente_id": db_order.cliente_id,
         "items_source": items,
     }
+
+
+def to_utc_naive(value: datetime) -> datetime:
+    """Normalize external timestamps without depending on the server timezone."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def to_utc_iso(value: datetime) -> str:
+    return to_utc_naive(value).replace(tzinfo=timezone.utc).isoformat()
 
 
 def valid_master_key(value: Optional[str]) -> bool:
@@ -233,7 +250,7 @@ def resolve_tenant_id(request: Request, payload: Optional[dict], credential: Opt
 
 
 async def broadcast(event: str, order: Dict[str, Any]) -> None:
-    payload = {'event': event, 'order': public_order(order)}
+    payload = jsonable_encoder({'event': event, 'order': public_order(order)})
     message = f"data: {json.dumps(payload)}\n\n"
     for queue in list(listeners.get(order["tenant_id"], set())):
         await queue.put(message)
@@ -267,9 +284,13 @@ async def receive_order(
         orders[storage_id] = record
         return {"ok": True, "duplicate": True, "order": public_order(record)}
 
+    external_item_ids = set()
     for item in payload.itens:
         if item.tenant_id != payload.pedido.tenant_id or item.pedido_id != payload.pedido.id:
             raise HTTPException(status_code=400, detail="Scope inconsistency: item tenant_id or pedido_id does not match the parent order.")
+        if item.id in external_item_ids:
+            raise HTTPException(status_code=422, detail="Duplicate item id within the order payload.")
+        external_item_ids.add(item.id)
 
     record = record_from_agent_payload(payload)
     
@@ -277,10 +298,10 @@ async def receive_order(
         tenant_id=record["tenant_id"], pedido_id=record["id"],
         cliente_id=record["cliente_id"], client_jid=record["cliente_id"], content_jid=record["content_jid"],
         address=record["address"], total=record["total"], status=record["status"],
-        created_at=payload.pedido.created_at.astimezone(timezone.utc).replace(tzinfo=None),
+        created_at=to_utc_naive(payload.pedido.created_at),
         items=[
             OrderManagerOrderItem(
-                id=item["id"],
+                external_item_id=item["external_item_id"],
                 tenant_id=item["tenant_id"],
                 pedido_id=item["pedido_id"],
                 codigo=item["codigo"],
@@ -294,7 +315,20 @@ async def receive_order(
         ],
     )
     db.add(db_order)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # A concurrent n8n retry may win after the initial duplicate lookup.
+        # Re-read after rollback so the endpoint remains safely idempotent.
+        db.rollback()
+        existing = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter_by(
+            tenant_id=payload.pedido.tenant_id, pedido_id=payload.pedido.id
+        ).first()
+        if existing:
+            record = order_to_record(existing)
+            orders[storage_id] = record
+            return {"ok": True, "duplicate": True, "order": public_order(record)}
+        raise
     db.refresh(db_order)
     record = order_to_record(db_order)
     orders[storage_id] = record
@@ -322,7 +356,11 @@ async def order_events(request: Request, token: Optional[str] = Query(None)):
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
         finally:
-            listeners.get(tenant_id, set()).discard(queue)
+            tenant_listeners = listeners.get(tenant_id)
+            if tenant_listeners is not None:
+                tenant_listeners.discard(queue)
+                if not tenant_listeners:
+                    listeners.pop(tenant_id, None)
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 

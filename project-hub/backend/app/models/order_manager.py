@@ -35,10 +35,19 @@ class OrderManagerOrder(Base):
 
 class OrderManagerOrderItem(Base):
     __tablename__ = "order_manager_order_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "pedido_id",
+            "external_item_id",
+            name="uq_order_manager_item_scope_external",
+        ),
+    )
 
-    id = Column(String(255), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String(255), nullable=False, index=True)
     pedido_id = Column(String(255), nullable=False, index=True)
+    external_item_id = Column(String(255), nullable=False)
     order_id = Column(UUID(as_uuid=True), ForeignKey("order_manager_orders.id", ondelete="CASCADE"), nullable=False, index=True)
     codigo = Column(String(255), nullable=False)
     nome = Column(String, nullable=False)

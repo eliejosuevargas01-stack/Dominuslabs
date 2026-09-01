@@ -1,4 +1,8 @@
 import asyncio
+from copy import deepcopy
+from datetime import datetime, timezone
+from decimal import Decimal
+from types import SimpleNamespace
 
 from app.api.endpoints import orders
 
@@ -111,27 +115,120 @@ def test_n8n_order_envelope_maps_to_order_manager_record():
 
     assert record["id"] == payload.pedido.id
     assert record["tenant_id"] == "admin"
-    assert record["customer_name"] == "125203162075156@lid"
+    assert record["customer_name"] == "Cliente"
     assert record["address"] == "av rodolfo vieira pamplona 1920, gaspar - SC"
-    assert record["total"] == 0.0
+    assert record["total"] == Decimal("0.00")
     assert record["status"] == "pending"
     assert record["items"] == [
         {
             "id": "item-1", "tenant_id": "admin", "pedido_id": "0848aa1a-8b98-49f7-ba32-9902c710c28e",
             "name": "Fatia Especial Dois Amores", "quantity": 1, "codigo": "fatia-especial-dois-amores",
-            "preco_unitario": 20.0, "subtotal": 20.0, "observacoes": "Sem açúcar", "created_at": "2026-08-31T14:48:07.915000+00:00"
+            "preco_unitario": Decimal("20.00"), "subtotal": Decimal("20.00"), "observacoes": "Sem açúcar", "created_at": "2026-08-31T14:48:07.915000+00:00"
         },
         {
             "id": "item-2", "tenant_id": "admin", "pedido_id": "0848aa1a-8b98-49f7-ba32-9902c710c28e",
             "name": "Sonho Especial", "quantity": 1, "codigo": "sonho-especial",
-            "preco_unitario": 10.0, "subtotal": 10.0, "observacoes": None, "created_at": "2026-08-31T14:48:07.915000+00:00"
+            "preco_unitario": Decimal("10.00"), "subtotal": Decimal("10.00"), "observacoes": None, "created_at": "2026-08-31T14:48:07.915000+00:00"
         },
         {
             "id": "item-3", "tenant_id": "admin", "pedido_id": "0848aa1a-8b98-49f7-ba32-9902c710c28e",
             "name": "Sonho Especial", "quantity": 1, "codigo": "sonho-especial",
-            "preco_unitario": 10.0, "subtotal": 10.0, "observacoes": "Com mais recheio", "created_at": "2026-08-31T14:48:07.915000+00:00"
+            "preco_unitario": Decimal("10.00"), "subtotal": Decimal("10.00"), "observacoes": "Com mais recheio", "created_at": "2026-08-31T14:48:07.915000+00:00"
         },
     ]
+    assert record["items_source"][0]["external_item_id"] == "item-1"
+
+
+def test_same_external_item_id_is_scoped_to_each_order(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
+    payload = {
+        "pedido": {
+            "id": "order-scope-a", "tenant_id": "admin", "cliente_id": "125203162075156@lid",
+            "status": "ativo", "metodo_pagamento": "padrao", "tipo_entrega": "padrao",
+            "endereco_entrega": {"endereco_completo": "rua 1"}, "taxa_entrega": "0.00",
+            "subtotal": "10.00", "valor_total": "10.00",
+            "created_at": "2026-08-31T14:48:07.915Z", "updated_at": "2026-08-31T14:48:07.916Z",
+        },
+        "itens": [{
+            "id": "item-1", "tenant_id": "admin", "pedido_id": "order-scope-a",
+            "produto_id": "prod-1", "nome_produto": "Produto 1", "quantidade": 1,
+            "preco_unitario": "10.00", "subtotal": "10.00", "observacoes": None,
+            "created_at": "2026-08-31T14:48:07.915Z",
+        }],
+    }
+    second_payload = deepcopy(payload)
+    second_payload["pedido"]["id"] = "order-scope-b"
+    second_payload["itens"][0]["pedido_id"] = "order-scope-b"
+
+    first = client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"})
+    second = client.post("/api/v1/orders", json=second_payload, headers={"X-Master-API-Key": "super-secret-key"})
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert second.json()["order"]["items"][0]["id"] == "item-1"
+
+
+def test_receive_order_returns_duplicate_after_a_concurrent_integrity_error(monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
+    payload = orders.AgentOrderPayload.model_validate({
+        "pedido": {
+            "id": "order-race", "tenant_id": "admin", "cliente_id": "125203162075156@lid",
+            "status": "ativo", "metodo_pagamento": "padrao", "tipo_entrega": "padrao",
+            "endereco_entrega": {"endereco_completo": "rua 1"}, "taxa_entrega": "0.00",
+            "subtotal": "10.00", "valor_total": "10.00",
+            "created_at": "2026-08-31T14:48:07.915Z", "updated_at": "2026-08-31T14:48:07.916Z",
+        },
+        "itens": [{
+            "id": "item-race", "tenant_id": "admin", "pedido_id": "order-race",
+            "produto_id": "prod-1", "nome_produto": "Produto 1", "quantidade": 1,
+            "preco_unitario": "10.00", "subtotal": "10.00", "observacoes": None,
+            "created_at": "2026-08-31T14:48:07.915Z",
+        }],
+    })
+    persisted_order = SimpleNamespace(
+        pedido_id="order-race", tenant_id="admin", cliente_id="125203162075156@lid",
+        total=Decimal("10.00"), address="rua 1", status="pending",
+        created_at=datetime(2026, 8, 31, 14, 48, 7, tzinfo=timezone.utc),
+        content_jid="125203162075156@lid", items=[],
+    )
+
+    class FakeQuery:
+        def __init__(self, db):
+            self.db = db
+
+        def options(self, *_):
+            return self
+
+        def filter_by(self, **_):
+            return self
+
+        def first(self):
+            return persisted_order if self.db.rolled_back else None
+
+    class DuplicateOnCommitDb:
+        def __init__(self):
+            self.rolled_back = False
+
+        def query(self, *_):
+            return FakeQuery(self)
+
+        def add(self, _):
+            pass
+
+        def commit(self):
+            raise orders.IntegrityError("insert", {}, Exception("duplicate"))
+
+        def rollback(self):
+            self.rolled_back = True
+
+    response = asyncio.run(orders.receive_order(payload, x_master_api_key="super-secret-key", db=DuplicateOnCommitDb()))
+
+    assert response["duplicate"] is True
+    assert response["order"]["customerName"] == "Cliente"
 
 
 def test_reject_inconsistent_tenant_id_or_pedido_id_in_items(client, monkeypatch):
