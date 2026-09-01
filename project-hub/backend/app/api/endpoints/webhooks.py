@@ -35,7 +35,7 @@ project_listeners = {}  # {public_token: [asyncio.Queue]}
 global_listeners = []   # [asyncio.Queue]
 lead_listeners: Dict[tuple[str, str, str], List[tuple[str, asyncio.Queue]]] = {}
 # {(tenant_id, session_id, contact_jid): [(user_email, queue)]}
-crm_chat_listeners: Dict[str, List[tuple[str, asyncio.Queue, str]]] = {}  # {tenant_id: [(user_email, queue, session_id)]}
+crm_chat_listeners: Dict[str, List[tuple[str, asyncio.Queue]]] = {}  # {tenant_id: [(user_email, queue)]}
 
 
 def _lead_listener_key(
@@ -137,9 +137,7 @@ async def notify_crm_chat_listeners(
         "event": "new_message",
         "messages": messages or []
     })
-    for user_email, queue, listener_session_id in list(crm_chat_listeners.get(tenant_id, [])):
-        if listener_session_id and listener_session_id != resolved_session_id:
-            continue
+    for user_email, queue in list(crm_chat_listeners.get(tenant_id, [])):
         await queue.put(payload)
 
 @router.get("/events/leads/{lead_id}")
@@ -199,7 +197,6 @@ async def lead_events(
 @router.get("/events/crm-chats")
 async def crm_chats_events(
     request: Request,
-    session_id: Optional[str] = None,
     token: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
@@ -216,7 +213,7 @@ async def crm_chats_events(
     user_email, tenant_id = await _tenant_for_sse_subscriber(payload, db)
 
     queue = asyncio.Queue()
-    listener = (user_email, queue, session_id or "")
+    listener = (user_email, queue)
     crm_chat_listeners.setdefault(tenant_id, []).append(listener)
     
     async def event_generator():
@@ -282,18 +279,40 @@ def _normalize_chat_event_message(
     resolved_message_id = _event_text(
         message.get("message_id") or message.get("id") or key.get("id") or message_id
     )
-    resolved_contact_id = _event_text(
-        message.get("contact_jid")
-        or message.get("contact_id")
-        or message.get("chat_jid")
-        or message.get("jid")
-        or message.get("remoteJid")
-        or key.get("remoteJid")
-        or contact_id
-        or lead_id
-        or jid
-        or phone
+
+    from_me = _event_bool(
+        message.get("is_from_me", message.get("from_me", message.get("fromMe", is_from_me or False)))
     )
+
+    if from_me:
+        resolved_contact_id = _event_text(
+            message.get("to")
+            or message.get("recipient")
+            or message.get("remoteJid")
+            or key.get("remoteJid")
+            or message.get("contact_jid")
+            or message.get("contact_id")
+            or message.get("chat_jid")
+            or message.get("jid")
+            or contact_id
+            or lead_id
+            or jid
+            or phone
+        )
+    else:
+        resolved_contact_id = _event_text(
+            message.get("contact_jid")
+            or message.get("contact_id")
+            or message.get("chat_jid")
+            or message.get("jid")
+            or message.get("remoteJid")
+            or key.get("remoteJid")
+            or contact_id
+            or lead_id
+            or jid
+            or phone
+        )
+
     resolved_session_id = _event_session_id(
         message.get("session_id") or message.get("session") or message.get("whatsapp_instance") or session_id
     )
@@ -306,10 +325,6 @@ def _normalize_chat_event_message(
         raise ValueError("session_id is required")
     if not resolved_tenant_id:
         raise ValueError("tenant_id is required")
-
-    from_me = _event_bool(
-        message.get("is_from_me", message.get("from_me", message.get("fromMe", is_from_me or False)))
-    )
     raw_sender = _event_text(message.get("sender") or sender).lower()
     normalized_sender = "user" if from_me or raw_sender in {"user", "me", "operator"} else "lead"
     message.update({

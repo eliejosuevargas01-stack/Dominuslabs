@@ -113,8 +113,8 @@ def test_outbound_whatsapp_send_rejects_master_key_in_body(mocker, client):
 def test_crm_chat_event_is_scoped_to_its_tenant_and_session():
     tenant_a_queue = asyncio.Queue()
     tenant_b_queue = asyncio.Queue()
-    tenant_a_listener = ("operator-a@dominuslabs.online", tenant_a_queue, "")
-    tenant_b_listener = ("operator-b@dominuslabs.online", tenant_b_queue, "")
+    tenant_a_listener = ("operator-a@dominuslabs.online", tenant_a_queue)
+    tenant_b_listener = ("operator-b@dominuslabs.online", tenant_b_queue)
     webhooks.crm_chat_listeners.clear()
     webhooks.crm_chat_listeners["tenant-a"] = [tenant_a_listener]
     webhooks.crm_chat_listeners["tenant-b"] = [tenant_b_listener]
@@ -176,8 +176,8 @@ def test_crm_update_chat_notifies_each_tenant_and_session_separately(client):
     tenant_a_queue = asyncio.Queue()
     tenant_b_queue = asyncio.Queue()
     webhooks.crm_chat_listeners.clear()
-    webhooks.crm_chat_listeners["tenant-a"] = [("operator-a@example.com", tenant_a_queue, "")]
-    webhooks.crm_chat_listeners["tenant-b"] = [("operator-b@example.com", tenant_b_queue, "")]
+    webhooks.crm_chat_listeners["tenant-a"] = [("operator-a@example.com", tenant_a_queue)]
+    webhooks.crm_chat_listeners["tenant-b"] = [("operator-b@example.com", tenant_b_queue)]
     try:
         response = client.post("/api/v1/webhooks/crm/update-chat", json=[
             {
@@ -212,33 +212,36 @@ def test_crm_update_chat_notifies_each_tenant_and_session_separately(client):
     finally:
         webhooks.crm_chat_listeners.clear()
 
-def test_crm_chat_event_enforces_session_id_scoping():
-    tenant_queue = asyncio.Queue()
-    # Listener specifically for session-b
-    listener = ("operator@dominuslabs.online", tenant_queue, "session-b")
-    webhooks.crm_chat_listeners.clear()
-    webhooks.crm_chat_listeners["tenant-a"] = [listener]
-    try:
-        # Broadcast message for session-a
-        asyncio.run(webhooks.notify_crm_chat_listeners(
-            "5511999999999@s.whatsapp.net",
-            is_from_me=True,
-            sender="user",
-            session_id="session-a",
-            tenant_id="tenant-a",
-            messages=[{"id": "msg-1"}],
-        ))
-        assert tenant_queue.empty()
+def test_normalize_chat_event_message_prioritizes_remote_for_outgoing():
+    from app.api.endpoints.webhooks import _normalize_chat_event_message
 
-        # Broadcast message for session-b
-        asyncio.run(webhooks.notify_crm_chat_listeners(
-            "5511999999999@s.whatsapp.net",
-            is_from_me=True,
-            sender="user",
-            session_id="session-b",
-            tenant_id="tenant-a",
-            messages=[{"id": "msg-2"}],
-        ))
-        assert not tenant_queue.empty()
-    finally:
-        webhooks.crm_chat_listeners.clear()
+    # Simulate an outgoing message where n8n returns the sender JID in contact_jid
+    # but actual destination in 'to' or 'recipient'
+    raw = {
+        "message_id": "out-1",
+        "is_from_me": True,
+        "contact_jid": "sender@s.whatsapp.net",
+        "to": "recipient@s.whatsapp.net",
+        "session_id": "sess-1",
+        "tenant_id": "tenant-1"
+    }
+
+    normalized = _normalize_chat_event_message(raw)
+    assert normalized["is_from_me"] is True
+    assert normalized["contact_jid"] == "recipient@s.whatsapp.net"
+
+def test_normalize_chat_event_message_prioritizes_remote_for_outgoing_with_key():
+    from app.api.endpoints.webhooks import _normalize_chat_event_message
+
+    raw = {
+        "message_id": "out-2",
+        "fromMe": True,
+        "contact_jid": "sender@s.whatsapp.net",
+        "key": {"remoteJid": "remote@s.whatsapp.net"},
+        "session_id": "sess-1",
+        "tenant_id": "tenant-1"
+    }
+
+    normalized = _normalize_chat_event_message(raw)
+    assert normalized["is_from_me"] is True
+    assert normalized["contact_jid"] == "remote@s.whatsapp.net"

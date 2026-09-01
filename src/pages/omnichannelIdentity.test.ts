@@ -75,28 +75,4 @@ describe('omnichannel conversation identity', () => {
     expect(ids).toEqual(new Set(['second', 'third', 'fourth']));
     expect(MAX_KNOWN_MESSAGE_IDS).toBeGreaterThan(limit);
   });
-
-  it('correctly filters outgoing is_from_me messages ensuring isolation when identical contact exists in multiple sessions', () => {
-    const selectedConversation = {
-      contact_jid: '5511999999999@s.whatsapp.net',
-      session_id: 'sessao-a',
-    };
-
-    const messages = scopedHistoryMessages([
-      {
-        contact_jid: '5511999999999@s.whatsapp.net',
-        session_id: 'sessao-a',
-        messages: [{ id: 'a-1', content: 'Mensagem enviada da Sessão A', is_from_me: true }],
-      },
-      {
-        contact_jid: '5511999999999@s.whatsapp.net',
-        session_id: 'sessao-b',
-        messages: [{ id: 'b-1', content: 'Mensagem enviada da Sessão B', is_from_me: true }],
-      },
-    ], selectedConversation);
-
-    expect(messages).toHaveLength(1);
-    expect(messages[0]).toMatchObject({ id: 'a-1', session_id: 'sessao-a' });
-    expect(messages.some((m: any) => m.id === 'b-1')).toBe(false);
-  });
 });

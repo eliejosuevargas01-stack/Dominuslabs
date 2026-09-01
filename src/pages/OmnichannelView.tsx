@@ -1120,7 +1120,11 @@ function playOutgoingSound() {
               }
               
               const msgIsFromMe = rawMsg.fromMe ?? rawMsg.from_me ?? rawMsg.is_from_me ?? parsed.fromMe ?? parsed.from_me ?? parsed.is_from_me ?? false;
+              const msgTs = rawMsg.timestamp
+                ? (typeof rawMsg.timestamp === 'number' && rawMsg.timestamp < 10000000000 ? new Date(rawMsg.timestamp * 1000).toISOString() : new Date(rawMsg.timestamp).toISOString())
+                : (rawMsg.message_timestamp || rawMsg.created_at || parsed.emittedAt || new Date().toISOString());
 
+              const generatedId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
               const resolvedSessionId = rawMsg.session_id || parsed.session_id || parsed.session?.id;
               let resolvedContactJid = msgIsFromMe
                   ? (rawMsg.to || rawMsg.recipient || rawMsg.key?.remoteJid || parsed.to || parsed.recipient || parsed.key?.remoteJid || rawMsg.contact_jid || rawMsg.jid || rawMsg.resolvedJid || rawMsg.lid || parsed.conversation?.jid || parsed.contact_jid)
@@ -1129,11 +1133,6 @@ function playOutgoingSound() {
               if (!resolvedSessionId || !resolvedContactJid) {
                  continue; // Eventos com escopo ausente ou ambíguo não podem ser anexados nem alterar contador/prévia
               }
-              const msgTs = rawMsg.timestamp 
-                ? (typeof rawMsg.timestamp === 'number' && rawMsg.timestamp < 10000000000 ? new Date(rawMsg.timestamp * 1000).toISOString() : new Date(rawMsg.timestamp).toISOString()) 
-                : (rawMsg.message_timestamp || rawMsg.created_at || parsed.emittedAt || new Date().toISOString());
-
-              const generatedId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
               const normalized = {
                 ...rawMsg,
                 id: rawMsg.id || rawMsg.message_id || rawMsg.key?.id || generatedId,
@@ -1143,10 +1142,8 @@ function playOutgoingSound() {
                 is_from_me: msgIsFromMe,
                 from_me: msgIsFromMe,
                 fromMe: msgIsFromMe,
-                contact_jid: msgIsFromMe
-                  ? (rawMsg.to || rawMsg.recipient || rawMsg.key?.remoteJid || parsed.to || parsed.recipient || parsed.key?.remoteJid || rawMsg.contact_jid || rawMsg.jid || rawMsg.resolvedJid || rawMsg.lid || parsed.conversation?.jid || parsed.contact_jid)
-                  : (rawMsg.contact_jid || rawMsg.jid || rawMsg.resolvedJid || rawMsg.lid || rawMsg.key?.remoteJid || parsed.conversation?.jid || parsed.contact_jid),
-                session_id: rawMsg.session_id || parsed.session_id || parsed.session?.id,
+                contact_jid: resolvedContactJid,
+                session_id: resolvedSessionId,
                 message_timestamp: msgTs,
                 status: rawMsg.status || 'sent',
                 media_url: rawMsg.media_url || rawMsg.url || rawMsg.file_url || (rawMsg.media?.url),
