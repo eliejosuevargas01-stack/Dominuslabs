@@ -2,6 +2,9 @@ import '@testing-library/jest-dom';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: toastError } }));
+
 import OrderManagerView from './OrderManagerView';
 
 class MockWebSocket {
@@ -32,11 +35,12 @@ class MockWebSocket {
 
 class MockAudio {
   static instances: MockAudio[] = [];
+  static playResult: Promise<void> = Promise.resolve();
 
   src = '';
   currentTime = 0;
   onended: (() => void) | null = null;
-  play = vi.fn().mockResolvedValue(undefined);
+  play = vi.fn(() => MockAudio.playResult);
   pause = vi.fn();
 
   constructor() {
@@ -63,6 +67,7 @@ describe('OrderManagerView', () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
     MockAudio.instances = [];
+    MockAudio.playResult = Promise.resolve();
     MockURL.createObjectURL.mockClear();
     MockURL.revokeObjectURL.mockClear();
     localStorage.setItem('admin_token', 'fake_token');
@@ -73,6 +78,7 @@ describe('OrderManagerView', () => {
       ok: true,
       json: async () => ({ orders: [] }),
     }));
+    toastError.mockClear();
   });
 
   afterEach(() => {
@@ -85,7 +91,7 @@ describe('OrderManagerView', () => {
     render(<OrderManagerView />);
 
     expect(MockWebSocket.instances).toHaveLength(1);
-    expect(MockWebSocket.instances[0].url).toContain('/api/v1/orders/ws?token=fake_token');
+    expect(MockWebSocket.instances[0].url).toContain('/orders/ws?token=fake_token');
 
     act(() => MockWebSocket.instances[0].open());
     expect(screen.getByText('Conectado (Ao Vivo)')).toBeInTheDocument();
@@ -182,5 +188,29 @@ describe('OrderManagerView', () => {
 
     expect(audio.play).not.toHaveBeenCalled();
     expect(MockURL.revokeObjectURL).toHaveBeenCalledWith('blob:order-alarm');
+  });
+
+  it('uses visible and spoken fallback when browser audio is blocked', async () => {
+    const speak = vi.fn();
+    vi.stubGlobal('speechSynthesis', { cancel: vi.fn(), speak });
+    vi.stubGlobal('SpeechSynthesisUtterance', class {
+      constructor(public text: string) {}
+    });
+    MockAudio.playResult = Promise.reject(new Error('play blocked'));
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ orders: [] }) })
+      .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['audio']) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<OrderManagerView />);
+    act(() => MockWebSocket.instances[0].message({ event: 'new_order', order: pendingOrder }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining('Novo pedido pendente'));
+    expect(speak).toHaveBeenCalledTimes(1);
   });
 });

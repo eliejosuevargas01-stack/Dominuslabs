@@ -117,7 +117,7 @@ def test_n8n_order_envelope_maps_to_order_manager_record():
     assert record["tenant_id"] == "admin"
     assert record["customer_name"] == "Cliente"
     assert record["address"] == "av rodolfo vieira pamplona 1920, gaspar - SC"
-    assert record["total"] == Decimal("0.00")
+    assert record["total"] == Decimal("44.97")
     assert record["status"] == "pending"
     assert record["items"] == [
         {
@@ -170,6 +170,37 @@ def test_same_external_item_id_is_scoped_to_each_order(client, monkeypatch):
     assert second.json()["order"]["items"][0]["id"] == "item-1"
 
 
+def test_replaying_order_snapshot_replaces_removed_items(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
+    payload = {
+        "pedido": {
+            "id": "order-snapshot", "tenant_id": "admin", "cliente_id": "client@lid",
+            "status": "ativo", "metodo_pagamento": "padrao", "tipo_entrega": "padrao",
+            "endereco_entrega": {"endereco_completo": "rua 1"}, "taxa_entrega": "4.97",
+            "subtotal": "0.00", "valor_total": "0.00",
+            "created_at": "2026-08-31T14:48:07.915Z", "updated_at": "2026-08-31T14:48:07.916Z",
+        },
+        "itens": [
+            {"id": "item-kept", "tenant_id": "admin", "pedido_id": "order-snapshot", "produto_id": "prod-1", "nome_produto": "Produto 1", "quantidade": 1, "preco_unitario": "20.00", "subtotal": "20.00", "observacoes": None, "created_at": "2026-08-31T14:48:07.915Z"},
+            {"id": "item-removed", "tenant_id": "admin", "pedido_id": "order-snapshot", "produto_id": "prod-2", "nome_produto": "Produto 2", "quantidade": 1, "preco_unitario": "10.00", "subtotal": "10.00", "observacoes": None, "created_at": "2026-08-31T14:48:07.915Z"},
+        ],
+    }
+    assert client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"}).status_code == 201
+
+    payload["itens"] = [{**payload["itens"][0], "quantidade": 2, "subtotal": "40.00"}]
+    replay = client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"})
+
+    assert replay.status_code == 201
+    assert replay.json()["duplicate"] is True
+    assert replay.json()["order"]["total"] == 44.97
+    assert len(replay.json()["order"]["items"]) == 1
+    assert replay.json()["order"]["items"][0]["id"] == "item-kept"
+    assert replay.json()["order"]["items"][0]["quantity"] == 2
+    assert replay.json()["order"]["items"][0]["subtotal"] == 40.0
+
+
 def test_receive_order_returns_duplicate_after_a_concurrent_integrity_error(monkeypatch):
     from app.core.config import settings
 
@@ -206,12 +237,18 @@ def test_receive_order_returns_duplicate_after_a_concurrent_integrity_error(monk
         def filter_by(self, **_):
             return self
 
+        def with_for_update(self):
+            return self
+
         def first(self):
             return persisted_order if self.db.rolled_back else None
 
     class DuplicateOnCommitDb:
         def __init__(self):
             self.rolled_back = False
+
+        def refresh(self, obj):
+            pass
 
         def query(self, *_):
             return FakeQuery(self)
@@ -220,7 +257,9 @@ def test_receive_order_returns_duplicate_after_a_concurrent_integrity_error(monk
             pass
 
         def commit(self):
-            raise orders.IntegrityError("insert", {}, Exception("duplicate"))
+            if not self.rolled_back:
+                raise orders.IntegrityError("insert", {}, Exception("duplicate"))
+            pass
 
         def rollback(self):
             self.rolled_back = True

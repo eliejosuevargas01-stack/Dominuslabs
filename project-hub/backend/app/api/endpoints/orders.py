@@ -148,13 +148,29 @@ def record_from_agent_payload(payload: AgentOrderPayload) -> Dict[str, Any]:
         }
         for item in payload.itens
     ]
+    # Alguns fluxos do n8n criam primeiro o pedido com os totais zerados e
+    # depois acrescentam os itens. Nunca podemos transformar esse snapshot em
+    # um pedido gratuito no PDV: derive o subtotal a partir dos itens e some a
+    # taxa de entrega quando o total informado ainda não é utilizável.
+    derived_subtotal = sum(
+        (
+            item["subtotal"]
+            if item["subtotal"] > Decimal("0")
+            else item["preco_unitario"] * item["quantidade"]
+        )
+        for item in canonical_items
+    )
+    total = payload.pedido.valor_total
+    if total <= Decimal("0") and derived_subtotal > Decimal("0"):
+        total = derived_subtotal + payload.pedido.taxa_entrega
+
     return {
         "id": payload.pedido.id,
         "tenant_id": payload.pedido.tenant_id,
         # The exact n8n contract has no customer name. Keep the WhatsApp JID
         # only in internal fields and never present it as a display name.
         "customer_name": "Cliente",
-        "total": payload.pedido.valor_total,
+        "total": total.quantize(Decimal("0.01")),
         "address": payload.pedido.endereco_entrega.endereco_completo,
         "items": [
             {
@@ -173,6 +189,51 @@ def record_from_agent_payload(payload: AgentOrderPayload) -> Dict[str, Any]:
         "cliente_id": payload.pedido.cliente_id,
         "items_source": canonical_items,
     }
+
+
+def apply_order_snapshot(
+    existing: OrderManagerOrder,
+    record_data: Dict[str, Any],
+) -> None:
+    """Replace mutable order fields and line items with the latest n8n snapshot."""
+    existing.total = record_data["total"]
+    existing.address = record_data["address"]
+
+    existing_items = {item.external_item_id: item for item in existing.items}
+    incoming_ids = set()
+    for item_data in record_data["items_source"]:
+        external_item_id = item_data["external_item_id"]
+        incoming_ids.add(external_item_id)
+        persisted_item = existing_items.get(external_item_id)
+        if persisted_item is None:
+            existing.items.append(
+                OrderManagerOrderItem(
+                    external_item_id=external_item_id,
+                    tenant_id=item_data["tenant_id"],
+                    pedido_id=item_data["pedido_id"],
+                    codigo=item_data["codigo"],
+                    nome=item_data["nome"],
+                    quantidade=item_data["quantidade"],
+                    preco_unitario=item_data["preco_unitario"],
+                    subtotal=item_data["subtotal"],
+                    observacoes=item_data["observacoes"],
+                    created_at=item_data["created_at"],
+                )
+            )
+            continue
+
+        persisted_item.codigo = item_data["codigo"]
+        persisted_item.nome = item_data["nome"]
+        persisted_item.quantidade = item_data["quantidade"]
+        persisted_item.preco_unitario = item_data["preco_unitario"]
+        persisted_item.subtotal = item_data["subtotal"]
+        persisted_item.observacoes = item_data["observacoes"]
+
+    # The envelope is a complete snapshot. Removing stale relationship members
+    # activates delete-orphan and prevents cancelled items remaining in the PDV.
+    for external_item_id, persisted_item in existing_items.items():
+        if external_item_id not in incoming_ids:
+            existing.items.remove(persisted_item)
 
 
 def order_to_record(db_order: OrderManagerOrder) -> Dict[str, Any]:
@@ -275,15 +336,6 @@ async def receive_order(
     if not valid_master_key(x_master_api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing Master API Key")
         
-    storage_id = f"{payload.pedido.tenant_id}:{payload.pedido.id}"
-    existing = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter_by(
-        tenant_id=payload.pedido.tenant_id, pedido_id=payload.pedido.id
-    ).first()
-    if existing:
-        record = order_to_record(existing)
-        orders[storage_id] = record
-        return {"ok": True, "duplicate": True, "order": public_order(record)}
-
     external_item_ids = set()
     for item in payload.itens:
         if item.tenant_id != payload.pedido.tenant_id or item.pedido_id != payload.pedido.id:
@@ -292,7 +344,19 @@ async def receive_order(
             raise HTTPException(status_code=422, detail="Duplicate item id within the order payload.")
         external_item_ids.add(item.id)
 
+    storage_id = f"{payload.pedido.tenant_id}:{payload.pedido.id}"
     record = record_from_agent_payload(payload)
+    existing = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter_by(
+        tenant_id=payload.pedido.tenant_id, pedido_id=payload.pedido.id
+    ).first()
+    if existing:
+        apply_order_snapshot(existing, record)
+        db.commit()
+        db.refresh(existing)
+        record = order_to_record(existing)
+        orders[storage_id] = record
+        await broadcast("order_updated", record)
+        return {"ok": True, "duplicate": True, "order": public_order(record)}
     
     db_order = OrderManagerOrder(
         tenant_id=record["tenant_id"], pedido_id=record["id"],
@@ -325,8 +389,12 @@ async def receive_order(
             tenant_id=payload.pedido.tenant_id, pedido_id=payload.pedido.id
         ).first()
         if existing:
+            apply_order_snapshot(existing, record)
+            db.commit()
+            db.refresh(existing)
             record = order_to_record(existing)
             orders[storage_id] = record
+            await broadcast("order_updated", record)
             return {"ok": True, "duplicate": True, "order": public_order(record)}
         raise
     db.refresh(db_order)
