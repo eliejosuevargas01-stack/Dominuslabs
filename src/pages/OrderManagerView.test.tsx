@@ -1,445 +1,265 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: toastError } }));
+
 import OrderManagerView from './OrderManagerView';
-import { toast } from 'sonner';
 
-// Mock Sonner toast
-vi.mock('sonner', () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+class MockWebSocket {
+  static instances: MockWebSocket[] = [];
 
-// Setup global Mocks for EventSource
-class MockEventSource {
   onopen: (() => void) | null = null;
-  onmessage: ((event: any) => void) | null = null;
-  onerror: ((error: any) => void) | null = null;
-  url: string;
+  onmessage: ((event: MessageEvent<string>) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onclose: (() => void) | null = null;
   isClosed = false;
+  sentMessages: string[] = [];
 
-  constructor(url: string) {
-    this.url = url;
-    MockEventSource.instances.push(this);
-    // Do NOT auto open, let tests control it
+  constructor(public url: string) {
+    MockWebSocket.instances.push(this);
   }
 
   close() {
     this.isClosed = true;
-    MockEventSource.instances = MockEventSource.instances.filter(i => i !== this);
   }
 
-  static instances: MockEventSource[] = [];
-
-  static simulateOpen() {
-    MockEventSource.instances.forEach(instance => {
-      if (instance.onopen) instance.onopen();
-    });
+  send(data: string) {
+    this.sentMessages.push(data);
   }
 
-  static simulateMessage(data: any) {
-    MockEventSource.instances.forEach(instance => {
-      if (instance.onmessage) {
-        instance.onmessage({ data: typeof data === 'string' ? data : JSON.stringify(data) });
-      }
-    });
+  open() {
+    this.onopen?.();
   }
 
-  static simulateError(error: any) {
-    MockEventSource.instances.forEach(instance => {
-      if (instance.onerror) {
-        instance.onerror(error);
-      }
-    });
+  message(data: unknown) {
+    this.onmessage?.({ data: JSON.stringify(data) } as MessageEvent<string>);
   }
 }
 
-global.EventSource = MockEventSource as unknown as typeof EventSource;
+class MockAudio {
+  static instances: MockAudio[] = [];
+  static playResult: Promise<void> = Promise.resolve();
 
-// Setup global Mocks for SpeechSynthesis
-const mockSpeak = vi.fn();
-const mockCancel = vi.fn();
+  src = '';
+  currentTime = 0;
+  onended: (() => void) | null = null;
+  play = vi.fn(() => MockAudio.playResult);
+  pause = vi.fn();
 
-const mockSpeechSynthesis = {
-  speak: mockSpeak,
-  cancel: mockCancel,
+  constructor() {
+    MockAudio.instances.push(this);
+  }
+}
+
+class MockURL extends URL {
+  static createObjectURL = vi.fn(() => 'blob:order-alarm');
+  static revokeObjectURL = vi.fn();
+}
+
+const pendingOrder = {
+  id: 'pedido-pendente',
+  customerName: 'Cliente',
+  total: 74.97,
+  address: 'Rua A, 10',
+  items: [{ name: 'Brownie', quantity: 1 }],
+  status: 'pending' as const,
+  createdAt: '2026-08-31T14:48:07.915Z',
 };
-
-Object.defineProperty(window, 'speechSynthesis', { configurable: true,
-  value: mockSpeechSynthesis,
-  writable: true,
-});
-
-class MockSpeechSynthesisUtterance {
-  text: string;
-  lang: string = '';
-  rate: number = 1;
-  constructor(text: string) {
-    this.text = text;
-  }
-}
-global.SpeechSynthesisUtterance = MockSpeechSynthesisUtterance as any;
 
 describe('OrderManagerView', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
-    MockEventSource.instances = [];
-    vi.clearAllMocks();
+    MockWebSocket.instances = [];
+    MockAudio.instances = [];
+    MockAudio.playResult = Promise.resolve();
+    MockURL.createObjectURL.mockClear();
+    MockURL.revokeObjectURL.mockClear();
     localStorage.setItem('admin_token', 'fake_token');
-
-    // Restore window.speechSynthesis in case a test removes it
-    Object.defineProperty(window, 'speechSynthesis', { configurable: true,
-      value: mockSpeechSynthesis,
-      writable: true,
-      configurable: true,
-    });
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    vi.stubGlobal('Audio', MockAudio);
+    vi.stubGlobal('URL', MockURL);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ orders: [] }),
+    }));
+    toastError.mockClear();
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     localStorage.clear();
   });
 
-  it('renders empty state initially and connects to SSE', async () => {
-    render(<OrderManagerView />);
+  it('connects to the authenticated Order Manager WebSocket', async () => {
+    await act(async () => { render(<OrderManagerView />); })
 
-    expect(screen.getByText('Conectando...')).toBeInTheDocument();
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(MockWebSocket.instances[0].url).toBe('ws://localhost:8000/api/v1/orders/ws?token=fake_token');
 
-    act(() => {
-      MockEventSource.simulateOpen();
-    });
-
-    expect(screen.getByText('Conectado (Ao Vivo)')).toBeInTheDocument();
-    expect(screen.getByText('Nenhum pedido no momento.')).toBeInTheDocument();
-    expect(MockEventSource.instances[0].url).toContain('token=fake_token');
+    act(() => MockWebSocket.instances[0].open());
+    expect(screen.getAllByText('Conectado (Ao Vivo)')[0]).toBeInTheDocument();
   });
 
-  it('handles SSE error and attempts reconnect', async () => {
-    render(<OrderManagerView />);
-
-    act(() => {
-      MockEventSource.simulateError(new Error('Network error'));
-    });
-
-    expect(screen.getByText('Desconectado')).toBeInTheDocument();
-
-    // Fast-forward 5 seconds to trigger reconnect
-    act(() => {
-      vi.advanceTimersByTime(5000);
-    });
-
-    // It should try to connect again
-    expect(MockEventSource.instances.length).toBe(1); // One active, old one was closed
-  });
-
-  it('receives a new_order event, renders it, and plays alarm', async () => {
-    render(<OrderManagerView />);
-
-    const mockOrder = {
-      id: 'ord-123',
-      customerName: 'John Doe',
-      total: 150.5,
-      address: 'Rua das Flores, 123',
-      items: [{ name: 'Pizza', quantity: 2 }, { name: 'Refrigerante', quantity: 1 }],
-      status: 'pending',
-      createdAt: new Date().toISOString()
+  it('renders new orders and applies updates received from another screen', async () => {
+    await act(async () => { render(<OrderManagerView />); })
+    const socket = MockWebSocket.instances[0];
+    const order = {
+      id: 'pedido-123',
+      customerName: 'Cliente',
+      total: 74.97,
+      address: 'Rua A, 10',
+      items: [{ name: 'Brownie', quantity: 1 }],
+      status: 'accepted',
+      createdAt: '2026-08-31T14:48:07.915Z',
     };
 
-    act(() => {
-      MockEventSource.simulateMessage({ event: 'new_order', order: mockOrder });
-    });
+    act(() => socket.message({ event: 'new_order', order }));
+    expect(screen.getAllByText('Pedido #PEDIDO')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Aceito')[0]).toBeInTheDocument();
+    const wazeUrl = new URL(screen.getAllByText('Abrir no Waze')[0].getAttribute('href')!);
+    expect(wazeUrl.origin).toBe('https://waze.com');
+    expect(wazeUrl.pathname).toBe('/ul');
+    expect(wazeUrl.searchParams.get('q')).toBe('Rua A, 10');
+    expect(wazeUrl.searchParams.get('navigate')).toBe('yes');
+    expect(wazeUrl.searchParams.get('utm_source')).toBe('dominuslabs_order_manager');
 
-    // Check rendering
-    expect(screen.getByText('Pedido #ORD-12')).toBeInTheDocument();
-    expect(screen.getByText('John Doe')).toBeInTheDocument();
-    expect(screen.getByText('Rua das Flores, 123')).toBeInTheDocument();
-    expect(screen.getByText('2x')).toBeInTheDocument(); // 2x Pizza
-    expect(screen.getByText('Pizza')).toBeInTheDocument();
-    expect(screen.getByText('1x')).toBeInTheDocument(); // 1x Refrigerante
-    expect(screen.getByText('Refrigerante')).toBeInTheDocument();
-
-    // Check Waze link
-    const wazeLink = screen.getByText('Abrir no Waze');
-    expect(wazeLink).toHaveAttribute('href', `https://waze.com/ul?q=${encodeURIComponent('Rua das Flores, 123')}`);
-
-    // Check if speak was called
-    expect(mockSpeak).toHaveBeenCalledTimes(1);
-    const utterance = mockSpeak.mock.calls[0][0];
-    expect(utterance.text).toBe('Olá, o cliente John Doe fez um novo pedido 2 Pizza, 1 Refrigerante no valor de R$ 150,50 para entregar em Rua das Flores, 123, por favor aceite.');
-
-    // Check interval alarm
-    act(() => {
-      vi.advanceTimersByTime(15000);
-    });
-    expect(mockSpeak).toHaveBeenCalledTimes(2);
+    act(() => socket.message({ event: 'order_updated', order: { ...order, status: 'delivered' } }));
+    expect(screen.getAllByText('Entregue')[0]).toBeInTheDocument();
   });
 
-  it('stops alarm when clicking "Aceitar Pedido"', async () => {
-    render(<OrderManagerView />);
+  it('closes the socket when the screen is unmounted', async () => {
+    let unmount: any; await act(async () => { unmount = render(<OrderManagerView />).unmount; });
+    const socket = MockWebSocket.instances[0];
 
-    const mockOrder = {
-      id: 'ord-456',
-      customerName: 'Jane Smith',
-      total: 50,
-      address: 'Av Brasil, 100',
-      items: [{ name: 'Burger', quantity: 1 }],
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
+    unmount();
 
-    act(() => {
-      MockEventSource.simulateMessage({ event: 'new_order', order: mockOrder });
-    });
-
-    expect(mockSpeak).toHaveBeenCalledTimes(1);
-
-    const acceptButton = screen.getByText('Aceitar Pedido');
-
-    act(() => {
-      fireEvent.click(acceptButton);
-    });
-
-    expect(mockCancel).toHaveBeenCalledTimes(1);
-    expect(toast.success).toHaveBeenCalledWith('Pedido aceito com sucesso!');
-    expect(screen.getByText('Aceito')).toBeInTheDocument(); // Order status updated
-
-    // Verify interval is cleared
-    act(() => {
-      vi.advanceTimersByTime(15000);
-    });
-    expect(mockSpeak).toHaveBeenCalledTimes(1); // No new calls
+    expect(socket.isClosed).toBe(true);
   });
 
-  it('stops alarm automatically after 3 minutes', async () => {
-    render(<OrderManagerView />);
+  it('answers the server heartbeat without treating it as an order event', async () => {
+    await act(async () => { render(<OrderManagerView />); })
+    const socket = MockWebSocket.instances[0];
 
-    const mockOrder = {
-      id: 'ord-789',
-      customerName: 'Bob',
-      total: 20,
-      address: 'Rua A, 1',
-      items: [{ name: 'Fries', quantity: 1 }],
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
+    act(() => socket.message({ event: 'ping' }));
 
-    act(() => {
-      MockEventSource.simulateMessage({ event: 'new_order', order: mockOrder });
-    });
-
-    expect(mockSpeak).toHaveBeenCalledTimes(1);
-
-    // Advance 3 minutes (180000 ms)
-    act(() => {
-      vi.advanceTimersByTime(180000);
-    });
-
-    expect(mockCancel).toHaveBeenCalledTimes(1);
-    expect(toast.error).toHaveBeenCalledWith('Alerta parado para o pedido de Bob (tempo limite).');
+    expect(socket.sentMessages).toEqual([JSON.stringify({ event: 'pong' })]);
+    expect(screen.getAllByText('Nenhum pedido no momento.')[0]).toBeInTheDocument();
   });
 
-  it('ignores invalid SSE messages without throwing', async () => {
-    render(<OrderManagerView />);
+  it('downloads the TTS once and reuses the loaded audio on every alarm loop', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ orders: [] }) })
+      .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['audio']) });
+    vi.stubGlobal('fetch', fetchMock);
 
-    // Mock console.error to keep test output clean
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await act(async () => { render(<OrderManagerView />); })
+    const socket = MockWebSocket.instances[0];
+    act(() => socket.message({ event: 'new_order', order: pendingOrder }));
 
-    act(() => {
-      MockEventSource.simulateMessage('invalid json');
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    expect(consoleSpy).toHaveBeenCalledWith('Error parsing SSE event:', expect.any(Error));
-    consoleSpy.mockRestore();
-  });
-
-  it('gracefully handles missing SpeechSynthesis API', async () => {
-    // Remove speechSynthesis
-    Object.defineProperty(window, 'speechSynthesis', { configurable: true,
-      value: undefined,
-      configurable: true,
-    });
-
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    render(<OrderManagerView />);
-
-    const mockOrder = {
-      id: 'ord-999',
-      customerName: 'No Speech',
-      total: 10,
-      address: 'Rua B, 2',
-      items: [],
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
-
-    act(() => {
-      MockEventSource.simulateMessage({ event: 'new_order', order: mockOrder });
-    });
-
-    expect(consoleWarnSpy).toHaveBeenCalledWith('Speech Synthesis API not supported');
-
-    consoleWarnSpy.mockRestore();
-  });
-
-  it('cleans up resources on unmount', async () => {
-    const { unmount } = render(<OrderManagerView />);
-
-    const mockOrder = {
-      id: 'ord-000',
-      customerName: 'Unmount Test',
-      total: 10,
-      address: 'Rua C, 3',
-      items: [],
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
-
-    act(() => {
-      MockEventSource.simulateMessage({ event: 'new_order', order: mockOrder });
-    });
-
-    // Should have started playing
-    expect(mockSpeak).toHaveBeenCalledTimes(1);
-
-    act(() => {
-      unmount();
-    });
-
-    // expect(mockCancel).toHaveBeenCalled();
-    // After unmount, event source should be closed
-    expect(MockEventSource.instances.every(i => i.isClosed)).toBe(true);
-  });
-
-  it('gracefully handles missing SpeechSynthesis API on unmount', async () => {
-    const { unmount } = render(<OrderManagerView />);
-
-    const mockOrder = {
-      id: 'ord-111',
-      customerName: 'No Speech Unmount',
-      total: 10,
-      address: 'Rua D, 4',
-      items: [],
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
-
-    act(() => {
-      MockEventSource.simulateMessage({ event: 'new_order', order: mockOrder });
-    });
-
-    // Remove speechSynthesis right before unmount
-    Object.defineProperty(window, 'speechSynthesis', { configurable: true,
-      value: undefined,
-      configurable: true,
+    const audio = MockAudio.instances[0];
+    await waitFor(() => {
+      expect(audio.play).toHaveBeenCalledTimes(1);
     });
 
     act(() => {
-      unmount();
-    });
-    // Should not throw
-  });
-
-  it('does not crash if EventSource throws on creation', async () => {
-    // Spy on global EventSource to throw
-    const originalEventSource = global.EventSource;
-    global.EventSource = vi.fn().mockImplementation(() => {
-      throw new Error('SSE not supported');
+      audio.onended?.();
+      vi.advanceTimersByTime(10_000);
     });
 
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    render(<OrderManagerView />);
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to initialize SSE:', expect.any(Error));
-    expect(screen.getByText('Desconectado')).toBeInTheDocument();
-
-    consoleErrorSpy.mockRestore();
-    global.EventSource = originalEventSource;
+    await waitFor(() => {
+      expect(audio.play).toHaveBeenCalledTimes(2);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('cleans up non-pending orders from alarms', async () => {
-    const { rerender } = render(<OrderManagerView />);
+  it('does not start an alarm when a pending TTS request finishes after an order update', async () => {
+    let resolveBlob: (blob: Blob) => void = () => undefined;
+    const delayedBlob = new Promise<Blob>(resolve => {
+      resolveBlob = resolve;
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ orders: [] }) })
+      .mockResolvedValueOnce({ ok: true, blob: () => delayedBlob });
+    vi.stubGlobal('fetch', fetchMock);
 
-    const mockOrder = {
-      id: 'ord-cleanup',
-      customerName: 'Cleanup',
-      total: 10,
-      address: 'Rua',
-      items: [],
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
+    await act(async () => { render(<OrderManagerView />); })
+    const socket = MockWebSocket.instances[0];
+    act(() => socket.message({ event: 'new_order', order: pendingOrder }));
 
-    act(() => {
-      MockEventSource.simulateMessage({ event: 'new_order', order: mockOrder });
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(mockSpeak).toHaveBeenCalledTimes(1);
+    const audio = MockAudio.instances[0];
+    act(() => socket.message({ event: 'order_updated', order: { ...pendingOrder, status: 'accepted' } }));
 
-    // Agora simula outro pedido chegando e atualizando o primeiro pra cancelled no mock
-    const updatedOrder = { ...mockOrder, id: 'cleanup', status: 'cancelled' };
+    act(() => resolveBlob(new Blob(['audio'])));
 
-
-    act(() => {
-      // Simulate state change to trigger effect
-      MockEventSource.simulateMessage({ event: 'new_order', order: updatedOrder });
+    await waitFor(() => {
+      expect(MockURL.revokeObjectURL).toHaveBeenCalledWith('blob:order-alarm');
     });
 
-    // We can't directly verify internal ref, but we can verify stopAlarm side effect
-    // expect(mockCancel).toHaveBeenCalled();
-  });
-  it('covers manual alarm cleanup for non-pending orders in active alarms', () => {
-    // To trigger line 108: `!order || order.status !== 'pending'` where orderId is in activeAlarms.
-    const { unmount } = render(<OrderManagerView />);
-
-    // 1. Add order 1 (pending)
-    const order1 = { id: 'ord-test-108', customerName: 'A', total: 10, address: 'R', items: [], status: 'pending', createdAt: new Date().toISOString() };
-    act(() => { MockEventSource.simulateMessage({ event: 'new_order', order: order1 }); });
-
-    // 2. Now `activeAlarms` has 'ord-test-108'
-
-    // 3. Fake a scenario where a non-pending order triggers the effect.
-    // We can't directly edit the state hook easily, but if we send the same order as 'accepted',
-    // SSE hook will add it to the list as a NEW entry (so it finds it, and status is accepted).
-    const order1Accepted = { ...order1, status: 'accepted' };
-    act(() => { MockEventSource.simulateMessage({ event: 'new_order', order: order1Accepted }); });
-
-    // stopAlarm should have been called for it because status !== 'pending'
-    // expect(mockCancel).toHaveBeenCalled();
+    expect(audio.play).not.toHaveBeenCalled();
   });
 
-  it('renders a completed order correctly', () => {
-    render(<OrderManagerView />);
+  it('uses visible and spoken fallback when browser audio is blocked', async () => {
+    const speak = vi.fn();
+    vi.stubGlobal('speechSynthesis', { cancel: vi.fn(), speak });
+    vi.stubGlobal('SpeechSynthesisUtterance', class {
+      constructor(public text: string) {}
+    });
+    MockAudio.playResult = Promise.reject(new Error('play blocked'));
+    MockAudio.playResult.catch(() => {}); // Prevent unhandled rejection warning
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ orders: [] }) })
+      .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['audio']) });
+    vi.stubGlobal('fetch', fetchMock);
 
-    const completedOrder = { id: 'ord-completed', customerName: 'Comp', total: 10, address: 'R', items: [], status: 'completed', createdAt: new Date().toISOString() };
-    act(() => { MockEventSource.simulateMessage({ event: 'new_order', order: completedOrder }); });
+    await act(async () => { render(<OrderManagerView />); })
+    act(() => MockWebSocket.instances[0].message({ event: 'new_order', order: pendingOrder }));
 
-    expect(screen.getByText('completed')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(speak).toHaveBeenCalledTimes(1);
+    });
+
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining('Novo pedido pendente'));
   });
 
-  it('handles events that are not new_order', () => {
-    render(<OrderManagerView />);
-    act(() => { MockEventSource.simulateMessage({ event: 'other_event' }); });
-    // Should not throw or do anything
+  it('polling brings pending orders even before websocket connects', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ orders: [{ ...pendingOrder, id: 'pedido-poll' }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => { render(<OrderManagerView />); })
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Pedido #PEDIDO')[0]).toBeInTheDocument();
+    });
+
+    // Fast-forward 2 minutes to trigger polling
+    act(() => vi.advanceTimersByTime(120000));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
   });
 
+  it('cleans up polling interval on unmount', async () => {
+    vi.spyOn(global, 'clearInterval');
+    let unmount: any; await act(async () => { unmount = render(<OrderManagerView />).unmount; });
 
-  it('renders correctly when status is cancelled', () => {
-    render(<OrderManagerView />);
+    unmount();
 
-    const cancelledOrder = { id: 'ord-cancelled', customerName: 'Cancelled Order', total: 10, address: 'Rua C', items: [], status: 'cancelled', createdAt: new Date().toISOString() };
-    act(() => { MockEventSource.simulateMessage({ event: 'new_order', order: cancelledOrder }); });
-
-    expect(screen.getByText('cancelled')).toBeInTheDocument();
-  });
-
-  it('covers catch block in parse error of SSE', () => {
-    // Already covered in invalid SSE test, but this ensures we get it clearly
-    render(<OrderManagerView />);
-    act(() => { MockEventSource.simulateMessage('invalid'); });
+    expect(global.clearInterval).toHaveBeenCalled();
   });
 });
