@@ -551,13 +551,13 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
                       <>
                         <button 
                           onClick={prevMedia}
-                          className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 hover:bg-black/80 text-white z-20 cursor-pointer transition-all hover:scale-105 border border-white/10"
+                          className="absolute left-4 top-1/2 -tranzinc-y-1/2 p-2 rounded-full bg-black/50 hover:bg-black/80 text-white z-20 cursor-pointer transition-all hover:scale-105 border border-white/10"
                         >
                           <ChevronLeft className="w-5 h-5" />
                         </button>
                         <button 
                           onClick={nextMedia}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 hover:bg-black/80 text-white z-20 cursor-pointer transition-all hover:scale-105 border border-white/10"
+                          className="absolute right-4 top-1/2 -tranzinc-y-1/2 p-2 rounded-full bg-black/50 hover:bg-black/80 text-white z-20 cursor-pointer transition-all hover:scale-105 border border-white/10"
                         >
                           <ChevronRight className="w-5 h-5" />
                         </button>

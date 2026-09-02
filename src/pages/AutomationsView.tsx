@@ -121,7 +121,7 @@ export default function AutomationsView({
                   >
                     <span
                       className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out flex items-center justify-center ${
-                        rule.ativo ? 'translate-x-5' : 'translate-x-0'
+                        rule.ativo ? 'tranzinc-x-5' : 'tranzinc-x-0'
                       }`}
                     >
                       {isBusy ? (

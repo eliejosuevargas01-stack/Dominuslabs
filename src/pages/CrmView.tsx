@@ -323,7 +323,7 @@ export default function CrmView() {
           {/* Search Box */}
           <div className="flex items-center gap-2">
             <div className="relative">
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -tranzinc-y-1/2" />
               <input
                 type="text"
                 placeholder="Buscar cliente, telefone ou pedido..."

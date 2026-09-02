@@ -669,7 +669,7 @@ export default function CompanySettingsView() {
                   Valor Base / Taxa (R$)
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-sm font-semibold">R$</span>
+                  <span className="absolute left-4 top-1/2 -tranzinc-y-1/2 text-zinc-400 text-sm font-semibold">R$</span>
                   <input
                     type="number"
                     min="0"
@@ -687,7 +687,7 @@ export default function CompanySettingsView() {
                   Raio Máximo de Entrega (KM)
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-sm font-semibold">Km</span>
+                  <span className="absolute left-4 top-1/2 -tranzinc-y-1/2 text-zinc-400 text-sm font-semibold">Km</span>
                   <input
                     type="number"
                     min="0"
@@ -758,7 +758,7 @@ export default function CompanySettingsView() {
                   Valor Mínimo do Pedido (R$)
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-sm font-semibold">R$</span>
+                  <span className="absolute left-4 top-1/2 -tranzinc-y-1/2 text-zinc-400 text-sm font-semibold">R$</span>
                   <input
                     type="number"
                     min="0"
@@ -776,7 +776,7 @@ export default function CompanySettingsView() {
                   Tempo Médio de Preparo / Envio (Minutos)
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-sm font-semibold"><Clock className="w-4 h-4"/></span>
+                  <span className="absolute left-4 top-1/2 -tranzinc-y-1/2 text-zinc-400 text-sm font-semibold"><Clock className="w-4 h-4"/></span>
                   <input
                     type="number"
                     min="0"

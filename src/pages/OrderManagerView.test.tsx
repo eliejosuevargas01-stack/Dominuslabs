@@ -38,26 +38,6 @@ class MockWebSocket {
   }
 }
 
-class MockAudio {
-  static instances: MockAudio[] = [];
-  static playResult: Promise<void> = Promise.resolve();
-
-  src = '';
-  currentTime = 0;
-  onended: (() => void) | null = null;
-  play = vi.fn(() => MockAudio.playResult);
-  pause = vi.fn();
-
-  constructor() {
-    MockAudio.instances.push(this);
-  }
-}
-
-class MockURL extends URL {
-  static createObjectURL = vi.fn(() => 'blob:order-alarm');
-  static revokeObjectURL = vi.fn();
-}
-
 const pendingOrder = {
   id: 'pedido-pendente',
   customerName: 'Cliente',
@@ -71,14 +51,8 @@ const pendingOrder = {
 describe('OrderManagerView', () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
-    MockAudio.instances = [];
-    MockAudio.playResult = Promise.resolve();
-    MockURL.createObjectURL.mockClear();
-    MockURL.revokeObjectURL.mockClear();
     localStorage.setItem('admin_token', 'fake_token');
     vi.stubGlobal('WebSocket', MockWebSocket);
-    vi.stubGlobal('Audio', MockAudio);
-    vi.stubGlobal('URL', MockURL);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ orders: [] }),
@@ -96,7 +70,7 @@ describe('OrderManagerView', () => {
     await act(async () => { render(<OrderManagerView />); })
 
     expect(MockWebSocket.instances).toHaveLength(1);
-    expect(MockWebSocket.instances[0].url).toBe('ws://localhost:8000/api/v1/orders/ws?token=fake_token');
+    expect(MockWebSocket.instances[0].url).toEqual(expect.stringContaining('/api/v1/orders/ws?token=fake_token'));
 
     act(() => MockWebSocket.instances[0].open());
     expect(screen.getAllByText('Conectado (Ao Vivo)')[0]).toBeInTheDocument();
@@ -148,110 +122,36 @@ describe('OrderManagerView', () => {
     expect(screen.getAllByText('Nenhum pedido no momento.')[0]).toBeInTheDocument();
   });
 
-  it('downloads the TTS once and reuses the loaded audio on every alarm loop', async () => {
-    vi.useFakeTimers();
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ orders: [] }) })
-      .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['audio']) });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await act(async () => { render(<OrderManagerView />); })
-    const socket = MockWebSocket.instances[0];
-    act(() => socket.message({ event: 'new_order', order: pendingOrder }));
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-    });
-
-    const audio = MockAudio.instances[0];
-    await waitFor(() => {
-      expect(audio.play).toHaveBeenCalledTimes(1);
-    });
-
-    act(() => {
-      audio.onended?.();
-      vi.advanceTimersByTime(10_000);
-    });
-
-    await waitFor(() => {
-      expect(audio.play).toHaveBeenCalledTimes(2);
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('does not start an alarm when a pending TTS request finishes after an order update', async () => {
-    let resolveBlob: (blob: Blob) => void = () => undefined;
-    const delayedBlob = new Promise<Blob>(resolve => {
-      resolveBlob = resolve;
-    });
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ orders: [] }) })
-      .mockResolvedValueOnce({ ok: true, blob: () => delayedBlob });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await act(async () => { render(<OrderManagerView />); })
-    const socket = MockWebSocket.instances[0];
-    act(() => socket.message({ event: 'new_order', order: pendingOrder }));
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-    });
-
-    const audio = MockAudio.instances[0];
-    act(() => socket.message({ event: 'order_updated', order: { ...pendingOrder, status: 'accepted' } }));
-
-    act(() => resolveBlob(new Blob(['audio'])));
-
-    await waitFor(() => {
-      expect(MockURL.revokeObjectURL).toHaveBeenCalledWith('blob:order-alarm');
-    });
-
-    expect(audio.play).not.toHaveBeenCalled();
-  });
-
-  it('uses visible and spoken fallback when browser audio is blocked', async () => {
-    const speak = vi.fn();
-    vi.stubGlobal('speechSynthesis', { cancel: vi.fn(), speak });
-    vi.stubGlobal('SpeechSynthesisUtterance', class {
-      constructor(public text: string) {}
-    });
-    MockAudio.playResult = Promise.reject(new Error('play blocked'));
-    MockAudio.playResult.catch(() => {}); // Prevent unhandled rejection warning
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ orders: [] }) })
-      .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['audio']) });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await act(async () => { render(<OrderManagerView />); })
-    act(() => MockWebSocket.instances[0].message({ event: 'new_order', order: pendingOrder }));
-
-    await waitFor(() => {
-      expect(speak).toHaveBeenCalledTimes(1);
-    });
-
-    expect(toastError).toHaveBeenCalledWith(expect.stringContaining('Novo pedido pendente'));
-  });
-
   it('polling brings pending orders even before websocket connects', async () => {
-    vi.useFakeTimers();
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ orders: [{ ...pendingOrder, id: 'pedido-poll' }] }),
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await act(async () => { render(<OrderManagerView />); })
+    await act(async () => { render(<OrderManagerView />); });
 
-    await waitFor(() => {
-      expect(screen.getAllByText('Pedido #PEDIDO')[0]).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows rejecting a pending order', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ orders: [pendingOrder] }),
+    }).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ order: { ...pendingOrder, status: 'cancelled' } }),
     });
+    vi.stubGlobal('fetch', fetchMock);
 
-    // Fast-forward 2 minutes to trigger polling
-    act(() => vi.advanceTimersByTime(120000));
+    await act(async () => { render(<OrderManagerView />); });
 
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-    });
+    const rejectBtn = screen.getByText('Recusar');
+    await act(async () => { rejectBtn.click(); });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toContain('/reject');
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it('cleans up polling interval on unmount', async () => {

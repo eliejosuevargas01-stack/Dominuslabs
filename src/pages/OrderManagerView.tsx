@@ -279,12 +279,9 @@ export default function OrderManagerView() {
     stopAlarm(orderId);
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/accept`, {
+      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/accept?token=${encodeURIComponent(token || '')}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
       });
       if (!response.ok) throw new Error('Falha ao confirmar pedido');
       const data = await response.json();
@@ -295,15 +292,29 @@ export default function OrderManagerView() {
     }
   };
 
+
+  const handleReject = async (orderId: string) => {
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/reject?token=${encodeURIComponent(token || '')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) throw new Error('Falha ao recusar pedido');
+      const data = await response.json();
+      setOrders(prev => prev.map(o => o.id === orderId ? data.order : o));
+      toast.success('Pedido recusado com sucesso!');
+    } catch {
+      toast.error('Não foi possível recusar o pedido.');
+    }
+  };
+
   const handleStatusChange = async (orderId: string, nextStatus: OperationalStatus) => {
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/status?status=${nextStatus}`, {
+      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/status?status=${nextStatus}&token=${encodeURIComponent(token || '')}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
       });
       if (!response.ok) throw new Error('Falha ao atualizar status');
       const data = await response.json();
@@ -406,13 +417,21 @@ export default function OrderManagerView() {
 
               {order.status === 'pending' && (
                 <div className="p-4 bg-zinc-50 border-t border-zinc-100">
-                  <button
-                    onClick={() => handleAccept(order.id)}
-                    className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Check className="w-4 h-4" />
-                    Aceitar Pedido
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleReject(order.id)}
+                      className="flex-1 py-2.5 bg-red-100 hover:bg-red-200 text-red-700 font-medium rounded-lg shadow-sm transition-colors cursor-pointer"
+                    >
+                      Recusar
+                    </button>
+                    <button
+                      onClick={() => handleAccept(order.id)}
+                      className="flex-[2] py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Check className="w-4 h-4" />
+                      Aceitar Pedido
+                    </button>
+                  </div>
                 </div>
               )}
               {order.status === 'accepted' && (
