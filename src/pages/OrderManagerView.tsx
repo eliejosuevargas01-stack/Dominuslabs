@@ -279,9 +279,12 @@ export default function OrderManagerView() {
     stopAlarm(orderId);
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/accept?token=${encodeURIComponent(token || '')}`, {
+      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/accept`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
       if (!response.ok) throw new Error('Falha ao confirmar pedido');
       const data = await response.json();
@@ -295,9 +298,12 @@ export default function OrderManagerView() {
   const handleStatusChange = async (orderId: string, nextStatus: OperationalStatus) => {
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/status?status=${nextStatus}&token=${encodeURIComponent(token || '')}`, {
+      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/status?status=${nextStatus}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
       if (!response.ok) throw new Error('Falha ao atualizar status');
       const data = await response.json();
