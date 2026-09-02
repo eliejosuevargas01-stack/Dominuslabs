@@ -72,7 +72,7 @@ function Header() {
             Dominuslabs
           </span>
         </Link>
-        
+
         <div className="flex items-center gap-2 sm:gap-3">
           <span className="hidden sm:flex text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -144,15 +144,15 @@ function App() {
           <Route path="/cases" element={<Showcase />} />
 
           {/* Protected Admin Routes (with sidebar layout) */}
-          <Route 
-            path="/project-hub" 
+          <Route
+            path="/project-hub"
             element={
               <ProtectedRoute>
                 <DashboardLayout>
                   <AdminDashboard />
                 </DashboardLayout>
               </ProtectedRoute>
-            } 
+            }
           />
           <Route
             path="/order-manager"
@@ -214,74 +214,74 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route 
-            path="/project-hub/project/:id" 
+          <Route
+            path="/project-hub/project/:id"
             element={
               <ProtectedRoute>
                 <DashboardLayout>
                   <AdminProjectView />
                 </DashboardLayout>
               </ProtectedRoute>
-            } 
+            }
           />
-          <Route 
-            path="/omnichannel" 
+          <Route
+            path="/omnichannel"
             element={
               <ProtectedRoute>
                 <DashboardLayout>
                   <OmnichannelView />
                 </DashboardLayout>
               </ProtectedRoute>
-            } 
+            }
           />
-          <Route 
-            path="/crm" 
+          <Route
+            path="/crm"
             element={
               <ProtectedRoute>
                 <DashboardLayout>
                   <CrmView />
                 </DashboardLayout>
               </ProtectedRoute>
-            } 
+            }
           />
-          <Route 
-            path="/connections" 
+          <Route
+            path="/connections"
             element={
               <ProtectedRoute>
                 <DashboardLayout>
                   <ConnectionsView />
                 </DashboardLayout>
               </ProtectedRoute>
-            } 
+            }
           />
-          <Route 
-            path="/cases-dashboard" 
+          <Route
+            path="/cases-dashboard"
             element={
               <ProtectedRoute>
                 <DashboardLayout>
                   <Showcase isDashboard={true} />
                 </DashboardLayout>
               </ProtectedRoute>
-            } 
+            }
           />
-          <Route 
-            path="/crm/leads/:id" 
+          <Route
+            path="/crm/leads/:id"
             element={
               <ProtectedRoute>
                 <DashboardLayout>
                   <LeadDetailView />
                 </DashboardLayout>
               </ProtectedRoute>
-            } 
+            }
           />
 
-          <Route 
-            path="/order-manager" 
+          <Route
+            path="/order-manager"
             element={
               <ProtectedRoute>
                 <OrderManagerView />
               </ProtectedRoute>
-            } 
+            }
           />
           {/* Default fallback redirects */}
           <Route path="/admin/*" element={<Navigate to="/dashboard-operacional" replace />} />
@@ -294,4 +294,5 @@ function App() {
   );
 }
 
+export { ProtectedRoute };
 export default App;
