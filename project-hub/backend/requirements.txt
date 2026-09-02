@@ -11,3 +11,4 @@ httpx
 cachetools
 slowapi
 cryptography
+alembic
