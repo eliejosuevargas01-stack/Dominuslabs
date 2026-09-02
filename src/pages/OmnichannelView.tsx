@@ -1787,7 +1787,7 @@ function playOutgoingSound() {
           <div className="p-3.5 space-y-3 bg-white border-b border-zinc-100">
             {/* Search Input */}
             <div className="relative">
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -tranzinc-y-1/2" />
+              <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder={activeTab === 'conversations' ? "Pesquisar conversa ou mensagem..." : "Buscar contatos no CRM..."}
@@ -1796,7 +1796,12 @@ function playOutgoingSound() {
                 className="w-full pl-9 pr-4 py-2 rounded-xl bg-zinc-50 text-xs font-semibold text-zinc-800 placeholder-zinc-400 outline-none focus:ring-2 focus:ring-purple-500/20 focus:bg-white transition-all border border-zinc-200"
               />
               {searchTerm && (
-                <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -tranzinc-y-1/2 text-zinc-400 hover:text-zinc-600">
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 rounded-full p-1 cursor-pointer"
+                  aria-label="Limpar pesquisa"
+                  title="Limpar pesquisa"
+                >
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
