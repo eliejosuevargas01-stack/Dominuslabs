@@ -7,7 +7,6 @@ Impacto na regra de negócio: É responsável por garantir que as operações e 
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
-from uuid import UUID
 
 class ProductMediaBase(BaseModel):
     """
@@ -16,7 +15,7 @@ class ProductMediaBase(BaseModel):
     O que faz: Representa a estrutura de dados e operações para a entidade ProductMediaBase em o esquema de validação Pydantic product_media.
     Impacto na regra de negócio: Centraliza o comportamento da entidade ProductMediaBase, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
     """
-    product_id: UUID
+    product_id: str
     media_type: str
     media_url: str
 

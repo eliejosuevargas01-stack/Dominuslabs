@@ -43,7 +43,7 @@ def test_upload_product_media_image(mock_copy, mock_makedirs, client: TestClient
 
     file_content = b"fake image data"
     files = {"file": ("product.png", file_content, "image/png")}
-    data = {"product_id": "11111111-1111-4111-8111-111111111111", "tenant_id": "test_tenant"}
+    data = {"product_id": "test_product_123", "tenant_id": "test_tenant"}
 
     with patch("builtins.open", mock_open()):
         response = client.post(f"{settings.API_V1_STR}/product-media/", files=files, data=data, headers=auth_headers)
@@ -52,7 +52,7 @@ def test_upload_product_media_image(mock_copy, mock_makedirs, client: TestClient
 
     assert response.status_code == 200
     res_data = response.json()
-    assert res_data["product_id"] == "11111111-1111-4111-8111-111111111111"
+    assert res_data["product_id"] == "test_product_123"
     assert res_data["media_type"] == "image"
     assert "media_url" in res_data
 
@@ -76,7 +76,7 @@ def test_upload_product_media_video(mock_copy, mock_makedirs, client: TestClient
 
     file_content = b"fake video data"
     files = {"file": ("product.mp4", file_content, "video/mp4")}
-    data = {"product_id": "22222222-2222-4222-8222-222222222222", "tenant_id": "test_tenant"}
+    data = {"product_id": "test_product_456", "tenant_id": "test_tenant"}
 
     with patch("builtins.open", mock_open()):
         response = client.post(f"{settings.API_V1_STR}/product-media/", files=files, data=data, headers=auth_headers)
@@ -85,7 +85,7 @@ def test_upload_product_media_video(mock_copy, mock_makedirs, client: TestClient
 
     assert response.status_code == 200
     res_data = response.json()
-    assert res_data["product_id"] == "22222222-2222-4222-8222-222222222222"
+    assert res_data["product_id"] == "test_product_456"
     assert res_data["media_type"] == "video"
 
     mock_makedirs.assert_called_once()
@@ -96,7 +96,7 @@ def test_upload_product_media_video(mock_copy, mock_makedirs, client: TestClient
 def test_upload_product_media_invalid_type(client: TestClient, auth_headers: dict):
     file_content = b"fake pdf data"
     files = {"file": ("product.pdf", file_content, "application/pdf")}
-    data = {"product_id": "33333333-3333-4333-8333-333333333333", "tenant_id": "test_tenant"}
+    data = {"product_id": "test_product_789", "tenant_id": "test_tenant"}
 
     response = client.post(f"{settings.API_V1_STR}/product-media/", files=files, data=data, headers=auth_headers)
 

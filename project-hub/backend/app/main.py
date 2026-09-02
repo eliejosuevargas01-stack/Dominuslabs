@@ -14,17 +14,87 @@ import os
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import Base, engine, get_db
 from app.core.middleware import AuditLoggingMiddleware, DecryptionMiddleware
 
-# Register all SQLAlchemy models; schema changes are applied by Alembic before startup.
-import app.models  # noqa: F401
+# Import all models to ensure they are registered on Base.metadata
+from app.models.project import Project
+from app.models.asset import ProjectAsset
+from app.models.task import ProjectTask
+from app.models.logs import CommitLog, DeployLog
+from app.models.feedback import Feedback
+from app.models.user import User
+from app.models.whatsapp_account import WhatsappAccount
+from app.models.order_manager import OrderManagerOrder, OrderManagerOrderItem
 
-# Create persistent upload folders. Database schema changes are managed by Alembic.
+# Create persistent upload folders and database tables
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "images"), exist_ok=True)
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "videos"), exist_ok=True)
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "audio"), exist_ok=True)
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "documents"), exist_ok=True)
+
+Base.metadata.create_all(bind=engine)
+
+
+
+# Automatic database migration for users and whatsapp_accounts columns
+from sqlalchemy import text
+db_type = engine.url.drivername
+# Garante compatibilidade local: Injeta colunas dinamicamente caso o banco seja SQLite, evitando que o ambiente de dev precise rodar migrations complexas.
+if "sqlite" in db_type:
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("users")]
+        with engine.begin() as conn:
+# Previne crash no login: Adiciona o tenant_id apenas se a coluna estiver faltando no SQLite de testes.
+            if "tenant_id" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN tenant_id VARCHAR(255);"))
+            if "whatsapp_token" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN whatsapp_token VARCHAR;"))
+            if "access_token" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN access_token VARCHAR;"))
+            if "refresh_token" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN refresh_token VARCHAR;"))
+            if "token_issued_at" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN token_issued_at DATETIME;"))
+            if "token_expires_at" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN token_expires_at DATETIME;"))
+            if "preferred_session_id" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN preferred_session_id VARCHAR(255);"))
+            if "permissions" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN permissions VARCHAR(255) DEFAULT 'read';"))
+            
+            wa_columns = [c["name"] for c in inspector.get_columns("whatsapp_accounts")] if inspector.has_table("whatsapp_accounts") else []
+            if "tenant_id" not in wa_columns and inspector.has_table("whatsapp_accounts"):
+                conn.execute(text("ALTER TABLE whatsapp_accounts ADD COLUMN tenant_id VARCHAR(255);"))
+        print("SQLite migration: users and whatsapp_accounts tenant_id/permissions columns checked/added successfully.")
+    except Exception as e:
+        print(f"SQLite migration warning: {e}")
+else:
+    # Postgres DDL executions in separate transactions
+    ddl_statements = [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_token VARCHAR(255);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_session_id VARCHAR(255);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions VARCHAR(255) DEFAULT 'read';",
+        "ALTER TABLE users ALTER COLUMN can_create_projects DROP NOT NULL;",
+        "ALTER TABLE users ALTER COLUMN can_edit_projects DROP NOT NULL;",
+        "ALTER TABLE users ALTER COLUMN can_manage_crm DROP NOT NULL;",
+        "ALTER TABLE users ALTER COLUMN can_use_scrapper DROP NOT NULL;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS access_token TEXT;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token TEXT;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_issued_at TIMESTAMP;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMP;",
+        "ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);"
+    ]
+    for stmt in ddl_statements:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(stmt))
+        except Exception as stmt_err:
+            print(f"Postgres migration DDL notice ({stmt}): {stmt_err}")
+    print("PostgreSQL migration: users and whatsapp_accounts columns migration completed.")
 
 # Seed database users
 def seed_database_users():

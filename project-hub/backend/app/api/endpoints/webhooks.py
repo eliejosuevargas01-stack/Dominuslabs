@@ -407,35 +407,6 @@ async def all_projects_events(request: Request):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-
-def _parse_nested_json(data: dict | list | str) -> dict | list | str:
-    """Recursively parses nested JSON strings into Python objects."""
-    if isinstance(data, dict):
-        for k, v in data.items():
-            if isinstance(v, str):
-                try:
-                    import json
-                    parsed = json.loads(v)
-                    if isinstance(parsed, (dict, list)):
-                        data[k] = _parse_nested_json(parsed)
-                except (ValueError, TypeError):
-                    pass
-            else:
-                data[k] = _parse_nested_json(v)
-    elif isinstance(data, list):
-        for i, item in enumerate(data):
-            if isinstance(item, str):
-                try:
-                    import json
-                    parsed = json.loads(item)
-                    if isinstance(parsed, (dict, list)):
-                        data[i] = _parse_nested_json(parsed)
-                except (ValueError, TypeError):
-                    pass
-            else:
-                data[i] = _parse_nested_json(item)
-    return data
-
 async def get_payload(request: Request) -> dict:
     """
     Função/Método get_payload.
@@ -450,14 +421,12 @@ async def get_payload(request: Request) -> dict:
         if not payload_str:
             return {}
         try:
-            parsed = json.loads(payload_str)
-            return _parse_nested_json(parsed)
+            return json.loads(payload_str)
         except Exception:
             return {}
     else:
         try:
-            parsed = await request.json()
-            return _parse_nested_json(parsed)
+            return await request.json()
         except Exception:
             return {}
 
@@ -657,7 +626,7 @@ async def deploy_webhook(request: Request, db: Session = Depends(get_db)):
     O que faz: Processa deploy_webhook recebendo os parâmetros (request, db) no contexto de o endpoint de API para webhooks.
     Impacto na regra de negócio: Assegura que o fluxo da operação deploy_webhook seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
-    payload = await get_payload(request)
+    payload = await request.json()
 
     project_id = payload.get("project_id")
     provider = payload.get("provider") # netlify, vercel
@@ -702,7 +671,7 @@ async def whatsapp_inbound_webhook(request: Request):
         if not signature or not hmac.compare_digest(signature, expected_signature):
             return {"status": "ignored", "reason": "invalid signature"}
 
-    payload = await get_payload(request)
+    payload = await request.json()
     lead_id = payload.get("lead_id")
     message_text = payload.get("message")
     sender = payload.get("sender", "lead")
@@ -752,7 +721,7 @@ async def instagram_inbound_webhook(request: Request):
         if not signature or not hmac.compare_digest(signature, expected_signature):
             return {"status": "ignored", "reason": "invalid signature"}
 
-    payload = await get_payload(request)
+    payload = await request.json()
     lead_id = payload.get("lead_id")
     message_text = payload.get("message")
     sender = payload.get("sender", "lead")
@@ -793,7 +762,7 @@ async def waha_session_status_webhook(request: Request):
     If a session drops or fails, we notify the frontend via SSE.
     """
     try:
-        payload = await get_payload(request)
+        payload = await request.json()
     except Exception:
         return {"status": "ignored", "reason": "invalid json"}
         
