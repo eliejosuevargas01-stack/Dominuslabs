@@ -8,6 +8,7 @@ import os
 import shutil
 import uuid
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -82,8 +83,6 @@ def upload_file(
 
     return asset_repo.create(db, obj_in=asset_in)
 
-from fastapi.responses import FileResponse
-
 @router.get("/{subfolder}/{filename}")
 def get_uploaded_file(subfolder: str, filename: str):
     """
@@ -92,7 +91,10 @@ def get_uploaded_file(subfolder: str, filename: str):
     O que faz: Recuperação de dados cadastrados para get_uploaded_file recebendo os parâmetros (subfolder, filename) no contexto de o endpoint de API para uploads.
     Impacto na regra de negócio: Assegura que o fluxo da operação get_uploaded_file seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
-    file_path = os.path.join(settings.UPLOAD_DIR, subfolder, filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path)
+    base_dir = os.path.realpath(settings.UPLOAD_DIR)
+    target_path = os.path.realpath(os.path.join(base_dir, subfolder, filename))
+    if not target_path.startswith(base_dir + os.sep) and target_path != base_dir:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    if not os.path.exists(target_path) or not os.path.isfile(target_path):
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+    return FileResponse(target_path)
