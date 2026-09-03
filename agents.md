@@ -1,14 +1,16 @@
-# 👥 Papéis e Responsabilidades dos Agentes (Agents)
+# Multi-Agent Coordination & Responsibilities
 
-## 1. Rabibi-Maestro (Arquiteto & Orquestrador Local)
-- **Responsabilidade:** Planejamento arquitetural, governança de código, auditoria de segurança (SAST), orquestração de threads Aider, validação de gates de qualidade, execução de code review e promoção segura.
+## 1. Rabibi-Maestro (Architect & Orchestrator)
+- Governança de arquitetura e padrões (SOLID, Zero-Trust, desacoplamento Node/FastAPI).
+- Definição dos contratos de modelo SQLAlchemy vs migrações Alembic.
+- Orquestração de threads no Dominus-MCP, revisão de código e gate de QA Jules.
 
-## 2. Aider Worker Threads na VPS
-- **Responsabilidade:** Execução cirúrgica das tarefas atribuídas em `tasks.md` e `implementation_plan.md` no backend Python/FastAPI.
-- **Restrições:**
-  - Manter-se no escopo de arquivos definido.
-  - Assegurar que os testes do pytest sejam executados e passem com sucesso.
-  - Submeter as alterações na branch `fix/backend-security-and-contracts`.
+## 2. Aider Worker Agents (Autonomous Coders na VPS)
+- **Worker 1 (`align-product-media-model`):**
+  - Alinhar `project-hub/backend/app/models/product_media.py` com o Alembic, definindo `product_id = Column(UUID(as_uuid=True), ForeignKey("produtos.id", ondelete="CASCADE"), index=True, nullable=False)`.
+- **Worker 2 (`fix-test-mocks`):**
+  - Ajustar mock de `check_crm_permission` em `project-hub/backend/tests/test_product_media.py`.
+  - Ajustar mock do cliente HTTP assíncrono em `project-hub/backend/tests/test_whatsapp.py:test_provision_whatsapp`.
 
-## 3. QA Jules Gatekeeper (Auditor de Testes Remoto)
-- **Responsabilidade:** Executar testes e validações no sandbox remoto como gate pré-produção.
+## 3. QA Jules (Autonomous Verifier)
+- Verificação do repositório remoto, execução do sandbox de testes e validação de cobertura.
