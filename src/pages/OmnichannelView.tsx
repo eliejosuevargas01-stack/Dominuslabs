@@ -195,39 +195,47 @@ function getAvatarColor(initials: string, name: string) {
   return AVATAR_COLORS_FALLBACK[index];
 }
 
-function getAvatarSrc(url?: string, session_id?: string, jid?: string): string | null {
+function getAvatarSrc(url?: string, session_id?: string, jid?: string, allowProxy: boolean = false): string | null {
   if (url && typeof url === 'string') {
     const trimmed = url.trim();
-    if (trimmed.includes('pps.whatsapp.net')) {
+    if (trimmed.includes('pps.whatsapp.net') || trimmed.includes('fbcdn.net')) {
       return trimmed;
     }
     if (trimmed.startsWith('data:image')) {
       return trimmed;
     }
-  }
-
-  let targetSession = session_id || 'default';
-  let targetJid = jid || '';
-
-  if (url && typeof url === 'string') {
-    const trimmed = url.trim();
-    if (trimmed.includes('/avatar?') || trimmed.includes('/sessions/')) {
-      try {
-        const fullUrl = trimmed.startsWith('http') ? trimmed : `https://dummy.local${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
-        const parsed = new URL(fullUrl);
-        const qSession = parsed.searchParams.get('session') || parsed.searchParams.get('session_id');
-        const qJid = parsed.searchParams.get('jid');
-        
-        if (qSession) targetSession = qSession;
-        if (qJid) targetJid = qJid;
-      } catch (e) {}
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
     }
   }
 
-  if (targetJid) {
-    const token = getAuthToken();
-    const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
-    return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(targetSession)}/avatar?jid=${encodeURIComponent(targetJid)}${tokenParam}`;
+  // Only attempt dynamic proxy for the explicitly active chat header if allowProxy is true.
+  // Never construct dynamic proxy for sidebar items without a real image URL,
+  // preventing 50 simultaneous slow proxy requests that exhaust the backend.
+  if (allowProxy) {
+    let targetSession = session_id || 'default';
+    let targetJid = jid || '';
+
+    if (url && typeof url === 'string') {
+      const trimmed = url.trim();
+      if (trimmed.includes('/avatar?') || trimmed.includes('/sessions/')) {
+        try {
+          const fullUrl = trimmed.startsWith('http') ? trimmed : `https://dummy.local${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
+          const parsed = new URL(fullUrl);
+          const qSession = parsed.searchParams.get('session') || parsed.searchParams.get('session_id');
+          const qJid = parsed.searchParams.get('jid');
+          
+          if (qSession) targetSession = qSession;
+          if (qJid) targetJid = qJid;
+        } catch (e) {}
+      }
+    }
+
+    if (targetJid) {
+      const token = getAuthToken();
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+      return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(targetSession)}/avatar?jid=${encodeURIComponent(targetJid)}${tokenParam}`;
+    }
   }
 
   return null;
@@ -1903,7 +1911,7 @@ function playOutgoingSound() {
                   const displayName = resolveContactName(item);
                   const initials = getInitials(displayName);
                   const colorScheme = getAvatarColor(initials, displayName);
-                  const avatarSrc = getAvatarSrc(item.profile_pic_url, item.session_id, item.contact_jid);
+                  const avatarSrc = getAvatarSrc(item.profile_pic_url, item.session_id, item.contact_jid, false);
 
                   return (
                     <div
@@ -2068,9 +2076,9 @@ function playOutgoingSound() {
 
                   {/* Avatar */}
                   <div className="relative">
-                    {getAvatarSrc(selectedChat.profile_pic_url, selectedChat.session_id, selectedChat.contact_jid) ? (
+                    {getAvatarSrc(selectedChat.profile_pic_url, selectedChat.session_id, selectedChat.contact_jid, true) ? (
                       <img
-                        src={getAvatarSrc(selectedChat.profile_pic_url, selectedChat.session_id, selectedChat.contact_jid)!}
+                        src={getAvatarSrc(selectedChat.profile_pic_url, selectedChat.session_id, selectedChat.contact_jid, true)!}
                         alt={resolveContactName(selectedChat)}
                         referrerPolicy="no-referrer"
                         className="w-10 h-10 rounded-full object-cover border border-zinc-200"
@@ -2085,7 +2093,7 @@ function playOutgoingSound() {
                       />
                     ) : null}
                     <div className={`avatar-header-fallback w-10 h-10 rounded-full ${getAvatarColor(getInitials(resolveContactName(selectedChat)), resolveContactName(selectedChat)).bg} ${getAvatarColor(getInitials(resolveContactName(selectedChat)), resolveContactName(selectedChat)).text} flex items-center justify-center font-bold text-xs shadow-sm ${
-                      getAvatarSrc(selectedChat.profile_pic_url, selectedChat.session_id, selectedChat.contact_jid) ? 'hidden' : 'flex'
+                      getAvatarSrc(selectedChat.profile_pic_url, selectedChat.session_id, selectedChat.contact_jid, true) ? 'hidden' : 'flex'
                     }`}>
                       {getInitials(resolveContactName(selectedChat))}
                     </div>

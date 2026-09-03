@@ -1,25 +1,35 @@
-# 📋 Tasks: Frontend Media and Global Alarm Fixes
+# 📋 Tasks: Plano de Execução e Distribuição
 
-## Tarefa 1: Corrigir URLs de Mídia e Avatar no Omnichannel
-- **Arquivo:** `src/pages/OmnichannelView.tsx`
+## Tarefa 1: Proteção e Blindagem de Avatares no Frontend (Omnichannel)
+- **Responsável:** Worker-Frontend
 - **Ações:**
-  1. No método `getMediaUrl(msg, defaultSessionId)`:
-     - Importar `API_BASE` de `../services/api` ou construir a URL base a partir dele.
-     - Obter o token JWT do localStorage (`admin_token`).
-     - Em vez de retornar uma URL relativa `/api/whatsapp/sessions/...`, compor com a URL do backend: `${API_BASE}/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}&token=${encodeURIComponent(token || '')}`.
-     - Tratar links existentes e garantir que URLs relativas legadas `/api/sessions/` ou `/api/whatsapp/sessions/` recebam o prefixo da API do backend e o parâmetro `token`.
-  2. No método `getAvatarUrl(session_id, jid, url)`:
-     - Obter o token do localStorage (`admin_token`).
-     - Se `targetJid` existir, retornar `${API_BASE}/whatsapp/sessions/${encodeURIComponent(targetSession)}/avatar?jid=${encodeURIComponent(targetJid)}&token=${encodeURIComponent(token || '')}`.
-     - Se for URL da Meta (`pps.whatsapp.net`), manter como alternativa ou fornecer fallback para o proxy do backend caso falhe.
+  - Atualizar `getAvatarSrc` em `src/pages/OmnichannelView.tsx` adicionando a flag `allowProxy=false` para itens da lista na sidebar.
+  - Assegurar que imagens diretas da CDN (`pps.whatsapp.net`, `fbcdn.net`, `data:image`) continuem sendo exibidas.
+  - Para contatos sem imagem direta, renderizar exclusivamente o fallback de iniciais com cores dinâmicas, sem efetuar requisições HTTP contra o backend.
+  - No cabeçalho da conversa aberta, permitir a tentativa sob demanda via proxy (`allowProxy=true`).
 
-## Tarefa 2: Corrigir Resolução Dinâmica de URL e WebSocket no Alarme Global
-- **Arquivo:** `src/components/GlobalOrderNotification.tsx`
+## Tarefa 2: Timeouts Rígidos e Circuit Breaker no Backend (FastAPI)
+- **Responsável:** Worker-Backend
 - **Ações:**
-  1. Importar `API_BASE` e `getDynamicApiUrl` de `../services/api`.
-  2. Construir dinamicamente a `WEBSOCKET_URL`:
-     - Se `import.meta.env.VITE_WS_URL` existir, usar.
-     - Caso contrário, converter a base HTTP de `API_BASE` para WebSocket: substituir `https://` por `wss://` e `http://` por `ws://`, removendo `/api/v1` da cauda se necessário, de modo que `API_BASE = "https://dominuslabs.online/api/v1"` gere `wss://dominuslabs.online/api/v1/orders/ws`.
-  3. No `fetchOrders`:
-     - Usar `${API_BASE}/orders` em vez de `http://localhost:8000/api/v1/orders`.
-  4. Garantir que nenhuma tentativa de conexão com `localhost:8000` ocorra quando a aplicação estiver rodando fora do ambiente local.
+  - Reduzir timeout de `make_whatsapp_api_request` nas rotas `/avatar` e `/media` para 3.0 segundos.
+  - Eliminar o loop de 6 caminhos sequenciais em `root_avatar_proxy`, focando exclusivamente na rota canônica da sessão.
+  - Garantir resposta rápida `404 Not Found` em falha ou timeout, sem segurar conexões dos workers ASGI.
+
+## Tarefa 3: Governança de Conexões SSE e Tratamento de Desconexão
+- **Responsável:** Worker-Backend & Worker-Frontend
+- **Ações:**
+  - Validar e garantir `await request.is_disconnected()` em todas as rotas SSE (`/webhooks/events`, `/webhooks/events/crm-chats`).
+  - No frontend, assegurar o encerramento imediato via `eventSource.close()` no evento `onerror` em todos os dashboards e visualizadores.
+
+## Tarefa 4: Controle de Áudio e Alarme no Order Manager
+- **Responsável:** Worker-Frontend
+- **Ações:**
+  - Garantir que o alarme sonoro pare instantaneamente quando qualquer pedido for Aceito ou Rejeitado no PDV.
+  - Validar renderização dos dados do novo payload de pedidos e links de navegação para o Waze.
+
+## Tarefa 5: Homologação e Gates de Qualidade
+- **Responsável:** Jules QA & Rabibi-Maestro
+- **Ações:**
+  - Executar suíte de testes unitários (`npm test` / Vitest).
+  - Validar build de produção (`npm run build`).
+  - Executar auditoria de rotas e console via Chrome DevTools MCP.

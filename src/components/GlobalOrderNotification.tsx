@@ -96,6 +96,7 @@ export default function GlobalOrderNotification() {
                 fetchOrders();
               } else if (data.event === 'order_updated') {
                 if (data.order && data.order.status !== 'pending') {
+                  stopAlarm();
                   setPendingCount(prev => Math.max(0, prev - 1));
                 }
                 fetchOrders();
@@ -141,6 +142,7 @@ export default function GlobalOrderNotification() {
             fetchOrders();
           } else if (data.event === 'order_updated') {
             if (data.order && data.order.status !== 'pending') {
+              stopAlarm();
               setPendingCount(prev => Math.max(0, prev - 1));
             }
             fetchOrders();
@@ -182,8 +184,9 @@ export default function GlobalOrderNotification() {
 
     const handleOrderActionTaken = () => {
       console.log('[GlobalOrderNotification] Pedido aceito ou rejeitado. Silenciando alarme imediatamente...');
-      setPendingCount(prev => Math.max(0, prev - 1));
-      fetchOrders();
+      stopAlarm();
+      setPendingCount(0);
+      setTimeout(fetchOrders, 1000);
     };
 
     window.addEventListener('token_refreshed', handleTokenRefreshed);
