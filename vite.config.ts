@@ -70,3 +70,4 @@ export default defineConfig({
     allowedHosts: 'all',
   }
 } as any)
+// verified-isolated-workspace
