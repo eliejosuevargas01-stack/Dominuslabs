@@ -1443,7 +1443,7 @@ function playOutgoingSound() {
     } catch (err) {
       console.warn("Error fetching contacts from backend/n8n", err);
       toast.error(err instanceof Error ? err.message : 'Erro ao buscar contatos');
-    } fontally {
+    } finally {
       setLoadingList(false);
     }
   };

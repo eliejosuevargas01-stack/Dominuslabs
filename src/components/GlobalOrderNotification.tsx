@@ -10,7 +10,8 @@ interface Order {
 
 const getWebSocketUrl = () => {
   if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
-  const resolvedUrl = new URL(API_BASE, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+  const origin = typeof window !== 'undefined' && window.location ? (window.location.origin || 'http://localhost:8000') : 'http://localhost:8000';
+  const resolvedUrl = new URL(API_BASE, origin);
   const wsProto = resolvedUrl.protocol === 'https:' ? 'wss:' : 'ws:';
   const pathname = resolvedUrl.pathname.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
   return `${wsProto}//${resolvedUrl.host}${pathname}`;
