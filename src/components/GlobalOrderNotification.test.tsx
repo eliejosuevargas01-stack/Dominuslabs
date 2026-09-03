@@ -201,4 +201,38 @@ describe('GlobalOrderNotification', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('converts http:// API_BASE to ws:// or wss:// appropriately', async () => {
+    // Delete window.location and mock it
+    const originalLocation = window.location;
+    // @ts-ignore
+    delete window.location;
+    // @ts-ignore
+    window.location = {
+      ...originalLocation,
+      origin: 'https://dominuslabs.online',
+      protocol: 'https:',
+      hostname: 'dominuslabs.online',
+    } as any;
+
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve({
+      ok: true,
+      json: async () => ({ ok: true, orders: [] })
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => { render(<div><GlobalOrderNotification /></div>); });
+
+    await waitForCustom(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    // Our websocket should be initialized with wss:// based on the origin
+    expect(MockWebSocket.instances.length).toBe(1);
+    expect(MockWebSocket.instances[0].url).toContain('wss://');
+
+    // restore window.location
+    // @ts-ignore
+    window.location = originalLocation as any;
+  });
 });
