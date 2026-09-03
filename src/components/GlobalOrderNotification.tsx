@@ -10,10 +10,10 @@ interface Order {
 
 const getWebSocketUrl = () => {
   if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
-  const baseWithoutApi = API_BASE.replace(/\/api\/v1\/?$/, '');
-  const wsProto = baseWithoutApi.startsWith('https') ? 'wss:' : 'ws:';
-  const host = baseWithoutApi.replace(/^https?:\/\//, '');
-  return `${wsProto}//${host}`;
+  const resolvedUrl = new URL(API_BASE, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+  const wsProto = resolvedUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+  const pathname = resolvedUrl.pathname.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
+  return `${wsProto}//${resolvedUrl.host}${pathname}`;
 };
 
 export default function GlobalOrderNotification() {
@@ -23,6 +23,16 @@ export default function GlobalOrderNotification() {
   const gainNodeRef = useRef<GainNode | null>(null);
   const isPlayingRef = useRef(false);
   const audioBlockedToastIdRef = useRef<string | number | null>(null);
+  const unlockAudioListenerRef = useRef<(() => void) | null>(null);
+
+  const removeUnlockListeners = () => {
+    if (unlockAudioListenerRef.current) {
+      window.removeEventListener('click', unlockAudioListenerRef.current);
+      window.removeEventListener('keydown', unlockAudioListenerRef.current);
+      window.removeEventListener('touchstart', unlockAudioListenerRef.current);
+      unlockAudioListenerRef.current = null;
+    }
+  };
 
   // Ref for polling interval to prevent stale closure
   const fetchOrders = async () => {
@@ -52,7 +62,7 @@ export default function GlobalOrderNotification() {
     if (!token) return;
 
     let socket: WebSocket | null = null;
-    let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let reconnectTimeout: ReturnType<setTimeout>;
 
     const connectWebSocket = () => {
       const wsBase = getWebSocketUrl();
@@ -143,6 +153,9 @@ export default function GlobalOrderNotification() {
             );
         }
 
+        // Clean up any stale listeners first
+        removeUnlockListeners();
+
         // Setup a one-time interaction listener to unlock audio
         const unlockAudio = async () => {
             if (audioContextRef.current?.state === 'suspended') {
@@ -157,11 +170,10 @@ export default function GlobalOrderNotification() {
                     }
                 }
             }
-            window.removeEventListener('click', unlockAudio);
-            window.removeEventListener('keydown', unlockAudio);
-            window.removeEventListener('touchstart', unlockAudio);
+            removeUnlockListeners();
         };
 
+        unlockAudioListenerRef.current = unlockAudio;
         window.addEventListener('click', unlockAudio);
         window.addEventListener('keydown', unlockAudio);
         window.addEventListener('touchstart', unlockAudio);
@@ -231,6 +243,8 @@ export default function GlobalOrderNotification() {
   };
 
   const stopAlarm = () => {
+    removeUnlockListeners();
+
     if (audioBlockedToastIdRef.current) {
         toast.dismiss(audioBlockedToastIdRef.current);
         audioBlockedToastIdRef.current = null;
