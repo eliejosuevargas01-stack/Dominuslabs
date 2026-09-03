@@ -692,7 +692,7 @@ async def provision_whatsapp(
 
     print(f"\n[M2M-AUTH-FLOW] >>> Solicitado VÍNCULO MANUAL para {user.email}", flush=True)
 
-    from app.services.whatsapp_service import get_tenant_id_for_user
+    from app.services.whatsapp_service import get_tenant_id_for_user, invalidate_token
 
     tenant_id = await get_tenant_id_for_user(user, db)
     try:
@@ -763,4 +763,3 @@ async def provision_whatsapp(
     except Exception as e:
         print(f"[M2M-AUTH-FLOW] >>> ❌ Erro inesperado: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=str(e))
-
