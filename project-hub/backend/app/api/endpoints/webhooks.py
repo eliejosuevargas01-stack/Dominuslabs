@@ -2,7 +2,7 @@
 Receptor Seguro de Webhooks Automáticos.
 Processa chamadas recebidas via automações do N8N ou integradores de sistema. Exige assinaturas HMAC-SHA256 para comprovar a autenticidade e repassa a carga para processamento assíncrono das mensagens e leads.
 """
-from fastapi import APIRouter, Depends, Request, HTTPException, Header, Body, BackgroundTasks
+from fastapi import APIRouter, Depends, Request, HTTPException, Header, Body, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
@@ -13,6 +13,7 @@ import asyncio
 from app.core.database import get_db
 from app.core.config import settings
 from app.services.webhook_service import webhook_service
+from app.core.auth import decode_access_token
 
 router = APIRouter()
 
@@ -31,7 +32,7 @@ class LeadChatUpdateRequest(BaseModel):
 project_listeners = {}  # {public_token: [asyncio.Queue]}
 global_listeners = []   # [asyncio.Queue]
 lead_listeners = {}     # {lead_id: [(user_email, queue)]}
-crm_chat_listeners = [] # [(user_email, queue)]
+crm_chat_listeners: List[tuple] = [] # [(user_email, tenant_id, queue)]
 
 async def notify_lead_listeners(lead_id: str, event: str = "reload"):
     """
@@ -44,11 +45,17 @@ async def notify_lead_listeners(lead_id: str, event: str = "reload"):
         for user_email, queue in list(lead_listeners[lead_id]):
             await queue.put(event)
 
-async def notify_crm_chat_listeners(lead_id: str, is_from_me: bool = False, sender: str = "lead", messages: Optional[List[Dict[str, Any]]] = None):
+async def notify_crm_chat_listeners(
+    lead_id: str,
+    is_from_me: bool = False,
+    sender: str = "lead",
+    messages: Optional[List[Dict[str, Any]]] = None,
+    tenant_id: Optional[str] = None
+):
     """
     Função/Método notify_crm_chat_listeners.
 
-    O que faz: Processa notify_crm_chat_listeners recebendo os parâmetros (lead_id, is_from_me, sender, messages) no contexto de o endpoint de API para webhooks.
+    O que faz: Processa notify_crm_chat_listeners recebendo os parâmetros (lead_id, is_from_me, sender, messages, tenant_id) no contexto de o endpoint de API para webhooks.
     Impacto na regra de negócio: Assegura que o fluxo da operação notify_crm_chat_listeners seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     import json
@@ -56,11 +63,16 @@ async def notify_crm_chat_listeners(lead_id: str, is_from_me: bool = False, send
     if messages:
         for msg in messages:
             if isinstance(msg, dict):
+                if not tenant_id and msg.get("tenant_id"):
+                    tenant_id = msg.get("tenant_id")
                 for k in ["contact_jid", "chat_jid", "group_jid", "remoteJid", "lead_id"]:
                     val = msg.get(k)
                     if val and isinstance(val, str) and "{{" not in val and "$" not in val:
                         if val not in all_jids:
                             all_jids.append(val)
+
+    if not tenant_id:
+        tenant_id = "default"
 
     primary_jid = all_jids[0] if all_jids else lead_id
 
@@ -74,8 +86,9 @@ async def notify_crm_chat_listeners(lead_id: str, is_from_me: bool = False, send
         "event": "new_message",
         "messages": messages or []
     })
-    for user_email, queue in list(crm_chat_listeners):
-        await queue.put(payload)
+    for user_email, listener_tenant_id, queue in list(crm_chat_listeners):
+        if listener_tenant_id == tenant_id:
+            await queue.put(payload)
 
 @router.get("/events/leads/{lead_id}")
 async def lead_events(lead_id: str, token: str, request: Request):
@@ -85,7 +98,6 @@ async def lead_events(lead_id: str, token: str, request: Request):
     O que faz: Processa lead_events recebendo os parâmetros (lead_id, token, request) no contexto de o endpoint de API para webhooks.
     Impacto na regra de negócio: Assegura que o fluxo da operação lead_events seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
-    from app.core.auth import decode_access_token
     payload = decode_access_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
@@ -104,7 +116,6 @@ async def lead_events(lead_id: str, token: str, request: Request):
         Impacto na regra de negócio: Assegura que o fluxo da operação event_generator seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         try:
-# Lógica de repetição (while): Mantém processamento de 'while True:...' até concluir a condição de negócio.
             while True:
                 if await request.is_disconnected():
                     break
@@ -124,25 +135,31 @@ async def lead_events(lead_id: str, token: str, request: Request):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.get("/events/crm-chats")
-async def crm_chats_events(request: Request, token: Optional[str] = None):
+async def crm_chats_events(request: Request, token: Optional[str] = Query(None)):
     """
     Função/Método crm_chats_events.
 
-    O que faz: Processa crm_chats_events recebendo os parâmetros (request, token) no contexto de o endpoint de API para webhooks.
-    Impacto na regra de negócio: Assegura que o fluxo da operação crm_chats_events seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    O que faz: Processa crm_chats_events com autenticação JWT obrigatória e isolamento multi-tenant. Rejeita requisições anônimas.
+    Impacto na regra de negócio: Garante que os eventos de mensagens do CRM sejam transmitidos estritamente para usuários autenticados pertencentes ao mesmo tenant_id.
     """
-    user_email = "anonymous"
-    if token:
-        try:
-            from app.core.auth import decode_access_token
-            payload = decode_access_token(token)
-            if payload:
-                user_email = payload.get("sub", "unknown")
-        except Exception:
-            pass
+    auth_header = request.headers.get("Authorization")
+    auth_token = token
+    if not auth_token and auth_header and auth_header.lower().startswith("bearer "):
+        auth_token = auth_header[7:].strip()
+
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Token de autenticação obrigatório.")
+
+    payload = decode_access_token(auth_token)
+    if not payload or not payload.get("sub"):
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado.")
+
+    user_email = payload.get("sub", "unknown")
+    tenant_id = payload.get("tenant_id") or "default"
 
     queue = asyncio.Queue()
-    crm_chat_listeners.append((user_email, queue))
+    listener_entry = (user_email, tenant_id, queue)
+    crm_chat_listeners.append(listener_entry)
     
     async def event_generator():
         """
@@ -152,7 +169,6 @@ async def crm_chats_events(request: Request, token: Optional[str] = None):
         Impacto na regra de negócio: Assegura que o fluxo da operação event_generator seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         try:
-# Lógica de repetição (while): Mantém processamento de 'while True:...' até concluir a condição de negócio.
             while True:
                 if await request.is_disconnected():
                     break
@@ -164,8 +180,8 @@ async def crm_chats_events(request: Request, token: Optional[str] = None):
         except asyncio.CancelledError:
             pass
         finally:
-            if (user_email, queue) in crm_chat_listeners:
-                crm_chat_listeners.remove((user_email, queue))
+            if listener_entry in crm_chat_listeners:
+                crm_chat_listeners.remove(listener_entry)
                     
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -235,9 +251,10 @@ async def _process_update_chat(
     final_sender = explicit_sender or ("user" if final_is_from_me else "lead")
 
     await notify_lead_listeners(resolved_contact_id, "reload")
-    await notify_crm_chat_listeners(resolved_contact_id, is_from_me=final_is_from_me, sender=final_sender, messages=messages_list)
+    await notify_crm_chat_listeners(resolved_contact_id, is_from_me=final_is_from_me, sender=final_sender, messages=messages_list, tenant_id=resolved_tenant_id)
 
-    notified_count = len(lead_listeners.get(resolved_contact_id, [])) + len(crm_chat_listeners)
+    tenant_chat_listeners = [l for l in crm_chat_listeners if l[1] == resolved_tenant_id]
+    notified_count = len(lead_listeners.get(resolved_contact_id, [])) + len(tenant_chat_listeners)
     return {
         "status": "success",
         "contact_id": resolved_contact_id,
@@ -248,7 +265,7 @@ async def _process_update_chat(
         "sender": final_sender,
         "messages_received": len(messages_list),
         "notified_sessions": notified_count,
-        "active_clients_connected": len(crm_chat_listeners)
+        "active_clients_connected": len(tenant_chat_listeners)
     }
 
 @router.post("/crm/update-chat")
@@ -351,7 +368,6 @@ async def project_events(public_token: str, request: Request):
         Impacto na regra de negócio: Assegura que o fluxo da operação event_generator seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         try:
-# Lógica de repetição (while): Mantém processamento de 'while True:...' até concluir a condição de negócio.
             while True:
                 if await request.is_disconnected():
                     break
@@ -390,7 +406,6 @@ async def all_projects_events(request: Request):
         Impacto na regra de negócio: Assegura que o fluxo da operação event_generator seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         try:
-# Lógica de repetição (while): Mantém processamento de 'while True:...' até concluir a condição de negócio.
             while True:
                 if await request.is_disconnected():
                     break
@@ -412,21 +427,27 @@ async def get_payload(request: Request) -> dict:
     Função/Método get_payload.
 
     O que faz: Recuperação de dados cadastrados para get_payload recebendo os parâmetros (request) no contexto de o endpoint de API para webhooks.
-    Impacto na regra de negócio: Assegura que o fluxo da operação get_payload seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    Impacto na regra de negócio: Trata webhooks enviando formulários (application/x-www-form-urlencoded) com JSON serializado ou payloads nativos em JSON.
     """
     content_type = request.headers.get("content-type", "")
     if "application/x-www-form-urlencoded" in content_type:
         form_data = await request.form()
         payload_str = form_data.get("payload")
         if not payload_str:
-            return {}
+            return dict(form_data)
         try:
             return json.loads(payload_str)
         except Exception:
-            return {}
+            return dict(form_data)
     else:
         try:
-            return await request.json()
+            body = await request.json()
+            if isinstance(body, str):
+                try:
+                    return json.loads(body)
+                except Exception:
+                    pass
+            return body if isinstance(body, dict) else {}
         except Exception:
             return {}
 
@@ -675,6 +696,7 @@ async def whatsapp_inbound_webhook(request: Request):
     lead_id = payload.get("lead_id")
     message_text = payload.get("message")
     sender = payload.get("sender", "lead")
+    tenant_id = payload.get("tenant_id") or "default"
     if not lead_id or not message_text:
         return {"status": "ignored", "reason": "missing lead_id or message"}
         
@@ -702,7 +724,7 @@ async def whatsapp_inbound_webhook(request: Request):
             
     # Notify listeners in real time
     await notify_lead_listeners(lead_id, "reload")
-    await notify_crm_chat_listeners(lead_id)
+    await notify_crm_chat_listeners(lead_id, tenant_id=tenant_id)
             
     return {"status": "success", "message": new_msg}
 
@@ -725,6 +747,7 @@ async def instagram_inbound_webhook(request: Request):
     lead_id = payload.get("lead_id")
     message_text = payload.get("message")
     sender = payload.get("sender", "lead")
+    tenant_id = payload.get("tenant_id") or "default"
     if not lead_id or not message_text:
         return {"status": "ignored", "reason": "missing lead_id or message"}
         
@@ -752,9 +775,10 @@ async def instagram_inbound_webhook(request: Request):
             
     # Notify listeners in real time
     await notify_lead_listeners(lead_id, "reload")
-    await notify_crm_chat_listeners(lead_id)
+    await notify_crm_chat_listeners(lead_id, tenant_id=tenant_id)
             
     return {"status": "success", "message": new_msg}
+
 @router.post("/waha/session-status")
 async def waha_session_status_webhook(request: Request):
     """
@@ -772,16 +796,18 @@ async def waha_session_status_webhook(request: Request):
     # WAHA usually sends event="session.status" and payload.status
     inner_payload = payload.get("payload", {})
     status = inner_payload.get("status", "").upper() if isinstance(inner_payload, dict) else ""
+    event_tenant_id = (inner_payload.get("tenant_id") if isinstance(inner_payload, dict) else None) or payload.get("tenant_id") or "default"
     if event_type == "session.status" and status in ["STOPPED", "FAILED", "DISCONNECTED", "UNPAIRED", "TIMEOUT"]:
-        # Broadcast to all CRM chat listeners that a session has disconnected
+        # Broadcast to all CRM chat listeners of matching tenant that a session has disconnected
         msg = json.dumps({
             "action": "session_disconnected",
             "session_id": session_id,
             "status": status,
             "message": f"A sessão '{session_id}' foi desconectada."
         })
-        for user_email, queue in list(crm_chat_listeners):
-            await queue.put(msg)
+        for user_email, listener_tenant_id, queue in list(crm_chat_listeners):
+            if listener_tenant_id == event_tenant_id:
+                await queue.put(msg)
             
     return {"status": "success"}
 

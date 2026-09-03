@@ -41,10 +41,15 @@ websocket_listeners: Dict[str, set[WebSocket]] = {}
 WEBHOOK_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 WEBHOOK_RETRY_DELAYS = (5, 15, 30, 60)
 ORDER_STATUS_TRANSITIONS = {
-    "pending": {"accepted"},
-    "accepted": {"ready_for_delivery"},
+    "pending": {"accepted", "rejected"},
+    "accepted": {"preparing", "ready_for_delivery"},
+    "preparing": {"ready", "ready_for_delivery"},
+    "ready": {"out_for_delivery"},
     "ready_for_delivery": {"out_for_delivery"},
     "out_for_delivery": {"delivered"},
+    "delivered": set(),
+    "rejected": set(),
+    "cancelled": set(),
 }
 
 
@@ -542,6 +547,49 @@ async def accept_order(
     orders[f"{tenant_id}:{order_id}"] = order
     await broadcast("order_updated", order)
     background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, "order_accepted", db_order.client_jid or db_order.cliente_id)
+    return {"ok": True, "order": public_order(order)}
+
+
+@router.post("/{order_id}/reject")
+async def reject_order(
+    order_id: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    token: Optional[str] = Query(None),
+    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
+    db: Session = Depends(get_db),
+):
+    """Rejeita o pedido e notifica ouvintes do websocket e webhook."""
+    if not valid_operator(request, x_master_api_key or token):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    payload = operator_payload(request, x_master_api_key or token)
+    tenant_id = resolve_tenant_id(request, payload, x_master_api_key or token)
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id is required for rejection")
+
+    db_order = db.query(OrderManagerOrder).filter_by(
+        tenant_id=tenant_id, pedido_id=order_id
+    ).with_for_update().first()
+    if not db_order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    order = order_to_record(db_order)
+    if order["status"] == "rejected":
+        orders[f"{tenant_id}:{order_id}"] = order
+        return {"ok": True, "duplicate": True, "order": public_order(order)}
+
+    if "rejected" not in ORDER_STATUS_TRANSITIONS.get(db_order.status, set()):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot change order status from {db_order.status} to rejected",
+        )
+
+    db_order.status = "rejected"
+    db.commit()
+    order = order_to_record(db_order)
+    orders[f"{tenant_id}:{order_id}"] = order
+    await broadcast("order_updated", order)
+    background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, "order_rejected", db_order.client_jid or db_order.cliente_id)
     return {"ok": True, "order": public_order(order)}
 
 
