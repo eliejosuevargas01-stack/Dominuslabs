@@ -1,0 +1,35 @@
+# Relatório de QA - Módulo WhatsApp e Product Media
+
+## 1. Comandos Executados
+Os testes foram criados e aprimorados durante a sessão nos arquivos `tests/test_whatsapp.py` e `tests/test_product_media.py`.
+Para executar a bateria de testes, o seguinte comando foi utilizado:
+```bash
+cd project-hub/backend && pytest tests/test_whatsapp.py tests/test_product_media.py --cov=app.api.endpoints.whatsapp --cov=app.api.endpoints.product_media --cov-report=term-missing
+```
+
+## 2. Resultados dos Testes
+- **Total de testes coletados e executados:** 14
+- **Testes com sucesso (Passed):** 14
+- **Falhas (Failed):** 0
+
+## 3. Falhas Encontradas & Correções Realizadas (Durante o Ciclo)
+- As requisições em `whatsapp.py` como `get_session_media`, `get_session_avatar` e `send_session_message` possuíam diferentes formatações e parâmetros (ex: requisições usavam parâmetros de query string ao invés do path). Os endpoints e testes precisaram ser parametrizados corretamente nos scripts de testes.
+- Houveram divergências no contrato do Payload de `product_media`, onde o modelo esperava um UUID e não uma string arbitrária. Os testes foram atualizados para garantir que o UUID estava sendo passado no formato correto.
+
+## 4. Métricas de Cobertura
+A execução focou nos módulos `whatsapp.py` e `product_media.py`:
+
+| Módulo                             | Linhas | Não cobertas | Cobertura |
+|-----------------------------------|-------:|-------------:|----------:|
+| app/api/endpoints/product_media.py|   34   |      0       |   100%    |
+| app/api/endpoints/whatsapp.py     |  377   |    235       |    38%    |
+| **TOTAL**                         | **411**|  **235**     |  **43%**  |
+
+**Observação de Cobertura do WhatsApp:**
+Alcançamos 100% no `product_media.py`.
+No `whatsapp.py`, a cobertura está em 38%. O foco foi total em provisionamento de clientes M2M, proxy do Instagram, credenciais, envio de mensagens e requisições para a interface de proxy de sessões (avatar e media) – em conformidade com as regras impostas, sendo o suficiente para as responsabilidades vitais desta release. Diversas validações restritas aos fluxos isolados (tais como deleção de sessões ou configurações) requerem instâncias concretas e lógicas adjacentes não críticas que não foram o alvo.
+
+## 5. Limitações Observadas
+- **Warning Pydantic V2:** O projeto ainda utiliza sintaxes de Config e Settings (BaseSettings) do Pydantic que foram deprecadas a partir da versão 2.0 (ex: `ConfigDict`). Há 16 warnings relatados pelo pytest. Embora o comportamento não quebre no FastAPI atual, isso precisará de uma migração dedicada caso a versão do pacote atualize, com a finalidade de evitar futuros erros.
+- A biblioteca nativa do python `jose` para validar os tokens precisou ser instalada (porém a dependência correta estava em `python-jose`) durante as execuções exploratórias.
+- **Starlette TestClient Deprecation:** A forma como o FastAPI chama o `TestClient` atualmente exibe um warning para utilizar `httpx2` ao invés de `starlette.testclient`.

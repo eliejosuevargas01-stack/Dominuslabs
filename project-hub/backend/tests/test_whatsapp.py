@@ -119,3 +119,40 @@ def test_provision_whatsapp(mock_get_async_client, mock_get_tenant_id, client: T
         response = client.post(f"{settings.API_V1_STR}/whatsapp/provision", headers=auth_headers)
 
     assert response.status_code == 200
+
+
+@patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
+@patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
+def test_send_message(mock_get_headers, mock_api_request, client: TestClient, auth_headers: dict, test_whatsapp_account):
+    mock_get_headers.return_value = {"Authorization": "Bearer token"}
+    mock_api_request.return_value = {"id": "msg_123", "status": "SENT"}
+
+    payload = {"phone": "5511999999999", "message": "Hello", "type": "text"}
+    response = client.post(f"{settings.API_V1_STR}/whatsapp/sessions/123/messages/send", json=payload, headers=auth_headers)
+
+    assert response.status_code == 200
+
+
+def test_ram_proxy_no_creds(client: TestClient, auth_headers: dict):
+    payload = {"username": "", "password": ""}
+    response = client.post(f"{settings.API_V1_STR}/whatsapp/instagram/login", json=payload, headers=auth_headers)
+    assert response.status_code == 400
+
+@patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
+@patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
+def test_ram_proxy_success(mock_get_headers, mock_api_request, client: TestClient, auth_headers: dict):
+    mock_get_headers.return_value = {"Authorization": "Bearer token", "x-session-token": "123"}
+    mock_api_request.return_value = {"status": "ok"}
+
+    payload = {"username": "user", "password": "password"}
+    response = client.post(f"{settings.API_V1_STR}/whatsapp/instagram/login", json=payload, headers=auth_headers)
+    assert response.status_code == 200
+
+@patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
+@patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
+def test_logout_instagram_proxy(mock_get_headers, mock_api_request, client: TestClient, auth_headers: dict):
+    mock_get_headers.return_value = {"Authorization": "Bearer token"}
+    mock_api_request.return_value = {"status": "ok"}
+
+    response = client.post(f"{settings.API_V1_STR}/whatsapp/instagram/sessions/test_user/logout", headers=auth_headers)
+    assert response.status_code == 200
