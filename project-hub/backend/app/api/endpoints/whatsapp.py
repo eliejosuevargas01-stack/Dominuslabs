@@ -246,7 +246,22 @@ async def get_session_avatar(
     Requer validação de token JWT via parâmetro de consulta 'token'.
     """
     try:
-        jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        sub = payload.get("sub")
+        if not sub:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token de autenticação inválido ou ausente."
+            )
+        user = db.query(User).filter((User.email == sub) | (User.id == sub)).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuário não encontrado."
+            )
+        user_headers = await get_user_m2m_headers(user.email, db)
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -257,7 +272,8 @@ async def get_session_avatar(
         clean_path = f"/api/sessions/{session_id}/avatar?jid={jid}&json=true"
         res = await make_whatsapp_api_request(
             "GET",
-            clean_path
+            clean_path,
+            headers=user_headers
         )
         if isinstance(res, dict) and res.get("url"):
             return RedirectResponse(
@@ -287,7 +303,22 @@ async def get_session_media(
     Requer validação de token JWT via parâmetro de consulta 'token'.
     """
     try:
-        jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        sub = payload.get("sub")
+        if not sub:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token de autenticação inválido ou ausente."
+            )
+        user = db.query(User).filter((User.email == sub) | (User.id == sub)).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuário não encontrado."
+            )
+        user_headers = await get_user_m2m_headers(user.email, db)
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -299,7 +330,7 @@ async def get_session_media(
         raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
     try:
         clean_path = f"/api/sessions/{session_id}/media?messageId={target_msg_id}"
-        res = await make_whatsapp_api_request("GET", clean_path, timeout=30.0)
+        res = await make_whatsapp_api_request("GET", clean_path, headers=user_headers, timeout=30.0)
         if isinstance(res, dict):
             if res.get("_is_binary"):
                 return Response(
