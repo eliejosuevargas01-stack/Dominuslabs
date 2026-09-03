@@ -231,7 +231,7 @@ async def make_whatsapp_api_request(
                 detail=f"A API de WhatsApp retornou erro (status {response.status_code}): {response.text[:200]}"
             )
 
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 
 @router.get("/sessions/{session_id}/avatar")
 async def get_session_avatar(
@@ -287,8 +287,6 @@ async def get_session_avatar(
         pass
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar não encontrado.")
 
-from fastapi.responses import Response
-
 @router.get("/sessions/{session_id}/media")
 async def get_session_media(
     session_id: str,
@@ -299,7 +297,7 @@ async def get_session_media(
 ):
     """
     Proxy de mídia (imagens, áudios, vídeos e documentos) da WhatsApp API via mTLS.
-    Retorna o streaming/binário com o Content-Type correto ou redirecionamento.
+    Retorna o streaming de binário com o Content-Type correto usando StreamingResponse.
     Requer validação de token JWT via parâmetro de consulta 'token'.
     """
     try:
@@ -328,49 +326,60 @@ async def get_session_media(
     target_msg_id = messageId or message_id
     if not target_msg_id:
         raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
-    try:
-        clean_path = f"/api/sessions/{session_id}/media?messageId={target_msg_id}"
-        res = await make_whatsapp_api_request("GET", clean_path, headers=user_headers, timeout=30.0)
-        if isinstance(res, dict):
-            if res.get("_is_binary"):
-                return Response(
-                    content=res["content"],
-                    media_type=res.get("content_type") or "application/octet-stream",
-                    headers={
-                        "Access-Control-Allow-Origin": "*",
-                        "Cache-Control": "public, max-age=86400"
-                    }
-                )
-            if res.get("url"):
-                return RedirectResponse(
-                    res["url"],
-                    headers={
-                        "Access-Control-Allow-Origin": "*",
-                        "Cache-Control": "public, max-age=86400"
-                    }
-                )
-            if res.get("data") and isinstance(res["data"], str):
-                base64_str = res["data"]
-                import base64
-                if "," in base64_str:
-                    header, base64_str = base64_str.split(",", 1)
-                    mime_type = header.split(";")[0].replace("data:", "") if "data:" in header else "application/octet-stream"
-                else:
-                    mime_type = res.get("mimeType") or res.get("mimetype") or "application/octet-stream"
-                
-                binary_data = base64.b64decode(base64_str)
-                return Response(
-                    content=binary_data,
-                    media_type=mime_type,
-                    headers={
-                        "Access-Control-Allow-Origin": "*",
-                        "Cache-Control": "public, max-age=86400"
-                    }
-                )
-    except Exception as e:
-        print(f"[WA-MEDIA] Erro ao buscar mídia proxy para session={session_id}, msg={target_msg_id}: {e}", flush=True)
 
-    raise HTTPException(status_code=404, detail="Mídia não encontrada ou indisponível.")
+    base_url = settings.WHATSAPP_API_URL.rstrip("/")
+    if base_url.startswith("http://") and ":3000" in base_url:
+        base_url = base_url.replace("http://", "https://", 1)
+
+    clean_path = f"/api/sessions/{session_id}/media?messageId={target_msg_id}"
+    url = f"{base_url}{clean_path}"
+
+    req_headers = dict(user_headers) if user_headers else {}
+    if "x-session-token" in req_headers:
+        token_val = req_headers["x-session-token"]
+        if "Authorization" not in req_headers and token_val:
+            req_headers["Authorization"] = f"Bearer {token_val}"
+
+    if "X-Master-API-Key" not in req_headers:
+        master_secret = getattr(settings, "WHATSAPP_MASTER_SECRET", None)
+        if master_secret and master_secret != "default_master_secret":
+            req_headers["X-Master-API-Key"] = master_secret
+
+    try:
+        client = httpx.AsyncClient(timeout=60.0)
+        req = client.build_request("GET", url, headers=req_headers)
+        response = await client.send(req, stream=True)
+        if response.status_code >= 400:
+            await response.aclose()
+            await client.aclose()
+            raise HTTPException(
+                status_code=response.status_code,
+                detail="Mídia não encontrada ou indisponível."
+            )
+
+        content_type = response.headers.get("content-type", "application/octet-stream")
+
+        async def media_stream():
+            try:
+                async for chunk in response.aiter_bytes():
+                    yield chunk
+            finally:
+                await response.aclose()
+                await client.aclose()
+
+        return StreamingResponse(
+            content=media_stream(),
+            media_type=content_type,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "public, max-age=86400"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[WA-MEDIA] Erro ao buscar mídia proxy para session={session_id}, msg={target_msg_id}: {e}")
+        raise HTTPException(status_code=404, detail="Mídia não encontrada ou indisponível.")
 
 @router.get("/sessions")
 async def list_sessions(
