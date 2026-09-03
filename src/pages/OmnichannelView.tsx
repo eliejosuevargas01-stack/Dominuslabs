@@ -26,6 +26,14 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
+const getAuthToken = (): string => {
+  try {
+    return localStorage.getItem('admin_token') || localStorage.getItem('token') || '';
+  } catch (e) {
+    return '';
+  }
+};
+
 // ============================================================================
 // KNOWN CONTACT DICTIONARY (FOR NAME RESOLUTION)
 // ============================================================================
@@ -190,12 +198,14 @@ function getAvatarColor(initials: string, name: string) {
 function getAvatarSrc(url?: string, session_id?: string, jid?: string): string | null {
   if (url && typeof url === 'string') {
     const trimmed = url.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:image')) {
+    if (trimmed.includes('pps.whatsapp.net')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('data:image')) {
       return trimmed;
     }
   }
 
-  // Fallback to proxy if url is a relative path or if jid/session are supplied
   let targetSession = session_id || 'default';
   let targetJid = jid || '';
 
@@ -215,7 +225,9 @@ function getAvatarSrc(url?: string, session_id?: string, jid?: string): string |
   }
 
   if (targetJid) {
-    return `/api/v1/crm/avatar?session=${encodeURIComponent(targetSession)}&jid=${encodeURIComponent(targetJid)}`;
+    const token = getAuthToken();
+    const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+    return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(targetSession)}/avatar?jid=${encodeURIComponent(targetJid)}${tokenParam}`;
   }
 
   return null;
@@ -227,7 +239,6 @@ function formatTimestamp(isoString?: string): string {
     const date = new Date(isoString);
     if (isNaN(date.getTime())) return '';
 
-    // Let JS Date handle UTC→local conversion automatically (timestamps come with Z suffix = UTC)
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
 
@@ -272,35 +283,49 @@ function getSenderColor(name: string): string {
 
 function getMediaUrl(msg: any, defaultSessionId?: string): string | null {
   if (!msg) return null;
-  const sessId = msg.session_id || defaultSessionId;
+  const sessId = msg.session_id || defaultSessionId || 'default';
   const msgId = msg.message_id || msg.id;
   const rawUrl = msg.media_url || msg.image_url || msg.url || msg.file_url;
 
+  const token = getAuthToken();
+  const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+
   if (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) {
     const trimmed = rawUrl.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+    if (trimmed.startsWith('data:')) {
       return trimmed;
     }
-    if (trimmed.startsWith('/api/whatsapp/sessions/') || trimmed.startsWith('/api/crm/media')) {
+    if (trimmed.includes('pps.whatsapp.net')) {
       return trimmed;
     }
-    if (trimmed.startsWith('/api/sessions/')) {
-      return trimmed.replace('/api/sessions/', '/api/whatsapp/sessions/');
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      if (trimmed.includes('/api/whatsapp/sessions/') || trimmed.includes('/api/v1/whatsapp/') || trimmed.includes('/api/crm/media') || trimmed.includes('dominuslabs')) {
+        if (!trimmed.includes('token=')) {
+          const separator = trimmed.includes('?') ? '&' : '?';
+          return token ? `${trimmed}${separator}token=${encodeURIComponent(token)}` : trimmed;
+        }
+        return trimmed;
+      }
+      return trimmed;
     }
-    if (sessId && msgId) {
-      return `/api/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}`;
+    if (trimmed.startsWith('/api/')) {
+      if (sessId && msgId) {
+        return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}${tokenParam}`;
+      }
+      const cleanPath = trimmed.startsWith('/api/v1') ? trimmed.replace('/api/v1', '') : trimmed.replace('/api', '');
+      const separator = cleanPath.includes('?') ? '&' : '?';
+      return `${API_BASE}${cleanPath}${token ? `${separator}token=${encodeURIComponent(token)}` : ''}`;
     }
-    return trimmed;
   }
 
   // Construct dynamic proxy route if session_id and message_id exist
   if (sessId && msgId) {
     const msgType = (msg.message_type || msg.type || '').toLowerCase();
     const contentText = (msg.content || msg.message || '').trim().toLowerCase();
-    const isMediaMsg = msgType.includes('audio') || msgType.includes('image') || msgType.includes('video') || msgType.includes('document') || msgType.includes('ptt') || ['[audio]', '[imagem]', '[video]', '[documento]'].includes(contentText);
+    const isMediaMsg = msgType.includes('audio') || msgType.includes('image') || msgType.includes('video') || msgType.includes('document') || msgType.includes('ptt') || ['[audio]', '[imagem]', '[video]', '[documento]', '[mídia]'].includes(contentText) || msg.media || msg.media_type;
     
-    if (isMediaMsg) {
-      return `/api/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}`;
+    if (isMediaMsg || rawUrl) {
+      return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}${tokenParam}`;
     }
   }
   return null;
@@ -1044,7 +1069,7 @@ function playOutgoingSound() {
 
   // Real-time EventSource (SSE) listener for instant n8n webhook notifications
   useEffect(() => {
-    const token = localStorage.getItem('admin_token') || localStorage.getItem('token') || '';
+    const token = getAuthToken();
     const sseUrl = `${API_BASE}/webhooks/events/crm-chats${token ? `?token=${encodeURIComponent(token)}` : ''}`;
     let eventSource: EventSource | null = null;
 
@@ -1104,8 +1129,7 @@ function playOutgoingSound() {
 
             for (let rawMsg of currentItemMsgs) {
               if (!rawMsg) continue;
-              
-              // Se rawMsg for um wrapper contendo "message" dentro (ex: webhook payload agrupado)
+
               if (rawMsg.message && typeof rawMsg.message === 'object' && (rawMsg.message.id || rawMsg.message.text || rawMsg.message.content || rawMsg.message.key)) {
                 rawMsg = { ...rawMsg, ...rawMsg.message };
               }
@@ -1454,7 +1478,7 @@ function playOutgoingSound() {
       console.warn("Error fetching conversations from backend/n8n", err);
       toast.error(err instanceof Error ? err.message : 'Erro ao buscar conversas');
       setConversations([]);
-    } finally {
+    } fontally {
       setLoadingList(false);
     }
   };
@@ -2053,7 +2077,6 @@ function playOutgoingSound() {
                   </div>
                 </div>
 
-                {/* Session tag */}
                 {/* Session tag dropdown */}
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 text-purple-800 border border-purple-200">

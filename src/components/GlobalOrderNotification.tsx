@@ -55,8 +55,8 @@ export default function GlobalOrderNotification() {
     let reconnectTimeout: ReturnType<typeof setTimeout>;
 
     const connectWebSocket = () => {
-      const wsUrl = `${getWebSocketUrl()}/api/v1/orders/ws?token=${encodeURIComponent(token)}`;
-      socket = new WebSocket(wsUrl);
+      const wsBase = getWebSocketUrl();
+      socket = new WebSocket(`${wsBase}/api/v1/orders/ws?token=${encodeURIComponent(token)}`);
 
       socket.onopen = () => {
         console.log('[GlobalOrderNotification] WebSocket conectado');
