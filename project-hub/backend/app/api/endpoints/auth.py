@@ -197,6 +197,8 @@ def login(
     username = payload.username
     if "@" not in username:
         username = f"{username}@dominuslabs.online"
+    if username.lower() in ("eliejousuevargas01@gmail.com", "eliejousuevargas01@dominuslabs.online"):
+        username = "Eliejosuevargas01@gmail.com"
 
     user = db.query(User).filter(User.email == username).first()
 # Regra de Segurança Crítica: Bloqueia o acesso (401) instantaneamente caso a senha seja inválida. O timing constante do verify_password evita ataques side-channel e protege os dados do CRM.
