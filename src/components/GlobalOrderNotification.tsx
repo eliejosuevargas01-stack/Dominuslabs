@@ -24,7 +24,11 @@ export default function GlobalOrderNotification() {
       const token = localStorage.getItem('admin_token');
       if (!token) return;
 
-      const response = await fetch(`${API_BASE}/orders?token=${encodeURIComponent(token)}`);
+      const response = await fetch(`${API_BASE}/orders`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       if (!response.ok) return;
 
       const data = await response.json();
@@ -136,7 +140,7 @@ export default function GlobalOrderNotification() {
         const unlockAudio = async () => {
             if (audioContextRef.current?.state === 'suspended') {
                 await audioContextRef.current.resume();
-                if (audioContextRef.current.state === 'running') {
+                if ((audioContextRef.current.state as string) === 'running') {
                     if (audioBlockedToastIdRef.current) {
                         toast.dismiss(audioBlockedToastIdRef.current);
                         audioBlockedToastIdRef.current = null;

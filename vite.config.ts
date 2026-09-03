@@ -62,6 +62,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    exclude: ['**/node_modules/**', '**/dist/**', '**/test-integration/**'],
   },
   server: {
     host: '0.0.0.0',

@@ -24,6 +24,7 @@ import DashboardOperationalView from './pages/DashboardOperationalView';
 import AiIntelligenceView from './pages/AiIntelligenceView';
 import AutomationsView from './pages/AutomationsView';
 import CampaignsWizardView from './pages/CampaignsWizardView';
+import GlobalOrderNotification from './components/GlobalOrderNotification';
 import { LogOut } from 'lucide-react';
 import { Toaster } from 'sonner';
 import './App.css';
@@ -136,6 +137,7 @@ function App() {
     <Router>
       <div className="min-h-screen text-zinc-900 font-sans relative">
         <Toaster position="top-right" richColors closeButton />
+        <GlobalOrderNotification />
 
         <Routes>
           {/* Public Access Routes (no sidebar layout) */}
@@ -271,15 +273,6 @@ function App() {
                 <DashboardLayout>
                   <LeadDetailView />
                 </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/order-manager"
-            element={
-              <ProtectedRoute>
-                <OrderManagerView />
               </ProtectedRoute>
             }
           />
