@@ -5,10 +5,11 @@ O que faz: Implementa a lógica estrutural e funcional para o endpoint de API pa
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para whatsapp funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
 from fastapi.concurrency import run_in_threadpool
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Query
 from sqlalchemy.orm import Session
 import httpx
 from typing import Optional, Dict, Any
+from jose import jwt, JWTError
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -236,13 +237,22 @@ from fastapi.responses import RedirectResponse
 async def get_session_avatar(
     session_id: str,
     jid: str,
+    token: str = Query(...),
     db: Session = Depends(get_db)
 ):
     """
     Proxy de imagem de perfil de contato/grupo via mTLS.
     Evita erros de NS_BINDING_ABORTED e SSL em requisições cross-origin do navegador.
-    Acessível por tags <img> do navegador sem exigir token Bearer nos cabeçalhos.
+    Requer validação de token JWT via parâmetro de consulta 'token'.
     """
+    try:
+        jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de autenticação inválido ou ausente."
+        )
+
     try:
         clean_path = f"/api/sessions/{session_id}/avatar?jid={jid}&json=true"
         res = await make_whatsapp_api_request(
@@ -266,6 +276,7 @@ from fastapi.responses import Response
 @router.get("/sessions/{session_id}/media")
 async def get_session_media(
     session_id: str,
+    token: str = Query(...),
     messageId: Optional[str] = None,
     message_id: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -273,8 +284,16 @@ async def get_session_media(
     """
     Proxy de mídia (imagens, áudios, vídeos e documentos) da WhatsApp API via mTLS.
     Retorna o streaming/binário com o Content-Type correto ou redirecionamento.
-    Acessível por tags <img>, <video>, <audio> e <a> do navegador sem exigir token Bearer nos cabeçalhos.
+    Requer validação de token JWT via parâmetro de consulta 'token'.
     """
+    try:
+        jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de autenticação inválido ou ausente."
+        )
+
     target_msg_id = messageId or message_id
     if not target_msg_id:
         raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
