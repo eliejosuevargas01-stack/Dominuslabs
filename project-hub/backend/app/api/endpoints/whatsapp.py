@@ -641,6 +641,17 @@ def save_credentials(
         db.add(account)
         print(f"[M2M-AUTH-FLOW] >>> Criando novo registro na tabela whatsapp_accounts...", flush=True)
 
+    if hasattr(account, "tenant_id") and getattr(user, "tenant_id", None):
+        account.tenant_id = user.tenant_id
+    if hasattr(account, "idpw"):
+        account.idpw = payload.client_id
+    if hasattr(account, "client_id"):
+        account.client_id = payload.client_id
+    if hasattr(account, "client_secret"):
+        account.client_secret = payload.client_secret
+    if hasattr(account, "secret"):
+        account.secret = payload.client_secret
+
     db.commit()
     print(f"[M2M-AUTH-FLOW] ✅ Credenciais salvas manualmente no banco de dados Dominus para {user.email}!\n", flush=True)
 
@@ -723,6 +734,17 @@ async def provision_whatsapp(
                 )
                 db.add(account)
                 print(f"[M2M-AUTH-FLOW] >>> Criando novo registro na tabela whatsapp_accounts...", flush=True)
+
+            if hasattr(account, "tenant_id"):
+                account.tenant_id = tenant_id
+            if hasattr(account, "idpw"):
+                account.idpw = client_id
+            if hasattr(account, "client_id"):
+                account.client_id = client_id
+            if hasattr(account, "client_secret"):
+                account.client_secret = client_secret
+            if hasattr(account, "secret"):
+                account.secret = client_secret
 
             db.commit()
             print(f"[M2M-AUTH-FLOW] ✅ Credenciais salvas automaticamente no banco de dados Dominus para {user.email}!\n", flush=True)
