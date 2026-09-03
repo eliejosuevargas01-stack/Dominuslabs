@@ -63,7 +63,7 @@ export default function GlobalOrderNotification() {
     if (!token) return;
 
     let socket: WebSocket | null = null;
-    let reconnectTimeout: ReturnType<setTimeout>;
+    let reconnectTimeout: ReturnType<typeof setTimeout>;
 
     const connectWebSocket = () => {
       const wsBase = getWebSocketUrl();
