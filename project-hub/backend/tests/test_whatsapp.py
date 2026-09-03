@@ -61,12 +61,11 @@ def test_create_session(mock_get_headers, mock_api_request, client: TestClient, 
     mock_get_headers.return_value = {"Authorization": "Bearer token"}
     mock_api_request.return_value = {"id": "123", "status": "CREATED"}
 
-    payload = {"sessionName": "test_session", "isDefault": True}
+    payload = {"name": "test_session", "isDefault": True}
     response = client.post(f"{settings.API_V1_STR}/whatsapp/sessions", json=payload, headers=auth_headers)
 
-    assert response.status_code in [200, 400]
-    if response.status_code == 200:
-        assert "status" in response.json()
+    assert response.status_code == 200
+    assert "status" in response.json()
 
 @patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
 @patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
@@ -96,13 +95,12 @@ def test_get_credentials(client: TestClient, auth_headers: dict, test_whatsapp_a
 
 def test_save_credentials(client: TestClient, auth_headers: dict, test_whatsapp_account):
     payload = {
-        "client_id": "new_idpw",
+        "client_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
         "client_secret": "new_secret"
     }
     response = client.put(f"{settings.API_V1_STR}/whatsapp/credentials", json=payload, headers=auth_headers)
-    assert response.status_code in [200, 400, 422]
-    if response.status_code == 200:
-        assert response.json().get("status") == "success"
+    assert response.status_code == 200
+    assert response.json().get("ok") is True
 
 @patch("app.services.whatsapp_service.get_tenant_id_for_user")
 @patch("app.api.endpoints.whatsapp.get_async_client")
