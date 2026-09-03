@@ -611,8 +611,10 @@ async def update_order_status(
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id is required")
 
-    allowed_statuses = {"ready_for_delivery", "out_for_delivery", "delivered"}
-    if order_status not in allowed_statuses:
+    valid_statuses = set(ORDER_STATUS_TRANSITIONS.keys()) | {
+        s for targets in ORDER_STATUS_TRANSITIONS.values() for s in targets
+    }
+    if order_status not in valid_statuses:
         raise HTTPException(status_code=422, detail="Invalid order status")
     db_order = db.query(OrderManagerOrder).filter_by(
         tenant_id=tenant_id, pedido_id=order_id
