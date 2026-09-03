@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 
 from app.core.database import get_db
 from app.core.config import settings
+from app.core.auth import check_crm_permission
+from app.models.user import User
 from app.models.product_media import ProductMedia
 from app.schemas.product_media import ProductMediaResponse
 
@@ -23,12 +25,13 @@ def upload_product_media(
     product_id: str = Form(...),
     tenant_id: str = Form("default"),
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_crm_permission)
 ):
     """
     Função/Método upload_product_media.
 
-    O que faz: Processa upload_product_media recebendo os parâmetros (product_id, tenant_id, file, db) no contexto de o endpoint de API para product_media.
+    O que faz: Processa upload_product_media recebendo os parâmetros (product_id, tenant_id, file, db, current_user) no contexto de o endpoint de API para product_media.
     Impacto na regra de negócio: Assegura que o fluxo da operação upload_product_media seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     file_type = file.content_type or "application/octet-stream"
@@ -47,8 +50,8 @@ def upload_product_media(
     
     file_path = os.path.join(folder_path, filename)
     
-    # URL that the frontend will use to fetch the file via the static or get_uploaded_file endpoint
-    relative_url = f"/api/uploads/products/{filename}"
+    # URL that the frontend will use to fetch the file via the static uploads endpoint
+    relative_url = f"/uploads/products/{filename}"
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 

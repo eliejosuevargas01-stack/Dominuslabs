@@ -32,6 +32,7 @@ os.makedirs(os.path.join(settings.UPLOAD_DIR, "images"), exist_ok=True)
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "videos"), exist_ok=True)
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "audio"), exist_ok=True)
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "documents"), exist_ok=True)
+os.makedirs(os.path.join(settings.UPLOAD_DIR, "products"), exist_ok=True)
 
 Base.metadata.create_all(bind=engine)
 
@@ -185,6 +186,7 @@ if settings.BACKEND_CORS_ORIGINS:
 app.include_router(api_router, prefix=settings.API_V1_STR)
 if os.path.exists(settings.UPLOAD_DIR):
     app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+    app.mount("/api/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="api_uploads")
 
 from fastapi.responses import RedirectResponse, Response
 from typing import Optional

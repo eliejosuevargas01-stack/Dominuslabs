@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.limiter import limiter
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.models.user import User
 from app.models.whatsapp_account import WhatsappAccount
 from app.core.security import verify_password
@@ -122,11 +122,13 @@ async def _provision_whatsapp_client(user: User, db: Session) -> None:
         print(f"[M2M-AUTH-FLOW] >>> ❌ Erro excepcional ao provisionar {user.email}: {e}", flush=True)
 
 
-async def _maybe_provision(user: User, db: Session) -> None:
+async def _maybe_provision(user: User) -> None:
     """
     Só chama o provisionamento se o usuário ainda não tiver
-    credenciais na tabela whatsapp_accounts.
+    credenciais na tabela whatsapp_accounts. Instancia sua própria sessão
+    do SQLAlchemy para evitar o uso de sessões fechadas pós-requisição.
     """
+    db = SessionLocal()
     try:
         existing = db.query(WhatsappAccount).filter(
             WhatsappAccount.user_id == user.id
@@ -138,6 +140,8 @@ async def _maybe_provision(user: User, db: Session) -> None:
         await _provision_whatsapp_client(user, db)
     except Exception as e:
         logger.error(f"[WA-PROVISION] Erro inesperado ao tentar provisionar no background para {user.email}: {e}")
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +208,7 @@ def login(
         user.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
 
     # Fase 1: Provisiona cliente na WhatsApp API em background (não bloqueia login)
-    background_tasks.add_task(_maybe_provision, user, db)
+    background_tasks.add_task(_maybe_provision, user)
 
     token_data = _build_token_data(user)
     access_token = create_access_token(data=token_data, expires_in=3600)
@@ -252,7 +256,7 @@ def refresh(
         user.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
 
     # Garante provisão em background no refresh também
-    background_tasks.add_task(_maybe_provision, user, db)
+    background_tasks.add_task(_maybe_provision, user)
 
     token_data = _build_token_data(user)
     new_access_token = create_access_token(data=token_data, expires_in=3600)
