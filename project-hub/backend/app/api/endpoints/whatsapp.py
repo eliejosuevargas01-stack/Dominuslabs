@@ -253,7 +253,11 @@ async def get_session_avatar(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token de autenticação inválido ou ausente."
             )
-        user = db.query(User).filter((User.email == sub) | (User.id == sub)).first()
+        sub_str = str(sub)
+        if sub_str.isdigit():
+            user = db.query(User).filter((User.email == sub_str) | (User.id == int(sub_str))).first()
+        else:
+            user = db.query(User).filter(User.email == sub_str).first()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -308,7 +312,11 @@ async def get_session_media(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token de autenticação inválido ou ausente."
             )
-        user = db.query(User).filter((User.email == sub) | (User.id == sub)).first()
+        sub_str = str(sub)
+        if sub_str.isdigit():
+            user = db.query(User).filter((User.email == sub_str) | (User.id == int(sub_str))).first()
+        else:
+            user = db.query(User).filter(User.email == sub_str).first()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
