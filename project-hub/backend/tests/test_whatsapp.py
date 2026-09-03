@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
 from app.core.config import settings
 from app.core.auth import create_access_token
@@ -105,8 +105,8 @@ def test_save_credentials(client: TestClient, auth_headers: dict, test_whatsapp_
         assert response.json().get("status") == "success"
 
 @patch("app.services.whatsapp_service.get_tenant_id_for_user")
-@patch("app.api.endpoints.whatsapp.httpx.AsyncClient")
-def test_provision_whatsapp(mock_client, mock_get_tenant_id, client: TestClient, auth_headers: dict):
+@patch("app.api.endpoints.whatsapp.get_async_client")
+def test_provision_whatsapp(mock_get_async_client, mock_get_tenant_id, client: TestClient, auth_headers: dict):
     mock_get_tenant_id.return_value = "admin"
 
     mock_response = MagicMock()
@@ -114,10 +114,10 @@ def test_provision_whatsapp(mock_client, mock_get_tenant_id, client: TestClient,
     mock_response.json.return_value = {"status": "success", "client_id": "mock_id", "client_secret": "mock_secret"}
 
     mock_client_instance = MagicMock()
-    mock_client.return_value.__aenter__.return_value = mock_client_instance
-    mock_client_instance.post.return_value = mock_response
+    mock_client_instance.post = AsyncMock(return_value=mock_response)
+    mock_get_async_client.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
 
     with patch.object(settings, 'WHATSAPP_MASTER_SECRET', 'test_secret'):
         response = client.post(f"{settings.API_V1_STR}/whatsapp/provision", headers=auth_headers)
 
-    assert response.status_code in [200, 503]
+    assert response.status_code == 200
