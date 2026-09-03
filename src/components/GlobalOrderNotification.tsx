@@ -92,7 +92,12 @@ export default function GlobalOrderNotification() {
             if (!event.data || event.data.startsWith(':')) return;
             try {
               const data = JSON.parse(event.data);
-              if (data.event === 'new_order' || data.event === 'order_updated') {
+              if (data.event === 'new_order') {
+                fetchOrders();
+              } else if (data.event === 'order_updated') {
+                if (data.order && data.order.status !== 'pending') {
+                  setPendingCount(prev => Math.max(0, prev - 1));
+                }
                 fetchOrders();
               }
             } catch (e) {
@@ -132,8 +137,12 @@ export default function GlobalOrderNotification() {
             socket?.send(JSON.stringify({ event: 'pong' }));
             return;
           }
-          if (data.event === 'new_order' || data.event === 'order_updated') {
-            // Reconciliate the pending count
+          if (data.event === 'new_order') {
+            fetchOrders();
+          } else if (data.event === 'order_updated') {
+            if (data.order && data.order.status !== 'pending') {
+              setPendingCount(prev => Math.max(0, prev - 1));
+            }
             fetchOrders();
           }
         } catch (e) {
@@ -171,7 +180,14 @@ export default function GlobalOrderNotification() {
       connectRealtime();
     };
 
+    const handleOrderActionTaken = () => {
+      console.log('[GlobalOrderNotification] Pedido aceito ou rejeitado. Silenciando alarme imediatamente...');
+      setPendingCount(prev => Math.max(0, prev - 1));
+      fetchOrders();
+    };
+
     window.addEventListener('token_refreshed', handleTokenRefreshed);
+    window.addEventListener('order_action_taken', handleOrderActionTaken);
 
     connectRealtime();
     fetchOrders(); // Initial fetch
@@ -182,6 +198,7 @@ export default function GlobalOrderNotification() {
     return () => {
       disposed = true;
       window.removeEventListener('token_refreshed', handleTokenRefreshed);
+      window.removeEventListener('order_action_taken', handleOrderActionTaken);
       clearTimeout(reconnectTimeout);
       clearInterval(intervalId);
       if (eventSource) {

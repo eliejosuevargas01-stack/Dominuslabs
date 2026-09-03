@@ -161,6 +161,7 @@ function useOrdersWebSocket() {
                     newSet.delete(data.order.id);
                     return newSet;
                   });
+                  window.dispatchEvent(new CustomEvent('order_action_taken', { detail: { orderId: data.order.id, status: data.order.status } }));
                 }
                 setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
               }
@@ -209,6 +210,7 @@ function useOrdersWebSocket() {
                   newSet.delete(data.order.id);
                   return newSet;
                 });
+                window.dispatchEvent(new CustomEvent('order_action_taken', { detail: { orderId: data.order.id, status: data.order.status } }));
               }
               setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
             }
@@ -400,6 +402,10 @@ export default function OrderManagerView() {
 
   const handleAccept = async (orderId: string) => {
     stopAlarm(orderId);
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    window.dispatchEvent(new CustomEvent('order_action_taken', { detail: { orderId, status: 'accepted' } }));
     try {
       const response = await fetchWithAuth(`${API_BASE}/orders/${encodeURIComponent(orderId)}/accept`, {
         method: 'POST',
@@ -415,6 +421,10 @@ export default function OrderManagerView() {
 
   const handleReject = async (orderId: string) => {
     stopAlarm(orderId);
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    window.dispatchEvent(new CustomEvent('order_action_taken', { detail: { orderId, status: 'rejected' } }));
     try {
       const response = await fetchWithAuth(`${API_BASE}/orders/${encodeURIComponent(orderId)}/reject`, {
         method: 'POST',
