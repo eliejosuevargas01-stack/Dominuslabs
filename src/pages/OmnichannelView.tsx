@@ -295,7 +295,7 @@ function getMediaUrl(msg: any, defaultSessionId?: string): string | null {
     if (trimmed.startsWith('data:')) {
       return trimmed;
     }
-    if (trimmed.includes('pps.whatsapp.net')) {
+    if (trimmed.includes('pps.whatsapp.net') || trimmed.includes('fbcdn.net')) {
       return trimmed;
     }
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
@@ -322,9 +322,11 @@ function getMediaUrl(msg: any, defaultSessionId?: string): string | null {
   if (sessId && msgId) {
     const msgType = (msg.message_type || msg.type || '').toLowerCase();
     const contentText = (msg.content || msg.message || '').trim().toLowerCase();
-    const isMediaMsg = msgType.includes('audio') || msgType.includes('image') || msgType.includes('video') || msgType.includes('document') || msgType.includes('ptt') || ['[audio]', '[imagem]', '[video]', '[documento]', '[mídia]'].includes(contentText) || msg.media || msg.media_type;
+    const isAudioMsg = msgType.includes('audio') || msgType.includes('ptt') || msgType.includes('voice') || contentText === '[audio]';
     
-    if (isMediaMsg || rawUrl) {
+    // Only construct proxy for audio (which is guarded with preload="none") or when rawUrl exists.
+    // Never blindly proxy image/video without a real URL reference to prevent concurrent request avalanches.
+    if (isAudioMsg || rawUrl) {
       return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}${tokenParam}`;
     }
   }
