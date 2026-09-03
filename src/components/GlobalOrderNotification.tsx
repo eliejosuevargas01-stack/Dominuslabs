@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { API_BASE } from '../services/api';
+import { API_BASE, handleExpiredSessionRedirect, decodeJwtExp } from '../services/api';
 
 // Type from the backend order schema
 interface Order {
@@ -46,7 +46,12 @@ export default function GlobalOrderNotification() {
           Authorization: `Bearer ${token}`,
         },
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        if (response.status === 401) {
+          handleExpiredSessionRedirect();
+        }
+        return;
+      }
 
       const data = await response.json();
       if (data.ok && Array.isArray(data.orders)) {
@@ -61,6 +66,12 @@ export default function GlobalOrderNotification() {
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
     if (!token) return;
+
+    const exp = decodeJwtExp(token);
+    if (exp && Date.now() >= exp * 1000) {
+      handleExpiredSessionRedirect();
+      return;
+    }
 
     let socket: WebSocket | null = null;
     let eventSource: EventSource | null = null;

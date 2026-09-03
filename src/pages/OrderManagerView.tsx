@@ -13,7 +13,7 @@ import { toast } from 'sonner';
  */
 
 // API Base URL (adjust for testing/prod)
-import { API_BASE } from "../services/api";
+import { API_BASE, handleExpiredSessionRedirect, decodeJwtExp } from "../services/api";
 
 interface OrderItem {
   name: string;
@@ -78,7 +78,13 @@ function useOrdersWebSocket() {
         const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
         fetch(`${API_BASE}/orders`, { headers: authHeaders })
           .then(response => {
-            if (!response || !response.ok) throw new Error('Falha ao carregar pedidos persistidos');
+            if (!response || !response.ok) {
+              if (response && response.status === 401) {
+                console.warn('[OrderManager] 401 Unauthorized ao buscar pedidos. Redirecionando...');
+                handleExpiredSessionRedirect();
+              }
+              throw new Error('Falha ao carregar pedidos persistidos');
+            }
             return response.json();
           })
           .then(data => {
@@ -108,14 +114,25 @@ function useOrdersWebSocket() {
 
     const connect = () => {
       if (disposed) return;
-      setConnectionStatus('connecting');
 
       const token = localStorage.getItem('admin_token');
+      if (!token) {
+        setConnectionStatus('disconnected');
+        return;
+      }
+      const exp = decodeJwtExp(token);
+      if (exp && Date.now() >= exp * 1000) {
+        console.warn('[OrderManager] Token expirado no localStorage. Redirecionando para login.');
+        handleExpiredSessionRedirect();
+        return;
+      }
+
+      setConnectionStatus('connecting');
 
       // Primary: EventSource (SSE) - 100% compatible with reverse proxies, Caddy, Cloudflare, etc.
       if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
         try {
-          const sseUrl = `${API_BASE}/orders/events${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+          const sseUrl = `${API_BASE}/orders/events?token=${encodeURIComponent(token)}`;
           const es = new EventSource(sseUrl);
           eventSource = es;
 
