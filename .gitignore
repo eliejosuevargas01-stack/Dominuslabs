@@ -2,7 +2,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
+venv/
+.venv/
 project-hub/backend/venv/
+project-hub/backend/.venv/
 **/__pycache__/
 
 # SQLite database & local uploads
@@ -11,13 +14,15 @@ project-hub/backend/uploads/
 *.sqlite3
 
 # Node modules & frontend caches
-project-hub/frontend/node_modules/
-project-hub/frontend/dist/
+node_modules/
+dist/
+coverage/
 .eslintcache
 .vite/
+.tmp/
 
 # Environment variables, certificates and secrets
-.env.example
+.env
 .env.*
 *.env
 certs/
@@ -25,10 +30,6 @@ certs/
 *.key
 *.pem
 
-# Git worktrees / local test clones
+# Git worktrees & Aider
 test-integration/
-
-node_modules/
-dist/
-coverage/
 .aider*
