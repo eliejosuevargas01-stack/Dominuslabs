@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { API_BASE } from '../services/api';
 
 // Type from the backend order schema
 interface Order {
@@ -7,8 +8,13 @@ interface Order {
   status: string;
 }
 
-const WEBSOCKET_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api/v1';
+const getWebSocketUrl = () => {
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+  const baseWithoutApi = API_BASE.replace(/\/api\/v1\/?$/, '');
+  const wsProto = baseWithoutApi.startsWith('https') ? 'wss:' : 'ws:';
+  const host = baseWithoutApi.replace(/^https?:\/\//, '');
+  return `${wsProto}//${host}`;
+};
 
 export default function GlobalOrderNotification() {
   const [pendingCount, setPendingCount] = useState(0);
@@ -49,7 +55,8 @@ export default function GlobalOrderNotification() {
     let reconnectTimeout: ReturnType<typeof setTimeout>;
 
     const connectWebSocket = () => {
-      socket = new WebSocket(`${WEBSOCKET_URL}/api/v1/orders/ws?token=${encodeURIComponent(token)}`);
+      const wsUrl = `${getWebSocketUrl()}/api/v1/orders/ws?token=${encodeURIComponent(token)}`;
+      socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
         console.log('[GlobalOrderNotification] WebSocket conectado');
