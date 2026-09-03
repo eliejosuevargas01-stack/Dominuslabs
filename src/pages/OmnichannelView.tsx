@@ -1478,7 +1478,7 @@ function playOutgoingSound() {
       console.warn("Error fetching conversations from backend/n8n", err);
       toast.error(err instanceof Error ? err.message : 'Erro ao buscar conversas');
       setConversations([]);
-    } fontally {
+    } finally {
       setLoadingList(false);
     }
   };
