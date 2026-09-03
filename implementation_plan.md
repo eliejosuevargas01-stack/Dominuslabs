@@ -1,75 +1,41 @@
-# 📐 Plano de Implementação Arquitetural (Implementation Plan)
+# 🛠️ Implementation Plan: Frontend Media & Global Alarm Stabilization
 
-## 1. Visão Geral
-Este plano especifica as correções estritas e pontuais que os workers devem executar no código-fonte do Frontend para restabelecer a integridade de compilação, testes e conformidade com as diretrizes de segurança do Rabibi-Maestro.
+## 1. Contexto & Problema
+No ambiente de produção (`https://dominuslabs.onrender.com`):
+1. O chat de WhatsApp (`OmnichannelView.tsx`) tenta tocar áudios e carregar fotos usando caminhos relativos como `/api/whatsapp/sessions/{session}/media`. Como o Render serve apenas o SPA compilado, a requisição devolve o `index.html` do Vite com HTTP 200, quebrando tags `<audio>` e `<img>`. Além disso, a rota requer o parâmetro `?token=...` validado pelo backend.
+2. O componente `GlobalOrderNotification.tsx` possui fallbacks estáticos `ws://localhost:8000` e `http://localhost:8000/api/v1`, inundando o console com erros de CORS e desconexões contínuas a cada 5 segundos.
 
----
+## 2. Solução Arquitetural
 
-## 2. Especificação Técnica por Arquivo
-
-### 2.1 `src/components/GlobalOrderNotification.tsx`
-- **Problema:** A linha 139 avalia `audioContextRef.current.state === 'running'` dentro de um bloco `if (audioContextRef.current?.state === 'suspended')`. O compilador TS estreitou o tipo para `"suspended"`, acusando TS2367.
-- **Correção:** Realizar type assertion seguro:
+### Modificações em `src/pages/OmnichannelView.tsx`:
+- Importar `API_BASE` de `../services/api`.
+- Definir helper seguro para extrair o token do usuário:
   ```typescript
-  if ((audioContextRef.current.state as string) === 'running') {
+  const getToken = () => localStorage.getItem('admin_token') || '';
   ```
+- Atualizar `getMediaUrl`:
+  - Se a URL já for externa absoluta (`http://`, `https://`, `data:`), manter.
+  - Se for rota de proxy de mídia, prefixar com a base do backend (`API_BASE.replace(/\/api\/v1\/?$/, '')`) e rota `/api/v1/whatsapp/sessions/${sessId}/media?messageId=${msgId}&token=${getToken()}`.
+- Atualizar `getAvatarUrl`:
+  - Utilizar rota oficial do backend: `${API_BASE}/whatsapp/sessions/${targetSession}/avatar?jid=${encodeURIComponent(targetJid)}&token=${getToken()}`.
 
-### 2.2 `src/App.test.tsx`
-- **Problema:** Os testes falham porque o matcher `toBeInTheDocument` não foi estendido no `expect` do Vitest para este arquivo.
-- **Correção:** Adicionar a importação no topo de `src/App.test.tsx`:
+### Modificações em `src/components/GlobalOrderNotification.tsx`:
+- Importar `API_BASE` de `../services/api`.
+- Resolver a URL do WebSocket a partir de `API_BASE`:
   ```typescript
-  import '@testing-library/jest-dom';
+  const getWebSocketUrl = () => {
+    if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+    const baseWithoutApi = API_BASE.replace(/\/api\/v1\/?$/, '');
+    const wsProto = baseWithoutApi.startsWith('https') ? 'wss:' : 'ws:';
+    const host = baseWithoutApi.replace(/^https?:\/\//, '');
+    return `${wsProto}//${host}`;
+  };
   ```
+- Atualizar a montagem do WebSocket para `${getWebSocketUrl()}/api/v1/orders/ws?token=${token}`.
+- Atualizar `fetchOrders` para usar `${API_BASE}/orders`.
 
-### 2.3 `vite.config.ts`
-- **Problema:** O Vitest roda testes que residem em `test-integration/` por padrão, causando parsing errors do eslint e duplicidade de testes.
-- **Correção:** No bloco `test` do `vite.config.ts`, definir `exclude`:
-  ```typescript
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    exclude: ['**/node_modules/**', '**/dist/**', '**/test-integration/**'],
-  }
-  ```
-
-### 2.4 Purga de `tranzinc`
-- Substituir todas as ocorrências de `tranzinc` por `translate`:
-  - `tranzinc-x-5` -> `translate-x-5`
-  - `tranzinc-x-0` -> `translate-x-0`
-  - `-tranzinc-y-1/2` -> `-translate-y-1/2`
-- Em `src/pages/OmnichannelView.tsx`, restaurar:
-  ```tsx
-  <button
-    onClick={() => setSearchTerm('')}
-    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 rounded-full p-1 cursor-pointer"
-    aria-label="Limpar pesquisa"
-    title="Limpar pesquisa"
-  >
-    <X className="w-3.5 h-3.5" />
-  </button>
-  ```
-
-### 2.5 `src/App.tsx`
-- Remover as linhas 278-285 que declaram a rota duplicada `/order-manager` sem layout:
-  ```tsx
-  <Route
-    path="/order-manager"
-    element={
-      <ProtectedRoute>
-        <OrderManagerView />
-      </ProtectedRoute>
-    }
-  />
-  ```
-
-### 2.6 `src/pages/OrderManagerView.tsx`
-- Em `handleAccept`, `handleReject` e `handleStatusChange`:
-  - Enviar cabeçalho `Authorization: Bearer ${token}`.
-  - Remover `?token=...` dos URLs de mutação REST.
-  - No `handleReject`: adicionar `stopAlarm(orderId)` antes da chamada de rede para parar o alarme de áudio.
-
----
-
-## 3. Critérios de Validação Final
-- `npm test`: Todos os testes devem passar (código 0).
-- `npm run build`: O build do TypeScript e do Vite devem passar (código 0).
+## 3. Plano de Verificação
+1. Executar bateria de testes com Vitest:
+   `npm test -- --run`
+2. Validar que nenhum teste existente foi quebrado.
+3. Submeter à auditoria de Code Review do Dominus-MCP.

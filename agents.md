@@ -1,16 +1,13 @@
-# 👥 Papéis e Responsabilidades dos Agentes (Agents)
+# 👥 Agents & Governance: Frontend Media and Global Alarm Fixes
 
-## 1. Rabibi-Maestro (Arquiteto & Maestro Local)
-- **Responsabilidade:** Análise estrutural, governança de código, auditoria de segurança, planejamento macro (`goal.md`, `agents.md`, `tasks.md`, `implementation_plan.md`), delegação para workers Jules/Aider na VPS, revisão de código e aprovação final de gates de qualidade.
-- **Restrição:** Não realiza implementação pesada de código manualmente.
+## 1. Rabibi-Maestro (Arquiteto & Planejador)
+- Define a arquitetura das soluções e garante desacoplamento e conformidade com o padrão SPA do Vite.
+- Estrutura os arquivos de contexto (`goal.md`, `agents.md`, `tasks.md`, `implementation_plan.md`).
+- Delega a codificação para a VPS (`worker_create_thread`), monitora a telemetria e audita a qualidade via Code Review e QA.
 
-## 2. Jules Worker (Engenheiro Executor na VPS)
-- **Responsabilidade:** Execução cirúrgica das tarefas atribuídas em `tasks.md` e detalhadas em `implementation_plan.md`.
-- **Restrições:**
-  - Não alterar arquivos fora do escopo definido.
-  - Garantir que todos os testes existentes e novos passem sem exceções (`npm test`).
-  - Garantir que o build do TypeScript passe sem nenhum erro (`npm run build`).
-  - Submeter as alterações exclusivamente na branch dedicada indicada.
+## 2. Aider Workers (VPS)
+- Executam a edição cirúrgica de código nos arquivos `src/pages/OmnichannelView.tsx` e `src/components/GlobalOrderNotification.tsx`.
+- Garantem que testes unitários continuem 100% passando.
 
-## 3. QA Jules Gatekeeper (Auditor de Testes Remoto)
-- **Responsabilidade:** Executar suítes completas de testes no sandbox remoto e validar que nenhuma regressão foi introduzida no sistema.
+## 3. QA Jules (Validação Remota)
+- Valida o candidato de release garantindo cobertura e ausência de regressões no frontend.

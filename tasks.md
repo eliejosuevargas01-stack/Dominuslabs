@@ -1,29 +1,25 @@
-# 📋 Tarefas Desmembradas para Execução (Tasks)
+# 📋 Tasks: Frontend Media and Global Alarm Fixes
 
-### Tarefa 1: Desbloqueio do Compilador TypeScript & Build
+## Tarefa 1: Corrigir URLs de Mídia e Avatar no Omnichannel
+- **Arquivo:** `src/pages/OmnichannelView.tsx`
+- **Ações:**
+  1. No método `getMediaUrl(msg, defaultSessionId)`:
+     - Importar `API_BASE` de `../services/api` ou construir a URL base a partir dele.
+     - Obter o token JWT do localStorage (`admin_token`).
+     - Em vez de retornar uma URL relativa `/api/whatsapp/sessions/...`, compor com a URL do backend: `${API_BASE}/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}&token=${encodeURIComponent(token || '')}`.
+     - Tratar links existentes e garantir que URLs relativas legadas `/api/sessions/` ou `/api/whatsapp/sessions/` recebam o prefixo da API do backend e o parâmetro `token`.
+  2. No método `getAvatarUrl(session_id, jid, url)`:
+     - Obter o token do localStorage (`admin_token`).
+     - Se `targetJid` existir, retornar `${API_BASE}/whatsapp/sessions/${encodeURIComponent(targetSession)}/avatar?jid=${encodeURIComponent(targetJid)}&token=${encodeURIComponent(token || '')}`.
+     - Se for URL da Meta (`pps.whatsapp.net`), manter como alternativa ou fornecer fallback para o proxy do backend caso falhe.
+
+## Tarefa 2: Corrigir Resolução Dinâmica de URL e WebSocket no Alarme Global
 - **Arquivo:** `src/components/GlobalOrderNotification.tsx`
-- **Ação:** Corrigir a comparação de tipo TS2367 em `audioContextRef.current.state === 'running'` utilizando cast apropriado `((audioContextRef.current.state as string) === 'running')`.
-- **Validação:** Rodar `npm run build` e confirmar que `tsc -b` completa com sucesso.
-
-### Tarefa 2: Estabilização dos Testes Unitários do `App.tsx`
-- **Arquivo:** `src/App.test.tsx` e `vite.config.ts`
-- **Ação:**
-  - Adicionar `import '@testing-library/jest-dom';` em `src/App.test.tsx`.
-  - Configurar `vite.config.ts` para excluir `test-integration/**` da execução dos testes do Vitest.
-- **Validação:** Rodar `npm test` e verificar se os 5 testes de `ProtectedRoute` passam com 100% de sucesso.
-
-### Tarefa 3: Purga da Classe Inválida `tranzinc` e Restauração de Acessibilidade
-- **Arquivos:**
-  - `src/pages/AutomationsView.tsx` (restaurar `translate-x-5` e `translate-x-0`)
-  - `src/pages/CompanySettingsView.tsx` (restaurar `-translate-y-1/2`)
-  - `src/pages/CrmView.tsx` (restaurar `-translate-y-1/2`)
-  - `src/pages/OmnichannelView.tsx` (restaurar `-translate-y-1/2`, `aria-label="Limpar pesquisa"`, título e focus ring)
-  - `src/pages/Showcase.tsx` (restaurar `-translate-y-1/2`)
-- **Validação:** Checar via grep se qualquer resíduo de `tranzinc` permanece no repositório.
-
-### Tarefa 4: Limpeza de Rotas Duplicadas e Vazamento de Tokens
-- **Arquivos:**
-  - `src/App.tsx`: Remover a rota duplicada `<Route path="/order-manager" ...>` nas linhas finais, mantendo a rota principal envelopada com `DashboardLayout`.
-  - `src/pages/OrderManagerView.tsx`:
-    - Garantir que `handleAccept`, `handleReject` e `handleStatusChange` utilizem o header `Authorization: Bearer ${token}` em vez de passar o token na query string `?token=...`.
-    - Fazer com que `handleReject` chame `stopAlarm(orderId)` para encerrar o áudio sonoro ao recusar.
+- **Ações:**
+  1. Importar `API_BASE` e `getDynamicApiUrl` de `../services/api`.
+  2. Construir dinamicamente a `WEBSOCKET_URL`:
+     - Se `import.meta.env.VITE_WS_URL` existir, usar.
+     - Caso contrário, converter a base HTTP de `API_BASE` para WebSocket: substituir `https://` por `wss://` e `http://` por `ws://`, removendo `/api/v1` da cauda se necessário, de modo que `API_BASE = "https://dominuslabs.online/api/v1"` gere `wss://dominuslabs.online/api/v1/orders/ws`.
+  3. No `fetchOrders`:
+     - Usar `${API_BASE}/orders` em vez de `http://localhost:8000/api/v1/orders`.
+  4. Garantir que nenhuma tentativa de conexão com `localhost:8000` ocorra quando a aplicação estiver rodando fora do ambiente local.
