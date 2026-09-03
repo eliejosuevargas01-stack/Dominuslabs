@@ -681,7 +681,7 @@ async def provision_whatsapp(
 ):
     """
     Vincula o usuário com a WhatsApp API realizando o provisionamento automático.
-    Envia o email e a senha criptografada do usuário Dominus e salva o client_id/client_secret.
+    Envia o email e a referência do usuário Dominus e salva o client_id/client_secret.
     """
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
@@ -701,7 +701,7 @@ async def provision_whatsapp(
             headers = {"X-Master-API-Key": settings.WHATSAPP_MASTER_SECRET} if getattr(settings, "WHATSAPP_MASTER_SECRET", None) else {}
             resp = await client.post(
                 provision_url,
-                json={"email": user.email, "tenant_id": tenant_id, "password": user.hashed_password},
+                json={"email": user.email, "tenant_id": tenant_id, "email_ref": user.email},
                 headers=headers
             )
 
@@ -711,7 +711,7 @@ async def provision_whatsapp(
                 reprovision_url = f"{base_url}/api/v1/clients/reprovision"
                 resp = await client.post(
                     reprovision_url,
-                    json={"email": user.email, "tenant_id": tenant_id, "password": user.hashed_password},
+                    json={"email": user.email, "tenant_id": tenant_id, "email_ref": user.email},
                     headers=headers
                 )
             if resp.status_code not in (200, 201):
