@@ -91,33 +91,14 @@ async def make_whatsapp_api_request(
         except Exception:
             is_resolvable = False
 
-    url = f"{base_url}{clean_path}"
     if not is_resolvable:
-        import ssl
-        ctx = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
-        # ctx.check_hostname = False
-        # ctx.verify_mode = ssl.CERT_NONE
-        
-        async def check_ip(ip: str):
-            """
-            Função/Método check_ip.
+        logger.error(f"[make_whatsapp_api_request] Não foi possível resolver o hostname '{parsed.hostname}'.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível resolver o endereço da API de WhatsApp."
+        )
 
-            O que faz: Processa check_ip recebendo os parâmetros (ip) no contexto de o endpoint de API para whatsapp.
-            Impacto na regra de negócio: Assegura que o fluxo da operação check_ip seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-            """
-            try:
-                async with httpx.AsyncClient(verify=ctx, timeout=0.5) as test_client:
-                    res = await test_client.get(f"https://{ip}:3000/api/health")
-                    if res.status_code in (200, 401, 403, 404):
-                        return ip
-            except Exception:
-                pass
-            return None
-        
-        ips = await asyncio.gather(*[check_ip(f"10.0.1.{i}") for i in range(2, 50)])
-        valid = [ip for ip in ips if ip]
-        if valid:
-            url = f"https://{valid[0]}:3000{clean_path}"
+    url = f"{base_url}{clean_path}"
 
     req_headers = dict(headers) if headers else {}
     if "x-session-token" in req_headers:
