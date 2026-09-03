@@ -94,11 +94,10 @@ export default function GlobalOrderNotification() {
           };
 
           eventSource.onerror = () => {
+            try { eventSource?.close(); } catch (_) {}
             if (disposed) return;
-            if (eventSource?.readyState === EventSource.CLOSED) {
-              console.log('[GlobalOrderNotification] SSE desconectado. Tentando reconectar...');
-              reconnectTimeout = setTimeout(connectRealtime, 5000);
-            }
+            console.log('[GlobalOrderNotification] SSE desconectado. Tentando reconectar em 15s...');
+            reconnectTimeout = setTimeout(connectRealtime, 15000);
           };
           return;
         } catch (e) {

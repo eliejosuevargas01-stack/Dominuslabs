@@ -150,11 +150,10 @@ function useOrdersWebSocket() {
           };
 
           es.onerror = () => {
+            try { es.close(); } catch (_) {}
             if (disposed) return;
-            if (es.readyState === EventSource.CLOSED) {
-              setConnectionStatus('disconnected');
-              reconnectTimer = setTimeout(connect, 5000);
-            }
+            setConnectionStatus('disconnected');
+            reconnectTimer = setTimeout(connect, 10000);
           };
           return;
         } catch (error) {
