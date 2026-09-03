@@ -954,6 +954,11 @@ export default function OmnichannelView() {
     const file = e.target.files?.[0];
     if (!file || !selectedChat) return;
 
+    if (file.size > 15 * 1024 * 1024) {
+      toast.error('Arquivo muito grande (max 15MB)');
+      return;
+    }
+
     setUploadingMedia(true);
     try {
       const base64Data = await blobToBase64(file);
@@ -1033,6 +1038,12 @@ function playIncomingSound() {
     osc1.stop(now + 0.1);
     osc2.start(now + 0.08);
     osc2.stop(now + 0.35);
+
+    setTimeout(() => {
+      try {
+        ctx.close();
+      } catch (e) {}
+    }, 1000);
   } catch (e) {}
 }
 
@@ -1058,6 +1069,12 @@ function playOutgoingSound() {
     
     osc.start(now);
     osc.stop(now + 0.15);
+
+    setTimeout(() => {
+      try {
+        ctx.close();
+      } catch (e) {}
+    }, 1000);
   } catch (e) {}
 }
 
@@ -1426,7 +1443,7 @@ function playOutgoingSound() {
     } catch (err) {
       console.warn("Error fetching contacts from backend/n8n", err);
       toast.error(err instanceof Error ? err.message : 'Erro ao buscar contatos');
-    } finally {
+    } fontally {
       setLoadingList(false);
     }
   };
