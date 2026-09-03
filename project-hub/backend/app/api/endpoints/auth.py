@@ -122,24 +122,29 @@ async def _provision_whatsapp_client(user: User, db: Session) -> None:
         print(f"[M2M-AUTH-FLOW] >>> ❌ Erro excepcional ao provisionar {user.email}: {e}", flush=True)
 
 
-async def _maybe_provision(user: User) -> None:
+async def _maybe_provision(user_id: int) -> None:
     """
     Só chama o provisionamento se o usuário ainda não tiver
     credenciais na tabela whatsapp_accounts. Instancia sua própria sessão
-    do SQLAlchemy para evitar o uso de sessões fechadas pós-requisição.
+    do SQLAlchemy e recarrega o usuário pelo ID para evitar DetachedInstanceError.
     """
     db = SessionLocal()
     try:
         existing = db.query(WhatsappAccount).filter(
-            WhatsappAccount.user_id == user.id
+            WhatsappAccount.user_id == user_id
         ).first()
         if existing:
-            logger.debug(f"[WA-PROVISION] {user.email} já tem credenciais — pulando provisão.")
+            logger.debug(f"[WA-PROVISION] Usuário ID {user_id} já tem credenciais — pulando provisão.")
+            return
+
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            logger.error(f"[WA-PROVISION] Usuário ID {user_id} não encontrado para provisionamento.")
             return
 
         await _provision_whatsapp_client(user, db)
     except Exception as e:
-        logger.error(f"[WA-PROVISION] Erro inesperado ao tentar provisionar no background para {user.email}: {e}")
+        logger.error(f"[WA-PROVISION] Erro inesperado ao tentar provisionar no background para user_id={user_id}: {e}")
     finally:
         db.close()
 
@@ -207,8 +212,8 @@ def login(
     if not user.whatsapp_token:
         user.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
 
-    # Fase 1: Provisiona cliente na WhatsApp API em background (não bloqueia login)
-    background_tasks.add_task(_maybe_provision, user)
+    # Fase 1: Provisiona cliente na WhatsApp API em background usando o ID primitivo
+    background_tasks.add_task(_maybe_provision, user.id)
 
     token_data = _build_token_data(user)
     access_token = create_access_token(data=token_data, expires_in=3600)
@@ -255,8 +260,8 @@ def refresh(
     if not user.whatsapp_token:
         user.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
 
-    # Garante provisão em background no refresh também
-    background_tasks.add_task(_maybe_provision, user)
+    # Garante provisão em background no refresh usando o ID primitivo
+    background_tasks.add_task(_maybe_provision, user.id)
 
     token_data = _build_token_data(user)
     new_access_token = create_access_token(data=token_data, expires_in=3600)

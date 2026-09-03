@@ -2,7 +2,7 @@
 Ponto de entrada (Entrypoint) da aplicação FastAPI.
 Inicializa o servidor, configura os middlewares (como CORS e o limitador de taxa para proteção DDoS), e gerencia as rotas de fallback para servir o frontend (SPA) compilado no mesmo contêiner.
 """
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -194,9 +194,11 @@ from typing import Optional
 @app.get("/api/sessions/{session_id}/avatar")
 @app.get("/avatar")
 async def root_avatar_proxy(
+    request: Request,
     session_id: Optional[str] = None,
     session: Optional[str] = None,
-    jid: Optional[str] = None
+    jid: Optional[str] = None,
+    token: Optional[str] = Query(None)
 ):
     """
     Proxy de avatar direto consumido pelo frontend sem necessidade de pré-processamento.
@@ -204,6 +206,19 @@ async def root_avatar_proxy(
     - /api/sessions/{session_id}/avatar?jid=...
     - /avatar?session={session_id}&jid=...
     """
+    auth_header = request.headers.get("Authorization")
+    auth_token = token
+    if not auth_token and auth_header and auth_header.lower().startswith("bearer "):
+        auth_token = auth_header[7:].strip()
+
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Token de autenticação obrigatório.")
+
+    from app.core.auth import decode_access_token
+    payload = decode_access_token(auth_token)
+    if not payload or not payload.get("sub"):
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado.")
+
     target_session = session_id or session
     if not jid:
         raise HTTPException(status_code=400, detail="Parâmetro 'jid' é obrigatório.")
@@ -256,15 +271,30 @@ async def root_avatar_proxy(
 @app.get("/api/v1/crm/media")
 @app.get("/media")
 async def root_media_proxy(
+    request: Request,
     session_id: Optional[str] = None,
     session: Optional[str] = None,
     messageId: Optional[str] = None,
-    message_id: Optional[str] = None
+    message_id: Optional[str] = None,
+    token: Optional[str] = Query(None)
 ):
     """
     Proxy de mídias (imagem, áudio, vídeo, documentos) consumido pelo frontend.
     Mapeia /api/sessions/{session_id}/media?messageId=...
     """
+    auth_header = request.headers.get("Authorization")
+    auth_token = token
+    if not auth_token and auth_header and auth_header.lower().startswith("bearer "):
+        auth_token = auth_header[7:].strip()
+
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Token de autenticação obrigatório.")
+
+    from app.core.auth import decode_access_token
+    payload = decode_access_token(auth_token)
+    if not payload or not payload.get("sub"):
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado.")
+
     target_session = session_id or session
     msg_id = messageId or message_id
 # Se o frontend tentar carregar mídia de uma mensagem fantasma, aborta imediatamente com 400. Evita ping desnecessário na API de WhatsApp.
