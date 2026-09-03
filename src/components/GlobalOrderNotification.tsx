@@ -63,11 +63,50 @@ export default function GlobalOrderNotification() {
     if (!token) return;
 
     let socket: WebSocket | null = null;
+    let eventSource: EventSource | null = null;
     let reconnectTimeout: ReturnType<typeof setTimeout>;
     let disposed = false;
 
-    const connectWebSocket = () => {
+    const connectRealtime = () => {
       if (disposed) return;
+
+      // Primary: EventSource (SSE) - 100% compatible with reverse proxies, Caddy, Cloudflare, etc.
+      if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
+        try {
+          const sseUrl = `${API_BASE}/orders/events?token=${encodeURIComponent(token)}`;
+          eventSource = new EventSource(sseUrl);
+
+          eventSource.onopen = () => {
+            if (disposed) { eventSource?.close(); return; }
+            console.log('[GlobalOrderNotification] SSE conectado');
+          };
+
+          eventSource.onmessage = (event) => {
+            if (!event.data || event.data.startsWith(':')) return;
+            try {
+              const data = JSON.parse(event.data);
+              if (data.event === 'new_order' || data.event === 'order_updated') {
+                fetchOrders();
+              }
+            } catch (e) {
+              console.error('[GlobalOrderNotification] Erro ao processar mensagem SSE', e);
+            }
+          };
+
+          eventSource.onerror = () => {
+            if (disposed) return;
+            if (eventSource?.readyState === EventSource.CLOSED) {
+              console.log('[GlobalOrderNotification] SSE desconectado. Tentando reconectar...');
+              reconnectTimeout = setTimeout(connectRealtime, 5000);
+            }
+          };
+          return;
+        } catch (e) {
+          console.warn('[GlobalOrderNotification] Falha ao iniciar SSE, tentando fallback WebSocket...', e);
+        }
+      }
+
+      // Fallback: WebSocket
       const wsBase = getWebSocketUrl();
       socket = new WebSocket(`${wsBase}/api/v1/orders/ws?token=${encodeURIComponent(token)}`);
 
@@ -98,7 +137,7 @@ export default function GlobalOrderNotification() {
       socket.onclose = () => {
         if (disposed) return;
         console.log('[GlobalOrderNotification] WebSocket desconectado. Tentando reconectar...');
-        reconnectTimeout = setTimeout(connectWebSocket, 5000);
+        reconnectTimeout = setTimeout(connectRealtime, 5000);
       };
 
       socket.onerror = () => {
@@ -110,7 +149,7 @@ export default function GlobalOrderNotification() {
       };
     };
 
-    connectWebSocket();
+    connectRealtime();
     fetchOrders(); // Initial fetch
 
     // Polling every 2 minutes as fallback
@@ -120,6 +159,12 @@ export default function GlobalOrderNotification() {
       disposed = true;
       clearTimeout(reconnectTimeout);
       clearInterval(intervalId);
+      if (eventSource) {
+        eventSource.onopen = null;
+        eventSource.onmessage = null;
+        eventSource.onerror = null;
+        eventSource.close();
+      }
       if (socket) {
         socket.onopen = null;
         socket.onmessage = null;

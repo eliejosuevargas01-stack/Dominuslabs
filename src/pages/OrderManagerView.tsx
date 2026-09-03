@@ -68,6 +68,7 @@ function useOrdersWebSocket() {
 
   useEffect(() => {
     let websocket: WebSocket | null = null;
+    let eventSource: EventSource | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let pollingTimer: ReturnType<typeof setInterval> | null = null;
     let disposed = false;
@@ -108,8 +109,61 @@ function useOrdersWebSocket() {
     const connect = () => {
       if (disposed) return;
       setConnectionStatus('connecting');
+
+      const token = localStorage.getItem('admin_token');
+
+      // Primary: EventSource (SSE) - 100% compatible with reverse proxies, Caddy, Cloudflare, etc.
+      if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
+        try {
+          const sseUrl = `${API_BASE}/orders/events${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+          const es = new EventSource(sseUrl);
+          eventSource = es;
+
+          es.onopen = () => {
+            if (disposed) {
+              es.close();
+              return;
+            }
+            setConnectionStatus('connected');
+          };
+
+          es.onmessage = (event) => {
+            if (!event.data || event.data.startsWith(':')) return;
+            try {
+              const data = JSON.parse(event.data);
+              if (data.event === 'new_order' && data.order) {
+                setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
+                setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
+              } else if (data.event === 'order_updated' && data.order) {
+                if (data.order.status !== 'pending') {
+                  setAnnouncedOrderIds(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(data.order.id);
+                    return newSet;
+                  });
+                }
+                setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
+              }
+            } catch (error) {
+              console.error('Erro ao processar evento SSE de pedidos:', error);
+            }
+          };
+
+          es.onerror = () => {
+            if (disposed) return;
+            if (es.readyState === EventSource.CLOSED) {
+              setConnectionStatus('disconnected');
+              reconnectTimer = setTimeout(connect, 5000);
+            }
+          };
+          return;
+        } catch (error) {
+          console.warn('[OrderManager] Falha ao iniciar SSE, tentando WebSocket fallback...', error);
+        }
+      }
+
+      // Fallback: WebSocket
       try {
-        const token = localStorage.getItem('admin_token');
         const websocketBase = API_BASE.replace(/^http/, 'ws');
         websocket = new WebSocket(`${websocketBase}/orders/ws?token=${encodeURIComponent(token || '')}`);
         websocket.onopen = () => {
@@ -171,6 +225,12 @@ function useOrdersWebSocket() {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (pollingTimer) clearInterval(pollingTimer);
+      if (eventSource) {
+        eventSource.onopen = null;
+        eventSource.onmessage = null;
+        eventSource.onerror = null;
+        eventSource.close();
+      }
       if (websocket) {
         websocket.onopen = null;
         websocket.onmessage = null;
