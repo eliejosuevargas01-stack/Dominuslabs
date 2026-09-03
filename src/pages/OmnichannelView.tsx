@@ -497,6 +497,7 @@ function renderMessageMedia(msg: any, defaultSessionId?: string, onOpenLightbox?
         <img
           src={mediaSrc}
           alt="Imagem"
+          referrerPolicy="no-referrer"
           className="w-full max-h-72 object-cover rounded-2xl transition-transform duration-300 group-hover:scale-105"
           loading="lazy"
           onError={(e) => {
@@ -563,6 +564,7 @@ function renderMessageMedia(msg: any, defaultSessionId?: string, onOpenLightbox?
         <img
           src={mediaSrc}
           alt="Arquivo de Mídia"
+          referrerPolicy="no-referrer"
           className="w-full max-h-72 object-cover rounded-2xl group-hover:scale-105 transition-transform duration-300"
           onError={(e) => {
             (e.target as HTMLElement).style.display = 'none';
@@ -1407,7 +1409,7 @@ function playOutgoingSound() {
       };
 
       eventSource.onerror = () => {
-        // Suppress browser console noise on automatic reconnect
+        try { eventSource?.close(); } catch (_) {}
       };
     } catch (e) {}
 
@@ -1916,6 +1918,7 @@ function playOutgoingSound() {
                           <img
                             src={avatarSrc}
                             alt={displayName}
+                            referrerPolicy="no-referrer"
                             className="w-12 h-12 rounded-full object-cover shrink-0 border border-zinc-200/80 shadow-sm"
                             onError={(e) => {
                               (e.target as HTMLElement).style.display = 'none';
@@ -2066,6 +2069,7 @@ function playOutgoingSound() {
                       <img
                         src={getAvatarSrc(selectedChat.profile_pic_url, selectedChat.session_id, selectedChat.contact_jid)!}
                         alt={resolveContactName(selectedChat)}
+                        referrerPolicy="no-referrer"
                         className="w-10 h-10 rounded-full object-cover border border-zinc-200"
                         onError={(e) => {
                           (e.target as HTMLElement).style.display = 'none';
@@ -2549,6 +2553,7 @@ function playOutgoingSound() {
             <img
               src={lightboxUrl}
               alt="Mídia Ampliada"
+              referrerPolicy="no-referrer"
               className="max-h-[85vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl border border-white/10"
             />
           </div>

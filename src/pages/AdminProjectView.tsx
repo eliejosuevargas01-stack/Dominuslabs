@@ -173,6 +173,9 @@ export default function AdminProjectView() {
         loadProjectData();
       }
     };
+    eventSource.onerror = () => {
+      try { eventSource.close(); } catch (_) {}
+    };
 
     return () => {
       eventSource.close();

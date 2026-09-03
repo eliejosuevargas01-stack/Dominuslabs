@@ -98,6 +98,9 @@ export default function AdminDashboard() {
         loadDashboardData(true);
       }
     };
+    eventSource.onerror = () => {
+      try { eventSource.close(); } catch (_) {}
+    };
 
     return () => {
       eventSource.close();
