@@ -77,11 +77,11 @@ function useOrdersWebSocket() {
         const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
         fetch(`${API_BASE}/orders`, { headers: authHeaders })
           .then(response => {
-            if (!response.ok) throw new Error('Falha ao carregar pedidos persistidos');
+            if (!response || !response.ok) throw new Error('Falha ao carregar pedidos persistidos');
             return response.json();
           })
           .then(data => {
-            if (Array.isArray(data.orders)) {
+            if (Array.isArray(data?.orders)) {
               let newIds: string[] = [];
               setOrders(prev => {
                 const byId = new Map<string, Order>(prev.map(order => [order.id, order] as [string, Order]));
@@ -106,12 +106,19 @@ function useOrdersWebSocket() {
     };
 
     const connect = () => {
+      if (disposed) return;
       setConnectionStatus('connecting');
       try {
         const token = localStorage.getItem('admin_token');
         const websocketBase = API_BASE.replace(/^http/, 'ws');
         websocket = new WebSocket(`${websocketBase}/orders/ws?token=${encodeURIComponent(token || '')}`);
-        websocket.onopen = () => setConnectionStatus('connected');
+        websocket.onopen = () => {
+          if (disposed) {
+            try { websocket?.close(1000, 'Unmounted'); } catch (_) {}
+            return;
+          }
+          setConnectionStatus('connected');
+        };
         websocket.onmessage = event => {
           try {
             const data = JSON.parse(event.data);
@@ -134,7 +141,14 @@ function useOrdersWebSocket() {
             console.error('Erro ao processar mensagem do WebSocket:', error);
           }
         };
-        websocket.onerror = () => websocket?.close();
+        websocket.onerror = () => {
+          if (disposed) return;
+          console.warn('[OrderManager] WebSocket aviso/desconexão', {
+            url: websocket?.url,
+            readyState: websocket?.readyState,
+          });
+          websocket?.close();
+        };
         websocket.onclose = () => {
           if (disposed) return;
           setConnectionStatus('disconnected');
@@ -157,7 +171,19 @@ function useOrdersWebSocket() {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (pollingTimer) clearInterval(pollingTimer);
-      websocket?.close();
+      if (websocket) {
+        websocket.onopen = null;
+        websocket.onmessage = null;
+        websocket.onerror = null;
+        websocket.onclose = null;
+        if (websocket.readyState === WebSocket.OPEN) {
+          websocket.close(1000, 'Unmounted');
+        } else {
+          websocket.onopen = () => {
+            try { websocket?.close(1000, 'Unmounted'); } catch (_) {}
+          };
+        }
+      }
     };
   }, []);
 

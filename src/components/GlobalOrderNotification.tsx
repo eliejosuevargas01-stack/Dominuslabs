@@ -64,12 +64,18 @@ export default function GlobalOrderNotification() {
 
     let socket: WebSocket | null = null;
     let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let disposed = false;
 
     const connectWebSocket = () => {
+      if (disposed) return;
       const wsBase = getWebSocketUrl();
       socket = new WebSocket(`${wsBase}/api/v1/orders/ws?token=${encodeURIComponent(token)}`);
 
       socket.onopen = () => {
+        if (disposed) {
+          try { socket?.close(1000, 'Unmounted'); } catch (_) {}
+          return;
+        }
         console.log('[GlobalOrderNotification] WebSocket conectado');
       };
 
@@ -90,12 +96,17 @@ export default function GlobalOrderNotification() {
       };
 
       socket.onclose = () => {
+        if (disposed) return;
         console.log('[GlobalOrderNotification] WebSocket desconectado. Tentando reconectar...');
         reconnectTimeout = setTimeout(connectWebSocket, 5000);
       };
 
-      socket.onerror = (err) => {
-        console.error('[GlobalOrderNotification] WebSocket erro', err);
+      socket.onerror = () => {
+        if (disposed) return;
+        console.warn('[GlobalOrderNotification] WebSocket aviso/desconexão', {
+          url: socket?.url,
+          readyState: socket?.readyState,
+        });
       };
     };
 
@@ -106,12 +117,23 @@ export default function GlobalOrderNotification() {
     const intervalId = setInterval(fetchOrders, 2 * 60 * 1000);
 
     return () => {
-      if (socket) {
-        socket.onclose = null;
-        socket.close();
-      }
+      disposed = true;
       clearTimeout(reconnectTimeout);
       clearInterval(intervalId);
+      if (socket) {
+        socket.onopen = null;
+        socket.onmessage = null;
+        socket.onerror = null;
+        socket.onclose = null;
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.close(1000, 'Unmounted');
+        } else {
+          // If still connecting, wait for open before closing to avoid "closed before established" warning
+          socket.onopen = () => {
+            try { socket?.close(1000, 'Unmounted'); } catch (_) {}
+          };
+        }
+      }
     };
   }, []);
 
