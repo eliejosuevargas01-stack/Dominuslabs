@@ -345,41 +345,41 @@ async def get_session_media(
         if master_secret and master_secret != "default_master_secret":
             req_headers["X-Master-API-Key"] = master_secret
 
+    client = httpx.AsyncClient(timeout=60.0)
     try:
-        client = httpx.AsyncClient(timeout=60.0)
         req = client.build_request("GET", url, headers=req_headers)
         response = await client.send(req, stream=True)
-        if response.status_code >= 400:
+    except Exception as e:
+        await client.aclose()
+        logger.error(f"[WA-MEDIA] Erro ao buscar mídia proxy para session={session_id}, msg={target_msg_id}: {e}")
+        raise HTTPException(status_code=502, detail="Falha ao conectar à API de WhatsApp.")
+
+    if response.status_code >= 400:
+        await response.aclose()
+        await client.aclose()
+        raise HTTPException(
+            status_code=response.status_code,
+            detail="Mídia não encontrada ou indisponível."
+        )
+
+    content_type = response.headers.get("content-type", "application/octet-stream")
+
+    async def media_stream():
+        try:
+            async for chunk in response.aiter_bytes():
+                yield chunk
+        finally:
             await response.aclose()
             await client.aclose()
-            raise HTTPException(
-                status_code=response.status_code,
-                detail="Mídia não encontrada ou indisponível."
-            )
 
-        content_type = response.headers.get("content-type", "application/octet-stream")
-
-        async def media_stream():
-            try:
-                async for chunk in response.aiter_bytes():
-                    yield chunk
-            finally:
-                await response.aclose()
-                await client.aclose()
-
-        return StreamingResponse(
-            content=media_stream(),
-            media_type=content_type,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "public, max-age=86400"
-            }
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"[WA-MEDIA] Erro ao buscar mídia proxy para session={session_id}, msg={target_msg_id}: {e}")
-        raise HTTPException(status_code=404, detail="Mídia não encontrada ou indisponível.")
+    return StreamingResponse(
+        content=media_stream(),
+        media_type=content_type,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=86400"
+        }
+    )
 
 @router.get("/sessions")
 async def list_sessions(
@@ -706,10 +706,6 @@ def save_credentials(
         account.idpw = payload.client_id
     if hasattr(account, "client_id"):
         account.client_id = payload.client_id
-    if hasattr(account, "client_secret"):
-        account.client_secret = payload.client_secret
-    if hasattr(account, "secret"):
-        account.secret = payload.client_secret
 
     db.commit()
     print(f"[M2M-AUTH-FLOW] ✅ Credenciais salvas manualmente no banco de dados Dominus para {user.email}!\n", flush=True)
@@ -800,10 +796,6 @@ async def provision_whatsapp(
                 account.idpw = client_id
             if hasattr(account, "client_id"):
                 account.client_id = client_id
-            if hasattr(account, "client_secret"):
-                account.client_secret = client_secret
-            if hasattr(account, "secret"):
-                account.secret = client_secret
 
             db.commit()
             print(f"[M2M-AUTH-FLOW] ✅ Credenciais salvas automaticamente no banco de dados Dominus para {user.email}!\n", flush=True)
