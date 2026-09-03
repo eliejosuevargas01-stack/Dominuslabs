@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { API_BASE, handleExpiredSessionRedirect, decodeJwtExp } from '../services/api';
+import { 
+  API_BASE, 
+  fetchWithAuth, 
+  getStoredAccessToken, 
+  isTokenExpired, 
+  refreshAuthTokenSilently 
+} from '../services/api';
 
 // Type from the backend order schema
 interface Order {
@@ -38,20 +44,8 @@ export default function GlobalOrderNotification() {
   // Ref for polling interval to prevent stale closure
   const fetchOrders = async () => {
     try {
-      const token = localStorage.getItem('admin_token');
-      if (!token) return;
-
-      const response = await fetch(`${API_BASE}/orders`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) {
-        if (response.status === 401) {
-          handleExpiredSessionRedirect();
-        }
-        return;
-      }
+      const response = await fetchWithAuth(`${API_BASE}/orders`);
+      if (!response.ok) return;
 
       const data = await response.json();
       if (data.ok && Array.isArray(data.orders)) {
@@ -59,20 +53,11 @@ export default function GlobalOrderNotification() {
         setPendingCount(pCount);
       }
     } catch (e) {
-      console.error('Erro ao buscar pedidos no alarme global', e);
+      console.warn('[GlobalOrderNotification] Aviso ao sincronizar pedidos:', e);
     }
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('admin_token');
-    if (!token) return;
-
-    const exp = decodeJwtExp(token);
-    if (exp && Date.now() >= exp * 1000) {
-      handleExpiredSessionRedirect();
-      return;
-    }
-
     let socket: WebSocket | null = null;
     let eventSource: EventSource | null = null;
     let reconnectTimeout: ReturnType<typeof setTimeout>;
@@ -80,6 +65,17 @@ export default function GlobalOrderNotification() {
 
     const connectRealtime = () => {
       if (disposed) return;
+
+      const token = getStoredAccessToken();
+      if (!token) return;
+
+      if (isTokenExpired(token)) {
+        refreshAuthTokenSilently().then(newToken => {
+          if (disposed) return;
+          if (newToken) connectRealtime();
+        });
+        return;
+      }
 
       // Primary: EventSource (SSE) - 100% compatible with reverse proxies, Caddy, Cloudflare, etc.
       if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
@@ -104,11 +100,12 @@ export default function GlobalOrderNotification() {
             }
           };
 
-          eventSource.onerror = () => {
+          eventSource.onerror = async () => {
             try { eventSource?.close(); } catch (_) {}
             if (disposed) return;
-            console.log('[GlobalOrderNotification] SSE desconectado. Tentando reconectar em 15s...');
-            reconnectTimeout = setTimeout(connectRealtime, 15000);
+            console.log('[GlobalOrderNotification] SSE desconectado. Tentando renovação silenciosa...');
+            await refreshAuthTokenSilently();
+            reconnectTimeout = setTimeout(connectRealtime, 5000);
           };
           return;
         } catch (e) {
@@ -144,9 +141,10 @@ export default function GlobalOrderNotification() {
         }
       };
 
-      socket.onclose = () => {
+      socket.onclose = async () => {
         if (disposed) return;
-        console.log('[GlobalOrderNotification] WebSocket desconectado. Tentando reconectar...');
+        console.log('[GlobalOrderNotification] WebSocket desconectado. Tentando renovação silenciosa...');
+        await refreshAuthTokenSilently();
         reconnectTimeout = setTimeout(connectRealtime, 5000);
       };
 
@@ -159,6 +157,22 @@ export default function GlobalOrderNotification() {
       };
     };
 
+    const handleTokenRefreshed = () => {
+      if (disposed) return;
+      console.log('[GlobalOrderNotification] Token renovado detectado por evento. Reconectando...');
+      if (eventSource) {
+        try { eventSource.close(); } catch (_) {}
+        eventSource = null;
+      }
+      if (socket) {
+        try { socket.close(); } catch (_) {}
+        socket = null;
+      }
+      connectRealtime();
+    };
+
+    window.addEventListener('token_refreshed', handleTokenRefreshed);
+
     connectRealtime();
     fetchOrders(); // Initial fetch
 
@@ -167,6 +181,7 @@ export default function GlobalOrderNotification() {
 
     return () => {
       disposed = true;
+      window.removeEventListener('token_refreshed', handleTokenRefreshed);
       clearTimeout(reconnectTimeout);
       clearInterval(intervalId);
       if (eventSource) {

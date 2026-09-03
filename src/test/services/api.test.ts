@@ -61,3 +61,91 @@ describe('getDynamicApiUrl', () => {
     expect(resultHttps).toBe('https://example.com/api/v1');
   });
 });
+
+describe('Silent Reauth System', () => {
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('detects expired tokens correctly', async () => {
+    const { isTokenExpired } = await import('../../services/api');
+    // Token with exp in the past
+    const pastExp = Math.floor(Date.now() / 1000) - 100;
+    const expiredToken = `eyJhbGciOiJIUzI1NiJ9.${btoa(JSON.stringify({ exp: pastExp }))}.sig`;
+    expect(isTokenExpired(expiredToken)).toBe(true);
+
+    // Token with exp in the future
+    const futureExp = Math.floor(Date.now() / 1000) + 3600;
+    const validToken = `eyJhbGciOiJIUzI1NiJ9.${btoa(JSON.stringify({ exp: futureExp }))}.sig`;
+    expect(isTokenExpired(validToken)).toBe(false);
+  });
+
+  it('renews expired token silently using refresh token', async () => {
+    const { getValidAccessToken } = await import('../../services/api');
+    const pastExp = Math.floor(Date.now() / 1000) - 100;
+    const expiredToken = `eyJhbGciOiJIUzI1NiJ9.${btoa(JSON.stringify({ exp: pastExp }))}.sig`;
+    const newAccessToken = 'fresh_access_token';
+
+    localStorage.setItem('admin_token', expiredToken);
+    localStorage.setItem('admin_refresh_token', 'valid_refresh_token');
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        access_token: newAccessToken,
+        refresh_token: 'new_refresh_token',
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const token = await getValidAccessToken();
+    expect(token).toBe(newAccessToken);
+    expect(localStorage.getItem('admin_token')).toBe(newAccessToken);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/auth/refresh'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ refresh_token: 'valid_refresh_token' }),
+      })
+    );
+  });
+
+  it('deduplicates concurrent refresh requests using mutex', async () => {
+    const { getValidAccessToken } = await import('../../services/api');
+    const pastExp = Math.floor(Date.now() / 1000) - 100;
+    const expiredToken = `eyJhbGciOiJIUzI1NiJ9.${btoa(JSON.stringify({ exp: pastExp }))}.sig`;
+
+    localStorage.setItem('admin_token', expiredToken);
+    localStorage.setItem('admin_refresh_token', 'valid_refresh_token');
+
+    const fetchMock = vi.fn().mockImplementation(() => 
+      new Promise(resolve => setTimeout(() => resolve({
+        ok: true,
+        json: async () => ({
+          access_token: 'shared_new_token',
+          refresh_token: 'shared_new_refresh_token',
+        }),
+      }), 10))
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    // Dispara 5 requisições de token concorrentes
+    const [t1, t2, t3, t4, t5] = await Promise.all([
+      getValidAccessToken(),
+      getValidAccessToken(),
+      getValidAccessToken(),
+      getValidAccessToken(),
+      getValidAccessToken(),
+    ]);
+
+    expect(t1).toBe('shared_new_token');
+    expect(t2).toBe('shared_new_token');
+    expect(t3).toBe('shared_new_token');
+    expect(t4).toBe('shared_new_token');
+    expect(t5).toBe('shared_new_token');
+    // Deve ter chamado o endpoint /auth/refresh APENAS UMA VEZ
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

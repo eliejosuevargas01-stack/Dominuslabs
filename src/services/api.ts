@@ -27,97 +27,8 @@ function getHeaders(contentType: string | null = "application/json") {
   return headers;
 }
 
-export async function fetchWithAuth(
-  url: string,
-  options: RequestInit = {},
-  contentType: string | null = "application/json"
-) {
-  const token = localStorage.getItem("admin_token");
-  if (!token || token === "null" || token === "undefined") {
-    localStorage.removeItem("admin_token");
-    localStorage.removeItem("admin_refresh_token");
-    if (typeof window !== "undefined") {
-      window.location.href = "/login";
-    }
-    throw new Error("Sessão expirada. Por favor, faça login novamente.");
-  }
-
-  const mergedHeaders = {
-    ...getHeaders(contentType),
-    ...(options.headers || {}),
-  } as Record<string, string>;
-
-  // Ensure authorization header is set correctly
-  mergedHeaders["Authorization"] = `Bearer ${token}`;
-
-  let response = await fetch(url, {
-    ...options,
-    headers: mergedHeaders,
-  });
-
-  if (response.status === 401) {
-    const isSubServiceRoute = url.includes("/whatsapp/");
-    const refreshToken = localStorage.getItem("admin_refresh_token");
-    if (refreshToken && refreshToken !== "null" && refreshToken !== "undefined") {
-      try {
-        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refresh_token: refreshToken }),
-        });
-
-        if (refreshRes.ok) {
-          const refreshData = await refreshRes.json();
-          if (refreshData && refreshData.access_token) {
-            localStorage.setItem("admin_token", refreshData.access_token);
-            if (refreshData.refresh_token) {
-              localStorage.setItem("admin_refresh_token", refreshData.refresh_token);
-            }
-            if (refreshData.whatsapp_token) {
-              localStorage.setItem("whatsapp_token", refreshData.whatsapp_token);
-            }
-
-            window.dispatchEvent(new CustomEvent("token_refreshed", { detail: { token: refreshData.access_token } }));
-            schedulePreventiveTokenRefresh();
-
-            // Retry the original request with the new token
-            mergedHeaders["Authorization"] = `Bearer ${refreshData.access_token}`;
-            response = await fetch(url, {
-              ...options,
-              headers: mergedHeaders,
-            });
-
-            // Se o refresh do login foi um sucesso, o usuário está autenticado no Dominius.
-            // Retorna a resposta (mesmo se for 401 do sub-serviço) sem deslogar o usuário.
-            return response;
-          }
-        }
-      } catch (err) {
-        console.error("Token refresh failed:", err); toast.error("Ocorreu um erro na operacao.");
-      }
-    }
-
-    // Se for rota de sub-serviço (como /whatsapp/), não desloga o usuário do Dominius
-    if (isSubServiceRoute) {
-      return response;
-    }
-
-    localStorage.removeItem("admin_token");
-    localStorage.removeItem("admin_refresh_token");
-    localStorage.removeItem("whatsapp_token");
-    if (typeof window !== "undefined") {
-      window.location.href = "/login";
-    }
-    throw new Error("Sessão expirada. Por favor, faça login novamente.");
-  }
-
-  return response;
-}
-
-// ---------------------------------------------------------------------------
-// Re-autenticação Preventiva (1 a 10s antes da expiração / ~59.8 minutos)
-// ---------------------------------------------------------------------------
-
+// Mutex para deduplicar chamadas concorrentes de refresh de token
+let activeRefreshPromise: Promise<string | null> | null = null;
 let preventiveTimerId: any = null;
 
 export function decodeJwtExp(token: string): number | null {
@@ -140,43 +51,95 @@ export function handleExpiredSessionRedirect() {
   }
 }
 
-export async function refreshAuthTokenPreventively(): Promise<string | null> {
+/**
+ * Realiza a renovação silenciosa do access_token usando o refresh_token por baixo dos panos.
+ * Deduplica requisições concorrentes através de activeRefreshPromise.
+ */
+export async function refreshAuthTokenSilently(): Promise<string | null> {
+  if (activeRefreshPromise) {
+    return activeRefreshPromise;
+  }
+
   const refreshToken = localStorage.getItem("admin_refresh_token");
   if (!refreshToken || refreshToken === "null" || refreshToken === "undefined") {
-    handleExpiredSessionRedirect();
     return null;
   }
 
-  try {
-    const res = await fetch(`${API_BASE}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
+  activeRefreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.access_token) {
-        localStorage.setItem("admin_token", data.access_token);
-        if (data.refresh_token) {
-          localStorage.setItem("admin_refresh_token", data.refresh_token);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.access_token) {
+          localStorage.setItem("admin_token", data.access_token);
+          if (data.refresh_token) {
+            localStorage.setItem("admin_refresh_token", data.refresh_token);
+          }
+          if (data.whatsapp_token) {
+            localStorage.setItem("whatsapp_token", data.whatsapp_token);
+          }
+          console.log("[SILENT-REAUTH] ✅ Token renovado com sucesso por baixo dos panos!");
+          window.dispatchEvent(new CustomEvent("token_refreshed", { detail: { token: data.access_token } }));
+          schedulePreventiveTokenRefresh();
+          return data.access_token;
         }
-        if (data.whatsapp_token) {
-          localStorage.setItem("whatsapp_token", data.whatsapp_token);
-        }
-        console.log("[PREVENTIVE-REAUTH] ✅ Token re-autenticado com sucesso 1s antes da expiração!");
-        window.dispatchEvent(new CustomEvent("token_refreshed", { detail: { token: data.access_token } }));
-        schedulePreventiveTokenRefresh();
-        return data.access_token;
+      } else if (res.status === 401 || res.status === 403) {
+        // O refresh_token expirou de fato ou foi revogado (após os 7 dias de validade)
+        console.warn("[SILENT-REAUTH] ⚠️ Refresh token expirado ou inválido. Sessão encerrada.");
+        handleExpiredSessionRedirect();
       }
-    } else if (res.status === 401 || res.status === 403) {
-      console.warn("[PREVENTIVE-REAUTH] ⚠️ Refresh token expirado ou inválido. Redirecionando para login.");
-      handleExpiredSessionRedirect();
+    } catch (err) {
+      console.warn("[SILENT-REAUTH] Falha de rede temporária ao renovar token:", err);
+    } finally {
+      activeRefreshPromise = null;
     }
-  } catch (err) {
-    console.error("[PREVENTIVE-REAUTH] Erro ao re-autenticar preventivamente:", err); toast.error("Ocorreu um erro na operacao.");
+    return null;
+  })();
+
+  return activeRefreshPromise;
+}
+
+// Alias para compatibilidade retroativa
+export const refreshAuthTokenPreventively = refreshAuthTokenSilently;
+
+export function getStoredAccessToken(): string | null {
+  const token = localStorage.getItem("admin_token");
+  if (!token || token === "null" || token === "undefined") return null;
+  return token;
+}
+
+export function isTokenExpired(token: string, marginSec = 30): boolean {
+  const exp = decodeJwtExp(token);
+  if (!exp) return false; // Tokens sem exp (ex: testes) não são considerados expirados
+  return Math.floor(Date.now() / 1000) >= exp - marginSec;
+}
+
+/**
+ * Retorna um access_token garantidamente válido.
+ * Se o token atual estiver expirado ou prestes a expirar nos próximos 30s,
+ * renova silenciosamente usando o refresh_token antes de retornar.
+ */
+export async function getValidAccessToken(): Promise<string | null> {
+  const token = getStoredAccessToken();
+  const refreshToken = localStorage.getItem("admin_refresh_token");
+
+  // Se já temos token e ele NÃO está expirado, retorna diretamente
+  if (token && !isTokenExpired(token)) {
+    return token;
   }
-  return null;
+
+  // Se o token estiver expirado ou ausente, mas temos refresh token, renova por baixo dos panos
+  if (refreshToken && refreshToken !== "null" && refreshToken !== "undefined") {
+    const newToken = await refreshAuthTokenSilently();
+    if (newToken) return newToken;
+  }
+
+  return token || null;
 }
 
 export function schedulePreventiveTokenRefresh() {
@@ -195,25 +158,67 @@ export function schedulePreventiveTokenRefresh() {
   const secondsRemaining = exp - nowInSeconds;
 
   if (secondsRemaining <= 0) {
-    refreshAuthTokenPreventively();
+    refreshAuthTokenSilently();
     return;
   }
 
-  // Agenda disparo preventivo 60s antes do token expirar para garantir resiliência
+  // Agenda disparo preventivo 60s antes do token expirar
   const leadTimeSeconds = 60;
   const targetDelaySec = Math.max(secondsRemaining - leadTimeSeconds, 1);
   const delayMs = targetDelaySec * 1000;
 
-  console.log(`[PREVENTIVE-REAUTH] Re-autenticação preventiva agendada em ${targetDelaySec}s (~${(targetDelaySec / 60).toFixed(1)} min).`);
-
   preventiveTimerId = setTimeout(() => {
-    refreshAuthTokenPreventively();
+    refreshAuthTokenSilently();
   }, delayMs);
 }
 
 // Executa o agendador preventivo ao carregar o arquivo de API
 if (typeof window !== "undefined") {
   schedulePreventiveTokenRefresh();
+}
+
+export async function fetchWithAuth(
+  url: string,
+  options: RequestInit = {},
+  contentType: string | null = "application/json"
+) {
+  let token = await getValidAccessToken();
+  if (!token) {
+    handleExpiredSessionRedirect();
+    throw new Error("Sessão expirada. Por favor, faça login novamente.");
+  }
+
+  const mergedHeaders = {
+    ...getHeaders(contentType),
+    ...(options.headers || {}),
+    Authorization: `Bearer ${token}`,
+  } as Record<string, string>;
+
+  let response = await fetch(url, {
+    ...options,
+    headers: mergedHeaders,
+  });
+
+  // Se o backend ainda assim responder 401 (ex: revogação forçada), tenta renovar 1 vez
+  if (response.status === 401) {
+    const isSubServiceRoute = url.includes("/whatsapp/");
+    const refreshedToken = await refreshAuthTokenSilently();
+    if (refreshedToken) {
+      mergedHeaders["Authorization"] = `Bearer ${refreshedToken}`;
+      response = await fetch(url, {
+        ...options,
+        headers: mergedHeaders,
+      });
+      return response;
+    }
+
+    if (!isSubServiceRoute) {
+      handleExpiredSessionRedirect();
+      throw new Error("Sessão expirada. Por favor, faça login novamente.");
+    }
+  }
+
+  return response;
 }
 
 export async function loginUser(username: string, password: string) {

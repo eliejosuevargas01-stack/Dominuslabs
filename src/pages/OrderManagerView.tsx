@@ -13,7 +13,13 @@ import { toast } from 'sonner';
  */
 
 // API Base URL (adjust for testing/prod)
-import { API_BASE, handleExpiredSessionRedirect, decodeJwtExp } from "../services/api";
+import { 
+  API_BASE, 
+  fetchWithAuth, 
+  getStoredAccessToken, 
+  isTokenExpired, 
+  refreshAuthTokenSilently 
+} from "../services/api";
 
 interface OrderItem {
   name: string;
@@ -50,13 +56,14 @@ function buildWazeNavigationUrl(address: string): string | null {
   return url.toString();
 }
 
-const statusLabels: Record<Order['status'], string> = {
+const statusLabels: Record<string, string> = {
   pending: 'Pendente',
   accepted: 'Aceito',
   ready_for_delivery: 'Pronto para entrega',
   out_for_delivery: 'Saiu para entrega',
   delivered: 'Entregue',
   completed: 'Concluído',
+  rejected: 'Recusado',
   cancelled: 'Cancelado',
 };
 
@@ -74,15 +81,9 @@ function useOrdersWebSocket() {
     let disposed = false;
 
     const fetchOrders = () => {
-        const token = localStorage.getItem('admin_token');
-        const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-        fetch(`${API_BASE}/orders`, { headers: authHeaders })
+        fetchWithAuth(`${API_BASE}/orders`)
           .then(response => {
             if (!response || !response.ok) {
-              if (response && response.status === 401) {
-                console.warn('[OrderManager] 401 Unauthorized ao buscar pedidos. Redirecionando...');
-                handleExpiredSessionRedirect();
-              }
               throw new Error('Falha ao carregar pedidos persistidos');
             }
             return response.json();
@@ -109,21 +110,23 @@ function useOrdersWebSocket() {
               }
             }
           })
-          .catch(error => console.error('Erro ao carregar pedidos persistidos:', error));
+          .catch(error => console.warn('[OrderManager] Aviso ao carregar pedidos:', error));
     };
 
     const connect = () => {
       if (disposed) return;
 
-      const token = localStorage.getItem('admin_token');
+      const token = getStoredAccessToken();
       if (!token) {
         setConnectionStatus('disconnected');
         return;
       }
-      const exp = decodeJwtExp(token);
-      if (exp && Date.now() >= exp * 1000) {
-        console.warn('[OrderManager] Token expirado no localStorage. Redirecionando para login.');
-        handleExpiredSessionRedirect();
+
+      if (isTokenExpired(token)) {
+        refreshAuthTokenSilently().then(newToken => {
+          if (disposed) return;
+          if (newToken) connect();
+        });
         return;
       }
 
@@ -166,11 +169,13 @@ function useOrdersWebSocket() {
             }
           };
 
-          es.onerror = () => {
+          es.onerror = async () => {
             try { es.close(); } catch (_) {}
             if (disposed) return;
             setConnectionStatus('disconnected');
-            reconnectTimer = setTimeout(connect, 10000);
+            // Tenta renovar silenciosamente por baixo dos panos antes da próxima tentativa
+            await refreshAuthTokenSilently();
+            reconnectTimer = setTimeout(connect, 5000);
           };
           return;
         } catch (error) {
@@ -219,9 +224,10 @@ function useOrdersWebSocket() {
           });
           websocket?.close();
         };
-        websocket.onclose = () => {
+        websocket.onclose = async () => {
           if (disposed) return;
           setConnectionStatus('disconnected');
+          await refreshAuthTokenSilently();
           reconnectTimer = setTimeout(connect, 5000);
         };
       } catch (error) {
@@ -229,6 +235,22 @@ function useOrdersWebSocket() {
         setConnectionStatus('disconnected');
       }
     };
+
+    const handleTokenRefreshed = () => {
+      if (disposed) return;
+      console.log('[OrderManager] Token renovado detectado por evento global. Reconectando...');
+      if (eventSource) {
+        try { eventSource.close(); } catch (_) {}
+        eventSource = null;
+      }
+      if (websocket) {
+        try { websocket.close(); } catch (_) {}
+        websocket = null;
+      }
+      connect();
+    };
+
+    window.addEventListener('token_refreshed', handleTokenRefreshed);
 
     // The database is the durable source of truth. This reconciliation keeps
     // the screen current even when a WebSocket is connected to another app
@@ -239,6 +261,7 @@ function useOrdersWebSocket() {
 
     return () => {
       disposed = true;
+      window.removeEventListener('token_refreshed', handleTokenRefreshed);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (pollingTimer) clearInterval(pollingTimer);
       if (eventSource) {
@@ -298,7 +321,6 @@ export default function OrderManagerView() {
   }, [orders, announcedOrderIds]);
 
   const playAlarm = (order: Order) => {
-    const token = localStorage.getItem('admin_token');
     const audio = new Audio();
     const abortController = new AbortController();
     activeAlarms.current[order.id] = { audio, abortController };
@@ -320,8 +342,7 @@ export default function OrderManagerView() {
 
     void (async () => {
       try {
-        const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(order.id)}/tts-alarm`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        const response = await fetchWithAuth(`${API_BASE}/orders/${encodeURIComponent(order.id)}/tts-alarm`, {
           signal: abortController.signal,
         });
         if (!response.ok) throw new Error('Falha ao carregar TTS');
@@ -380,13 +401,8 @@ export default function OrderManagerView() {
   const handleAccept = async (orderId: string) => {
     stopAlarm(orderId);
     try {
-      const token = localStorage.getItem('admin_token');
-      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/accept`, {
+      const response = await fetchWithAuth(`${API_BASE}/orders/${encodeURIComponent(orderId)}/accept`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
       });
       if (!response.ok) throw new Error('Falha ao confirmar pedido');
       const data = await response.json();
@@ -397,17 +413,11 @@ export default function OrderManagerView() {
     }
   };
 
-
   const handleReject = async (orderId: string) => {
     stopAlarm(orderId);
     try {
-      const token = localStorage.getItem('admin_token');
-      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/reject`, {
+      const response = await fetchWithAuth(`${API_BASE}/orders/${encodeURIComponent(orderId)}/reject`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
       });
       if (!response.ok) throw new Error('Falha ao recusar pedido');
       const data = await response.json();
@@ -420,13 +430,8 @@ export default function OrderManagerView() {
 
   const handleStatusChange = async (orderId: string, nextStatus: OperationalStatus) => {
     try {
-      const token = localStorage.getItem('admin_token');
-      const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/status?status=${nextStatus}`, {
+      const response = await fetchWithAuth(`${API_BASE}/orders/${encodeURIComponent(orderId)}/status?status=${nextStatus}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
       });
       if (!response.ok) throw new Error('Falha ao atualizar status');
       const data = await response.json();
