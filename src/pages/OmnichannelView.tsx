@@ -408,6 +408,7 @@ function CustomAudioPlayer({ src, isOutgoing }: { src: string; isOutgoing?: bool
       <audio
         ref={audioRef}
         src={src}
+        preload="none"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={handleEnded}
@@ -518,7 +519,7 @@ function renderMessageMedia(msg: any, defaultSessionId?: string, onOpenLightbox?
       <div className="media-container mb-2 overflow-hidden rounded-2xl border border-zinc-800 shadow-md max-w-xs sm:max-w-sm bg-black">
         <video
           controls
-          preload="metadata"
+          preload="none"
           className="w-full max-h-72 rounded-2xl"
           src={mediaSrc}
         >
