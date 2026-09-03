@@ -171,6 +171,7 @@ export default function GlobalOrderNotification() {
     const handleTokenRefreshed = () => {
       if (disposed) return;
       console.log('[GlobalOrderNotification] Token renovado detectado por evento. Reconectando...');
+      clearTimeout(reconnectTimeout);
       if (eventSource) {
         try { eventSource.close(); } catch (_) {}
         eventSource = null;

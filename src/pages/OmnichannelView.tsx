@@ -849,6 +849,13 @@ export default function OmnichannelView() {
     audioChunksRef.current = [];
   };
 
+  // Cleanup recording hardware resources on component unmount
+  useEffect(() => {
+    return () => {
+      cancelRecording();
+    };
+  }, []);
+
   const blobToBase64 = (blob: Blob | File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -1023,11 +1030,27 @@ export default function OmnichannelView() {
     scrollToBottom();
   }, [chatMessages]);
 
-function playIncomingSound() {
+let sharedAudioCtx: AudioContext | null = null;
+function getSharedAudioContext(): AudioContext | null {
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    if (!AudioCtx) return null;
+    if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+      sharedAudioCtx = new AudioCtx();
+    }
+    if (sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+    return sharedAudioCtx;
+  } catch {
+    return null;
+  }
+}
+
+function playIncomingSound() {
+  try {
+    const ctx = getSharedAudioContext();
+    if (!ctx) return;
     const now = ctx.currentTime;
 
     const osc1 = ctx.createOscillator();
@@ -1051,20 +1074,13 @@ function playIncomingSound() {
     osc1.stop(now + 0.1);
     osc2.start(now + 0.08);
     osc2.stop(now + 0.35);
-
-    setTimeout(() => {
-      try {
-        ctx.close();
-      } catch (e) {}
-    }, 1000);
   } catch (e) {}
 }
 
 function playOutgoingSound() {
   try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    const ctx = getSharedAudioContext();
+    if (!ctx) return;
     const now = ctx.currentTime;
     
     const osc = ctx.createOscillator();
@@ -1082,12 +1098,6 @@ function playOutgoingSound() {
     
     osc.start(now);
     osc.stop(now + 0.15);
-
-    setTimeout(() => {
-      try {
-        ctx.close();
-      } catch (e) {}
-    }, 1000);
   } catch (e) {}
 }
 
@@ -1419,8 +1429,8 @@ function playOutgoingSound() {
         }
       };
 
-      eventSource.onerror = () => {
-        try { eventSource?.close(); } catch (_) {}
+      eventSource.onerror = (err) => {
+        console.warn('[OmnichannelView] SSE aviso de rede/reconectando...', err);
       };
     } catch (e) {}
 
