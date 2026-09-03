@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 import json
 import asyncio
+import secrets
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -33,6 +34,49 @@ project_listeners = {}  # {public_token: [asyncio.Queue]}
 global_listeners = []   # [asyncio.Queue]
 lead_listeners = {}     # {lead_id: [(user_email, queue)]}
 crm_chat_listeners: List[tuple] = [] # [(user_email, tenant_id, queue)]
+
+def _is_valid_m2m_or_hmac(
+    request: Request,
+    raw_body_bytes: bytes,
+    token: Optional[str] = None,
+    x_master_api_key: Optional[str] = None
+) -> bool:
+    """Valida se a requisição possui chave M2M, HMAC signature válida ou token JWT válido."""
+    # 1. Master API Key
+    master_secret = getattr(settings, "WHATSAPP_MASTER_SECRET", None)
+    if master_secret:
+        header_key = x_master_api_key or request.headers.get("X-Master-API-Key") or request.headers.get("X-API-Key")
+        query_key = request.query_params.get("x_master_api_key") or request.query_params.get("master_api_key") or request.query_params.get("api_key")
+        candidate_key = header_key or query_key
+        if candidate_key and secrets.compare_digest(candidate_key.strip(), master_secret.strip()):
+            return True
+
+    # 2. Webhook Secret / HMAC
+    webhook_secret = getattr(settings, "WEBHOOK_SECRET", None) or master_secret
+    if webhook_secret:
+        signature = request.headers.get("X-Signature") or request.headers.get("X-Webhook-Secret") or request.headers.get("X-Hub-Signature-256")
+        if signature:
+            sig_clean = signature.replace("sha256=", "").strip()
+            if secrets.compare_digest(sig_clean, webhook_secret.strip()):
+                return True
+            if raw_body_bytes:
+                import hmac
+                import hashlib
+                expected = hmac.new(webhook_secret.encode(), raw_body_bytes, hashlib.sha256).hexdigest()
+                if secrets.compare_digest(sig_clean, expected):
+                    return True
+
+    # 3. JWT Token
+    auth_header = request.headers.get("Authorization")
+    auth_token = token
+    if not auth_token and auth_header and auth_header.lower().startswith("bearer "):
+        auth_token = auth_header[7:].strip()
+    if auth_token:
+        payload = decode_access_token(auth_token)
+        if payload and payload.get("sub"):
+            return True
+
+    return False
 
 async def notify_lead_listeners(lead_id: str, event: str = "reload"):
     """
@@ -91,7 +135,7 @@ async def notify_crm_chat_listeners(
             await queue.put(payload)
 
 @router.get("/events/leads/{lead_id}")
-async def lead_events(lead_id: str, token: str, request: Request):
+async def lead_events(lead_id: str, token: str, request: Request, db: Session = Depends(get_db)):
     """
     Função/Método lead_events.
 
@@ -99,10 +143,38 @@ async def lead_events(lead_id: str, token: str, request: Request):
     Impacto na regra de negócio: Assegura que o fluxo da operação lead_events seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     payload = decode_access_token(token)
-    if not payload:
+    if not payload or not payload.get("sub"):
         raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
     
     user_email = payload.get("sub", "unknown")
+    user_tenant_id = payload.get("tenant_id") or "default"
+
+    # Validar se o tenant_id do usuário coincide com o tenant do lead consultado no banco
+    lead_tenant_id = None
+    try:
+        try:
+            from app.models.lead import Lead
+        except ImportError:
+            from app.models import Lead
+        db_lead = db.query(Lead).filter((Lead.id == lead_id) | (getattr(Lead, "remote_jid", Lead.id) == lead_id)).first()
+        if db_lead:
+            lead_tenant_id = getattr(db_lead, "tenant_id", None)
+    except Exception:
+        pass
+
+    if not lead_tenant_id:
+        try:
+            from app.services.n8n_service import MOCK_LEADS
+            for lead in MOCK_LEADS:
+                if lead.get("id") == lead_id or lead.get("phone") == lead_id or lead.get("jid") == lead_id:
+                    lead_tenant_id = lead.get("tenant_id")
+                    break
+        except Exception:
+            pass
+
+    if lead_tenant_id and user_tenant_id != "admin" and lead_tenant_id != user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado: o tenant do lead não coincide com o do usuário")
+
     queue = asyncio.Queue()
     if lead_id not in lead_listeners:
         lead_listeners[lead_id] = []
@@ -195,7 +267,9 @@ async def _process_update_chat(
     jid: Optional[str] = None,
     phone: Optional[str] = None,
     is_from_me: Optional[bool] = None,
-    sender: Optional[str] = None
+    sender: Optional[str] = None,
+    token: Optional[str] = None,
+    x_master_api_key: Optional[str] = None
 ):
     """
     Função/Método _process_update_chat.
@@ -203,8 +277,15 @@ async def _process_update_chat(
     O que faz: Processa _process_update_chat recebendo os parâmetros (request, contact_id, lead_id, tenant_id, session_id, id, jid, phone, is_from_me, sender) no contexto de o endpoint de API para webhooks.
     Impacto na regra de negócio: Assegura que o fluxo da operação _process_update_chat seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
+    body_bytes = await request.body()
+    if not _is_valid_m2m_or_hmac(request, body_bytes, token, x_master_api_key):
+        raise HTTPException(
+            status_code=401,
+            detail="Não autenticado. Token JWT ou chave M2M/HMAC inválida ou ausente."
+        )
+
     try:
-        raw_body = await request.json()
+        raw_body = json.loads(body_bytes) if body_bytes else await request.json()
         if isinstance(raw_body, dict):
             raw_body = [raw_body]
     except Exception:
@@ -279,7 +360,9 @@ async def update_chat_webhook_post(
     jid: Optional[str] = None,
     phone: Optional[str] = None,
     is_from_me: Optional[bool] = None,
-    sender: Optional[str] = None
+    sender: Optional[str] = None,
+    token: Optional[str] = Query(None),
+    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key")
 ):
     """
     Função/Método update_chat_webhook_post.
@@ -297,7 +380,9 @@ async def update_chat_webhook_post(
         jid=jid,
         phone=phone,
         is_from_me=is_from_me,
-        sender=sender
+        sender=sender,
+        token=token,
+        x_master_api_key=x_master_api_key
     )
 
 @router.get("/crm/update-chat")
@@ -311,7 +396,9 @@ async def update_chat_webhook_get(
     jid: Optional[str] = None,
     phone: Optional[str] = None,
     is_from_me: Optional[bool] = None,
-    sender: Optional[str] = None
+    sender: Optional[str] = None,
+    token: Optional[str] = Query(None),
+    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key")
 ):
     """
     Função/Método update_chat_webhook_get.
@@ -329,7 +416,9 @@ async def update_chat_webhook_get(
         jid=jid,
         phone=phone,
         is_from_me=is_from_me,
-        sender=sender
+        sender=sender,
+        token=token,
+        x_master_api_key=x_master_api_key
     )
 
 async def notify_listeners(public_token: str):
