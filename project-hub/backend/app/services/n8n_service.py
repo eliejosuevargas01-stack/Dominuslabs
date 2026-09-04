@@ -1627,16 +1627,20 @@ class N8NService:
                 mapped_list = map_n8n_message(m, lead_channel)
                 for mapped_msg in mapped_list:
                     msg_id = str(mapped_msg.get("id") or mapped_msg.get("message_id") or "")
-                    content = str(mapped_msg.get("content") or mapped_msg.get("message") or "").strip()
-                    is_from_me = mapped_msg.get("is_from_me", False)
-                    ts = str(mapped_msg.get("timestamp") or mapped_msg.get("message_timestamp") or "")
                     if msg_id and not msg_id.startswith("temp_") and msg_id.lower() not in ("none", "null", ""):
                         dedup_key = f"id:{msg_id}"
+                        if dedup_key in seen_keys:
+                            continue
                     else:
+                        content = str(mapped_msg.get("content") or mapped_msg.get("message") or "").strip()
+                        is_from_me = mapped_msg.get("is_from_me", False)
+                        ts = str(mapped_msg.get("timestamp") or mapped_msg.get("message_timestamp") or "")
                         dedup_key = f"msg:{content}:{is_from_me}:{ts[:16]}"
-                    if dedup_key not in seen_keys:
-                        seen_keys.add(dedup_key)
-                        embedded_msgs.append(mapped_msg)
+                        if dedup_key in seen_keys:
+                            continue
+
+                    seen_keys.add(dedup_key)
+                    embedded_msgs.append(mapped_msg)
 
             embedded_msgs.sort(key=lambda x: x.get("timestamp") or "")
             if len(embedded_msgs) > 0:
@@ -1703,16 +1707,20 @@ class N8NService:
                                     continue
 
                             msg_id = str(mapped_msg.get("id") or mapped_msg.get("message_id") or "")
-                            content = str(mapped_msg.get("content") or mapped_msg.get("message") or "").strip()
-                            is_from_me = mapped_msg.get("is_from_me", False)
-                            ts = str(mapped_msg.get("timestamp") or mapped_msg.get("message_timestamp") or "")
                             if msg_id and not msg_id.startswith("temp_") and msg_id.lower() not in ("none", "null", ""):
                                 dedup_key = f"id:{msg_id}"
+                                if dedup_key in seen_keys:
+                                    continue
                             else:
+                                content = str(mapped_msg.get("content") or mapped_msg.get("message") or "").strip()
+                                is_from_me = mapped_msg.get("is_from_me", False)
+                                ts = str(mapped_msg.get("timestamp") or mapped_msg.get("message_timestamp") or "")
                                 dedup_key = f"msg:{content}:{is_from_me}:{ts[:16]}"
-                            if dedup_key not in seen_keys:
-                                seen_keys.add(dedup_key)
-                                fresh_msgs.append(mapped_msg)
+                                if dedup_key in seen_keys:
+                                    continue
+
+                            seen_keys.add(dedup_key)
+                            fresh_msgs.append(mapped_msg)
 
                 fresh_msgs.sort(key=lambda x: x.get("timestamp") or "")
                 
