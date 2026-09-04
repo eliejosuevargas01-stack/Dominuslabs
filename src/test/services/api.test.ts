@@ -149,3 +149,46 @@ describe('Silent Reauth System', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('connectWhatsappSession', () => {
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('throws an error with the detail message from the response if it is a non-ok response', async () => {
+    const { connectWhatsappSession } = await import('../../services/api');
+
+    // Set up a valid token so fetchWithAuth doesn't throw early
+    const futureExp = Math.floor(Date.now() / 1000) + 3600;
+    const validToken = `eyJhbGciOiJIUzI1NiJ9.${btoa(JSON.stringify({ exp: futureExp }))}.sig`;
+    localStorage.setItem('admin_token', validToken);
+
+    const errorMessage = 'Custom backend error message';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ detail: errorMessage }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(connectWhatsappSession('session123')).rejects.toThrow(errorMessage);
+  });
+
+  it('throws a default error if the non-ok response does not contain a detail message or is invalid JSON', async () => {
+    const { connectWhatsappSession } = await import('../../services/api');
+
+    // Set up a valid token so fetchWithAuth doesn't throw early
+    const futureExp = Math.floor(Date.now() / 1000) + 3600;
+    const validToken = `eyJhbGciOiJIUzI1NiJ9.${btoa(JSON.stringify({ exp: futureExp }))}.sig`;
+    localStorage.setItem('admin_token', validToken);
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => { throw new Error('Invalid JSON'); },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(connectWhatsappSession('session123')).rejects.toThrow('Falha ao solicitar código QR.');
+  });
+});
