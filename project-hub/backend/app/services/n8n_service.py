@@ -1624,6 +1624,13 @@ class N8NService:
             for m in cached_lead["mensagens"]:
                 if not isinstance(m, dict):
                     continue
+
+                if "mensagens" not in m:
+                    m_id = str(m.get("id") or m.get("message_id") or "")
+                    if m_id and not m_id.startswith("temp_") and m_id.lower() not in ("none", "null", ""):
+                        if f"id:{m_id}" in seen_keys:
+                            continue
+
                 mapped_list = map_n8n_message(m, lead_channel)
                 for mapped_msg in mapped_list:
                     msg_id = str(mapped_msg.get("id") or mapped_msg.get("message_id") or "")
@@ -1695,6 +1702,12 @@ class N8NService:
                 seen_keys = set()
                 for m in raw_msgs:
                     if isinstance(m, dict):
+                        if "mensagens" not in m:
+                            m_id = str(m.get("id") or m.get("message_id") or "")
+                            if m_id and not m_id.startswith("temp_") and m_id.lower() not in ("none", "null", ""):
+                                if f"id:{m_id}" in seen_keys:
+                                    continue
+
                         mapped_list = map_n8n_message(m, lead_channel)
                         for mapped_msg in mapped_list:
                             msg_session = str(mapped_msg.get("session_id") or m.get("session_id") or "")
