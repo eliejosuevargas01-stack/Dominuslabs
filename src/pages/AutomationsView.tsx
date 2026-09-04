@@ -113,9 +113,12 @@ export default function AutomationsView({
 
                   {/* Switch Toggle UI */}
                   <button
+                    role="switch"
+                    aria-checked={rule.ativo}
+                    aria-label={`Alternar regra: ${rule.titulo}`}
                     onClick={() => handleToggle(rule)}
                     disabled={isBusy || loading}
-                    className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
+                    className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
                       rule.ativo ? 'bg-purple-600' : 'bg-zinc-300'
                     }`}
                   >
