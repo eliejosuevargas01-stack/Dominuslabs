@@ -228,7 +228,7 @@ export async function loginUser(username: string, password: string) {
     body: JSON.stringify({ username, password }),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errorData.detail || "Erro de login");
   }
   const data = await res.json();
@@ -277,7 +277,7 @@ export async function deleteProject(id: string | number) {
     method: "DELETE",
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errorData.detail || "Failed to delete project");
   }
   return res.json();
@@ -364,7 +364,7 @@ export async function uploadProductMedia(file: File, productId: string, tenantId
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errorData.detail || "Falha ao enviar mídia do produto.");
   }
   return res.json();
@@ -382,7 +382,7 @@ export async function updateCompanySettings(settings: CompanySettings, tenantId:
     body: JSON.stringify(settings),
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao salvar configurações da empresa.");
   }
   return res.json();
@@ -469,7 +469,7 @@ export async function submitFeedback(payload: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errorData.detail || "Falha ao enviar feedback.");
   }
   return res.json();
@@ -521,7 +521,7 @@ export async function createWhatsappSession(name: string) {
     body: JSON.stringify({ name }),
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao criar conexão.");
   }
   return res.json();
@@ -532,7 +532,7 @@ export async function connectWhatsappSession(sessionId: string) {
     method: "POST",
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao solicitar código QR.");
   }
   return res.json();
@@ -541,7 +541,7 @@ export async function connectWhatsappSession(sessionId: string) {
 export async function getWhatsappSessionStatus(sessionId: string) {
   const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}`);
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao consultar status da sessão.");
   }
   return res.json();
@@ -550,7 +550,7 @@ export async function getWhatsappSessionStatus(sessionId: string) {
 export async function getWhatsappSessionSettings(sessionId: string) {
   const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}/settings`);
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao buscar configurações da sessão.");
   }
   return res.json();
@@ -562,7 +562,7 @@ export async function updateWhatsappSessionSettings(sessionId: string, settingsD
     body: JSON.stringify(settingsData),
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao atualizar configurações da sessão.");
   }
   return res.json();
@@ -573,7 +573,7 @@ export async function disconnectWhatsappSession(sessionId: string) {
     method: "POST",
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao desconectar sessão.");
   }
   return res.json();
@@ -584,7 +584,7 @@ export async function deleteWhatsappSession(sessionId: string) {
     method: "DELETE",
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao excluir sessão.");
   }
   return res.json();
@@ -596,7 +596,7 @@ export async function loginInstagramProxy(payload: { username: string; password:
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao conectar Instagram.");
   }
   return res.json();
@@ -607,7 +607,7 @@ export async function logoutInstagramProxy(username: string) {
     method: "POST",
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao desconectar Instagram.");
   }
   return res.json();
@@ -629,7 +629,7 @@ export async function setSessionPreference(session_id: string): Promise<{ sessio
     body: JSON.stringify({ session_id }),
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao salvar preferência de sessão.");
   }
   return res.json();
@@ -650,7 +650,7 @@ export async function sendWhatsappMessage(payload: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao enviar mensagem.");
   }
   return res.json();
@@ -682,7 +682,7 @@ export async function saveCredentials(client_id: string, client_secret: string):
     body: JSON.stringify({ client_id, client_secret }),
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao salvar credenciais.");
   }
   return res.json();
@@ -698,7 +698,7 @@ export async function provisionCredentials(): Promise<{
     method: "POST",
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao vincular com a WhatsApp API.");
   }
   return res.json();
@@ -743,7 +743,7 @@ export async function sendOmnichannelMessage(payload: {
     }),
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao enviar mensagem.");
   }
   return res.json();
@@ -765,7 +765,7 @@ export async function sendOmnichannelMedia(payload: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
+    const errData = await res.json().catch((err) => { console.error("Failed to parse error response:", err); return {}; });
     throw new Error(errData.detail || "Falha ao enviar arquivo de mídia.");
   }
   return res.json();
