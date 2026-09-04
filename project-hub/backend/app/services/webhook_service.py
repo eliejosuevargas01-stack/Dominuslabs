@@ -44,16 +44,23 @@ class WebhookService:
             ProjectTask.project_id == project_id,
             ProjectTask.status != TaskStatus.DONE
         ).all()
+
+        ids_to_update = []
+        clean_msg = message.strip().lower()
+
         for task in tasks:
             clean_task = task.name.strip().lower()
-            clean_msg = message.strip().lower()
             # Mark task as DONE if commit message matches or contains the task name
             if clean_task == clean_msg or clean_task in clean_msg:
-                task.status = TaskStatus.DONE
-                task.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
-                task.completed_by_github = True
-                db.add(task)
-        
+                ids_to_update.append(task.id)
+
+        if ids_to_update:
+            db.query(ProjectTask).filter(ProjectTask.id.in_(ids_to_update)).update({
+                "status": TaskStatus.DONE,
+                "completed_at": datetime.now(timezone.utc).replace(tzinfo=None),
+                "completed_by_github": True
+            }, synchronize_session=False)
+
         db.commit()
 
     @staticmethod
