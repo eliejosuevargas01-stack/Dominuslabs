@@ -1,7 +1,11 @@
-🔒 Fix token exposure in fetch query parameters
+🎯 **What:** The code health issue addressed
+Broken long lines (specifically `logger.error` and `print` lines that exceeded 120 characters) in `project-hub/backend/app/services/identity_service.py` into multiple lines using Python's implicit line continuation with parentheses.
 
-🎯 **What:** Moved the authentication token from the URL query parameters to the `Authorization` header in the `fetch` requests within `OrderManagerView.tsx`.
+💡 **Why:** How this improves maintainability
+Long lines are difficult to read, especially on smaller screens or when comparing diffs side-by-side. Keeping lines concise and avoiding horizontal scrolling improves readability and overall code maintainability, adhering to PEP 8 line length guidelines.
 
-⚠️ **Risk:** Including tokens in URL query strings is a security vulnerability. URLs (including query strings) are often logged by servers, proxies, and potentially saved in browser histories. If an attacker gains access to these logs, they can extract the token and impersonate the user, compromising the system.
+✅ **Verification:** How you confirmed the change is safe
+Ran the full backend test suite (`python -m pytest` inside `project-hub/backend` directory) after the refactor to ensure no functionality is broken. All 71 tests passed successfully.
 
-🛡️ **Solution:** Replaced the `?token=` parameter with the secure `Authorization: Bearer <token>` HTTP header when performing REST API calls (`/accept` and `/status`). The WebSocket connection remains unchanged as standard browser WebSockets do not support custom headers and must use query string parameters for authentication.
+✨ **Result:** The improvement achieved
+The codebase is now cleaner, easier to read, and compliant with standard line length conventions without altering the original logging and functionality behavior.

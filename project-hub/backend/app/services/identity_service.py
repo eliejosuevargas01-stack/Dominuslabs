@@ -60,7 +60,10 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
             logger.debug(f"[IDENTITY-WORKER] Reutilizando JWT M2M do cache para tenant_id={tenant_id}, scope={scope}")
             return cached_token
         else:
-            logger.info(f"[IDENTITY-WORKER] Token em cache próximo do vencimento (<30s). Renovando proativamente para tenant_id={tenant_id}, scope={scope}...")
+            logger.info(
+                f"[IDENTITY-WORKER] Token em cache próximo do vencimento (<30s). "
+                f"Renovando proativamente para tenant_id={tenant_id}, scope={scope}..."
+            )
             _identity_token_cache.pop(cache_key, None)
 
     base_url = settings.IDENTITY_WORKER_URL.rstrip("/")
@@ -103,8 +106,15 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
                         logger.info("[FLOW-STEP 5] Identity Worker response payload decrypted successfully")
                         print("[FLOW-STEP 5] Identity Worker response payload decrypted successfully", flush=True)
                     except Exception as decrypt_err:
-                        logger.error(f"[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker response payload ({decrypt_err})")
-                        print(f"[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker response payload ({decrypt_err})", flush=True)
+                        logger.error(
+                            f"[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker "
+                            f"response payload ({decrypt_err})"
+                        )
+                        print(
+                            f"[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker "
+                            f"response payload ({decrypt_err})",
+                            flush=True
+                        )
                         raise HTTPException(
                             status_code=status.HTTP_502_BAD_GATEWAY,
                             detail="Falha ao decriptografar credencial emitida pelo Identity Worker."
@@ -116,15 +126,25 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
                 token = data.get("access_token")
                 expires_in = data.get("expires_in", 300)
                 if not token:
-                    logger.error("[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker response payload (access_token missing)")
-                    print("[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker response payload (access_token missing)", flush=True)
+                    logger.error(
+                        "[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker "
+                        "response payload (access_token missing)"
+                    )
+                    print(
+                        "[FLOW-STEP 5] ERROR: Failed to decrypt Identity Worker "
+                        "response payload (access_token missing)",
+                        flush=True
+                    )
                     raise HTTPException(
                         status_code=status.HTTP_502_BAD_GATEWAY,
                         detail="Identity Worker retornou credencial incompleta."
                     )
 
                 _identity_token_cache[cache_key] = token
-                logger.info(f"[IDENTITY-WORKER] ✅ JWT M2M emitido com sucesso para tenant_id={tenant_id} (exp={expires_in}s)")
+                logger.info(
+                    f"[IDENTITY-WORKER] ✅ JWT M2M emitido com sucesso para "
+                    f"tenant_id={tenant_id} (exp={expires_in}s)"
+                )
                 return token
             elif resp.status_code in (401, 403):
                 logger.error(f"[FLOW-STEP 4] ERROR: Identity Worker response failed (status {resp.status_code})")
