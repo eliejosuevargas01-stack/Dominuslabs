@@ -13,3 +13,7 @@
 ## 2024-08-27 - Accessibility on Input Clear Buttons
 **Learning:** Icon-only interactive elements positioned inside inputs (like an 'X' to clear search terms) are easily missed during standard a11y checks because they visually appear as part of the input, but they require independent ARIA labels and focus states to be accessible to screen readers and keyboard users.
 **Action:** Always verify that absolute-positioned action buttons inside inputs possess `aria-label`, `title`, and `focus-visible` outline styles, alongside standard hover states.
+
+## 2024-09-05 - Pagination Controls Accessibility
+**Learning:** Icon-only navigation buttons (like ChevronLeft/ChevronRight) for pagination and dynamic page number buttons often lack proper descriptive ARIA labels (`aria-label`, `title`) and active state indications (`aria-current`). This hides context from screen readers and makes keyboard navigation difficult if focus states are absent.
+**Action:** Always provide descriptive `aria-label` attributes for pagination buttons, indicate the currently active page using `aria-current="page"`, and ensure visible focus states (`focus-visible:ring`) are applied to all interactive navigation elements.
