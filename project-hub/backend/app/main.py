@@ -174,7 +174,7 @@ app.add_middleware(DecryptionMiddleware)
 if settings.BACKEND_CORS_ORIGINS:
     allow_origins = [str(origin) for origin in settings.BACKEND_CORS_ORIGINS]
     # In CORS spec, allow_credentials must be False if using wildcard '*'
-    allow_credentials = False if "*" in allow_origins else True
+    allow_credentials = False if "*" in allow_origins else settings.BACKEND_CORS_ALLOW_CREDENTIALS
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allow_origins,
