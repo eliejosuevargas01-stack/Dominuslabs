@@ -35,6 +35,7 @@ class Settings(BaseSettings):
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
+    BACKEND_CORS_ALLOW_CREDENTIALS: bool = False
 
     # Authentication
     ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
