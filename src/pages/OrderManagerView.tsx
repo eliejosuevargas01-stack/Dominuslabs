@@ -299,7 +299,7 @@ export default function OrderManagerView() {
     const message = `Novo pedido pendente ${order.id}. Ative o som desta tela.`;
     toast.error(message);
     if ('speechSynthesis' in window && 'SpeechSynthesisUtterance' in window) {
-      window.speechSynthesis.cancel();
+      // window.speechSynthesis.cancel(); // Removed to prevent silencing other pending orders
       window.speechSynthesis.speak(new SpeechSynthesisUtterance(message));
     }
   };
@@ -403,7 +403,7 @@ export default function OrderManagerView() {
   const handleAccept = async (orderId: string) => {
     stopAlarm(orderId);
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+      // window.speechSynthesis.cancel(); // Removed to prevent silencing other pending orders
     }
     window.dispatchEvent(new CustomEvent('order_action_taken', { detail: { orderId, status: 'accepted' } }));
     try {
@@ -422,7 +422,7 @@ export default function OrderManagerView() {
   const handleReject = async (orderId: string) => {
     stopAlarm(orderId);
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+      // window.speechSynthesis.cancel(); // Removed to prevent silencing other pending orders
     }
     window.dispatchEvent(new CustomEvent('order_action_taken', { detail: { orderId, status: 'rejected' } }));
     try {
