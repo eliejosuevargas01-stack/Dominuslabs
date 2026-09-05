@@ -336,10 +336,10 @@ export default function OrderManagerView() {
     };
 
     audio.onended = () => {
-      // Repete o alarme após 10 segundos de silêncio
+      // Repete o alarme após 15 segundos de silêncio
       const alarm = activeAlarms.current[order.id];
       if (!alarm || alarm.audio !== audio) return;
-      alarm.interval = setTimeout(replay, 10000);
+      alarm.interval = setTimeout(replay, 15000);
     };
 
     void (async () => {
