@@ -5,7 +5,7 @@ O que faz: Implementa a lógica estrutural e funcional para o endpoint de API pa
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para projects funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Dict, Any, Optional
 
 from app.core.database import get_db
@@ -299,7 +299,7 @@ def get_public_showcase(db: Session = Depends(get_db)):
     Impacto na regra de negócio: Assegura que o fluxo da operação get_public_showcase seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     from app.models.project import Project
-    all_projects = db.query(Project).all()
+    all_projects = db.query(Project).options(joinedload(Project.assets)).all()
     
     projects_list = []
     for p in all_projects:
@@ -315,7 +315,7 @@ def get_public_showcase(db: Session = Depends(get_db)):
         })
         
     from app.models.feedback import Feedback
-    feedbacks = db.query(Feedback).join(Project).all()
+    feedbacks = db.query(Feedback).options(joinedload(Feedback.project)).all()
     
     testimonials_list = []
     for f in feedbacks:
