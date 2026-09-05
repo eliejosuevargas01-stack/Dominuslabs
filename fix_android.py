@@ -35,17 +35,14 @@ old_login_func = """    private fun performLogin(username: String, password: Str
 
 new_login_func = """    private val client = OkHttpClient()
     private fun performLogin(username: String, password: String): Boolean {
-        val mediaType = "application/x-www-form-urlencoded".toMediaType()
-        // Use proper form encoding to avoid JSON injection, FastAPI OAuth2PasswordRequestForm expects form data
-        // Or if it expects JSON, escape it. Let's use simple manual escaping for POC or form data
-        val safeUser = username.replace("\"", "\\\\\"")
-        val safePass = password.replace("\"", "\\\\\"")
-        val json = "{\\"username\\":\\"$safeUser\\",\\"password\\":\\"$safePass\\"}"
+        val formBody = okhttp3.FormBody.Builder()
+            .add("username", username)
+            .add("password", password)
+            .build()
         
-        val requestBody = json.toRequestBody("application/json; charset=utf-8".toMediaType())
         val request = Request.Builder()
             .url("https://dominuslabs.online/api/v1/auth/login")
-            .post(requestBody)
+            .post(formBody)
             .build()
 
         return try {
