@@ -204,7 +204,7 @@ def decrypt_payload(encrypted_data: Any) -> Any:
             if isinstance(decrypted_json, dict):
                 # Preserve top-level metadata keys from the encrypted payload (like session_id, tenant_id)
                 for k, v in encrypted_data.items():
-                    if k not in ["_encrypted", "encryptedKey", "iv", "authTag", "payload"]:
+                    if k not in {"_encrypted", "encryptedKey", "iv", "authTag", "payload"}:
                         if k not in decrypted_json:
                             decrypted_json[k] = v
             return decrypted_json
