@@ -46,7 +46,7 @@ async def test_full_m2m_flow():
         wa_account = WhatsappAccount(
             user_id=user.id,
             tenant_id=user.tenant_id,
-            idpw=str(uuid.uuid4())
+            idpw="test_session_id"
         )
         db.add(wa_account)
         db.commit()

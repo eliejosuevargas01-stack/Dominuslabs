@@ -12,14 +12,17 @@ from app.api.endpoints import orders
 
 
 def make_n8n_post_args(payload: dict) -> tuple[bytes, dict]:
+    import uuid
     from app.core.config import settings
     body_bytes = json.dumps(payload).encode()
     secret = settings.N8N_WEBHOOK_SECRET
-    sig = hmac.new(secret.encode(), body_bytes, hashlib.sha256).hexdigest()
+    current_ts = str(int(time.time()))
+    sig = hmac.new(secret.encode(), f"{current_ts}.".encode() + body_bytes, hashlib.sha256).hexdigest()
     headers = {
         "Content-Type": "application/json",
-        "X-Signature": sig,
-        "X-Timestamp": str(int(time.time())),
+        "X-N8N-Signature": sig,
+        "X-N8N-Timestamp": current_ts,
+        "X-N8N-Event-Id": f"evt-{uuid.uuid4()}",
     }
     return body_bytes, headers
 
@@ -282,16 +285,18 @@ def test_receive_order_returns_duplicate_after_a_concurrent_integrity_error():
         def rollback(self):
             self.rolled_back = True
 
+    current_ts = str(int(time.time()))
     body_bytes = payload.model_dump_json().encode()
-    sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), body_bytes, hashlib.sha256).hexdigest()
+    sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), f"{current_ts}.".encode() + body_bytes, hashlib.sha256).hexdigest()
     scope = {
         "type": "http",
         "method": "POST",
         "path": "/api/v1/orders",
         "headers": [
             (b"content-type", b"application/json"),
-            (b"x-signature", sig.encode()),
-            (b"x-timestamp", str(int(time.time())).encode()),
+            (b"x-n8n-signature", sig.encode()),
+            (b"x-n8n-timestamp", current_ts.encode()),
+            (b"x-n8n-event-id", b"evt-race-123"),
         ],
         "query_string": b"",
     }
@@ -466,3 +471,66 @@ def test_receive_order_rejects_whatsapp_master_secret(client, monkeypatch):
     res = client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"})
     assert res.status_code == 401
     assert "WHATSAPP_MASTER_SECRET não é permitido" in res.json()["detail"]
+
+
+def test_operator_routes_reject_master_key_and_require_bearer(client, monkeypatch):
+    """
+    P0/Section 20: Operador não aceita WHATSAPP_MASTER_SECRET nem X-Master-API-Key.
+    Deve exigir autenticação de operador humano exclusivamente via Bearer JWT.
+    """
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-master-key")
+
+    # Trying to list orders using master key instead of Bearer token -> 401
+    res = client.get("/api/v1/orders", headers={"X-Master-API-Key": "super-master-key"})
+    assert res.status_code == 401
+    assert "detail" in res.json()
+
+
+def test_operator_routes_ignore_query_tenant_id(client):
+    """
+    P0/Section 21, 22: Tenant do Order Manager vem estritamente do JWT humano,
+    nunca de parâmetro de query (?tenant_id=).
+    """
+    from app.core.auth import create_access_token
+
+    operator_token = create_access_token({
+        "sub": "operator@tenant-a.com",
+        "tenant_id": "tenant-a",
+        "role": "operator"
+    })
+    headers = {"Authorization": f"Bearer {operator_token}"}
+
+    # Querying with ?tenant_id=tenant-b must return empty or tenant-a scoped orders, NOT tenant-b
+    res = client.get("/api/v1/orders?tenant_id=tenant-b", headers=headers)
+    assert res.status_code == 200
+    orders_list = res.json().get("orders", [])
+    for order in orders_list:
+        assert order.get("tenant_id") == "tenant-a"
+
+
+def test_outbound_order_callback_fails_closed_without_secret(monkeypatch):
+    """
+    P1/Section 30, 31: Callback Dominus -> n8n deve falhar fechado se N8N_WEBHOOK_SECRET ausente.
+    """
+    from app.core.config import settings
+    from app.api.endpoints.orders import notify_order_status
+
+    monkeypatch.setattr(settings, "N8N_WEBHOOK_SECRET", None)
+    monkeypatch.setattr(settings, "ACCEPT_ORDER_WEBHOOK_URL", "http://n8n-internal/webhook/order")
+
+    # Should not raise exception, logs error and aborts immediately without sending request
+    asyncio.run(notify_order_status("pedido-123", "accepted", "tenant-test", "client@s.whatsapp.net"))
+
+
+def test_sse_order_events_rejects_query_token_parameter(client):
+    """
+    P1/Section 38, 40: SSE não aceita credenciais via query string (?token=).
+    Deve exigir Authorization: Bearer.
+    """
+    from app.core.auth import create_access_token
+
+    token = create_access_token({"sub": "user@test.com", "tenant_id": "tenant-test", "role": "operator"})
+    res = client.get(f"/api/v1/orders/events?token={token}")
+    assert res.status_code == 401
+    assert "detail" in res.json()

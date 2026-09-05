@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.auth import get_current_user, check_crm_permission
 from app.models.user import User
+from app.models.whatsapp_account import WhatsappAccount
 import logging
 from app.core.http_client import get_async_client
 
@@ -209,7 +210,7 @@ async def get_session_avatar(
     db: Session = Depends(get_db)
 ):
     """
-    Proxy de imagem de perfil de contato/grupo via mTLS.
+    Proxy de imagem de perfil de contato/grupo via HTTPS/TLS.
     Evita erros de NS_BINDING_ABORTED e SSL em requisições cross-origin do navegador.
     Aceita Authorization: Bearer ou parâmetro de consulta 'token'.
     """
@@ -292,7 +293,7 @@ async def get_session_media(
     db: Session = Depends(get_db)
 ):
     """
-    Proxy de mídia (imagens, áudios, vídeos e documentos) da WhatsApp API via mTLS.
+    Proxy de mídia (imagens, áudios, vídeos e documentos) da WhatsApp API via HTTPS/TLS.
     Retorna o streaming de binário com o Content-Type correto usando StreamingResponse.
     Aceita Authorization: Bearer ou parâmetro de consulta 'token'.
     """
@@ -414,7 +415,7 @@ async def create_session(
     current_user: str = Depends(check_crm_permission)
 ):
     """
-    Create a new WhatsApp session.
+    Create a new WhatsApp session and persist positive tenant ownership.
     """
     name = payload.get("name")
     if not name:
@@ -422,15 +423,36 @@ async def create_session(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="O nome da sessão é obrigatório."
         )
-        
+
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    if not user.tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado: usuário não possui tenant_id configurado.")
+
     headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
-    return await make_whatsapp_api_request(
+    res = await make_whatsapp_api_request(
         "POST",
         "/api/sessions",
         headers=headers,
         json_data={"name": name, "authToken": headers.get("x-session-token")},
         timeout=15.0
     )
+
+    existing_acc = db.query(WhatsappAccount).filter(
+        WhatsappAccount.idpw == name,
+        WhatsappAccount.tenant_id == user.tenant_id
+    ).first()
+    if not existing_acc:
+        new_acc = WhatsappAccount(
+            user_id=user.id,
+            tenant_id=user.tenant_id,
+            idpw=name
+        )
+        db.add(new_acc)
+        db.commit()
+
+    return res
 
 @router.get("/sessions/{session_id}")
 async def get_session_status(
@@ -439,12 +461,17 @@ async def get_session_status(
     current_user: str = Depends(get_current_user)
 ):
     """
-    Get the details and status of a WhatsApp session.
+    Get the details and status of a WhatsApp session with positive ownership verification.
     """
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
     headers = await get_user_m2m_headers(current_user, db)
     return await make_whatsapp_api_request(
         "GET",
-        f"/api/sessions/{session_id}",
+        f"/api/sessions/{resolved_session}",
         headers=headers
     )
 
@@ -455,12 +482,17 @@ async def connect_session(
     current_user: str = Depends(check_crm_permission)
 ):
     """
-    Request connection (pairing QR Code) for a WhatsApp session.
+    Request connection (pairing QR Code) for a WhatsApp session with positive ownership verification.
     """
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
     headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
     return await make_whatsapp_api_request(
         "POST",
-        f"/api/sessions/{session_id}/connect",
+        f"/api/sessions/{resolved_session}/connect",
         headers=headers,
         timeout=20.0
     )
@@ -472,12 +504,17 @@ async def disconnect_session(
     current_user: str = Depends(check_crm_permission)
 ):
     """
-    Disconnect a WhatsApp session.
+    Disconnect a WhatsApp session with positive ownership verification.
     """
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
     headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
     return await make_whatsapp_api_request(
         "POST",
-        f"/api/sessions/{session_id}/disconnect",
+        f"/api/sessions/{resolved_session}/disconnect",
         headers=headers,
         timeout=15.0
     )
@@ -489,15 +526,26 @@ async def delete_session(
     current_user: str = Depends(check_crm_permission)
 ):
     """
-    Delete a WhatsApp session.
+    Delete a WhatsApp session with positive ownership verification and local cleanup.
     """
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
     headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
-    return await make_whatsapp_api_request(
+    res = await make_whatsapp_api_request(
         "DELETE",
-        f"/api/sessions/{session_id}",
+        f"/api/sessions/{resolved_session}",
         headers=headers,
         timeout=15.0
     )
+    db.query(WhatsappAccount).filter(
+        WhatsappAccount.idpw == resolved_session,
+        WhatsappAccount.tenant_id == user.tenant_id
+    ).delete()
+    db.commit()
+    return res
 
 @router.get("/sessions/{session_id}/settings")
 async def get_session_settings(
@@ -506,12 +554,17 @@ async def get_session_settings(
     current_user: str = Depends(get_current_user)
 ):
     """
-    Get the webhook and other settings of a WhatsApp session.
+    Get the webhook and other settings of a WhatsApp session with positive ownership verification.
     """
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
     headers = await get_user_m2m_headers(current_user, db)
     return await make_whatsapp_api_request(
         "GET",
-        f"/api/sessions/{session_id}/settings",
+        f"/api/sessions/{resolved_session}/settings",
         headers=headers
     )
 
@@ -523,12 +576,17 @@ async def update_session_settings(
     current_user: str = Depends(check_crm_permission)
 ):
     """
-    Update the webhook and other settings of a WhatsApp session.
+    Update the webhook and other settings of a WhatsApp session with positive ownership verification.
     """
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
     headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
     return await make_whatsapp_api_request(
         "PUT",
-        f"/api/sessions/{session_id}/settings",
+        f"/api/sessions/{resolved_session}/settings",
         headers=headers,
         json_data=payload
     )
@@ -541,8 +599,14 @@ async def send_session_message(
     current_user: str = Depends(check_crm_permission)
 ):
     """
-    Send a WhatsApp message directly through a specific session.
+    Send a WhatsApp message directly through a specific session with positive ownership verification.
     """
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
+
     phone = payload.get("phone") or payload.get("number") or payload.get("jid")
     message = payload.get("message") or payload.get("text") or ""
     media = payload.get("media")
@@ -578,7 +642,7 @@ async def send_session_message(
 
     return await make_whatsapp_api_request(
         "POST",
-        f"/api/sessions/{session_id}/messages/send",
+        f"/api/sessions/{resolved_session}/messages/send",
         headers=headers,
         json_data=json_data,
         timeout=30.0 # Timeout aumentado por causa do envio de mídia
@@ -629,202 +693,4 @@ async def logout_instagram_proxy(
     )
 
 
-# ---------------------------------------------------------------------------
-# Credenciais manuais da WhatsApp API (client_id + client_secret)
-# ---------------------------------------------------------------------------
 
-from pydantic import BaseModel
-from app.models.whatsapp_account import WhatsappAccount
-import uuid as _uuid
-
-class CredentialsPayload(BaseModel):
-    """
-    Classe CredentialsPayload.
-
-    O que faz: Representa a estrutura de dados e operações para a entidade CredentialsPayload em o endpoint de API para whatsapp.
-    Impacto na regra de negócio: Centraliza o comportamento da entidade CredentialsPayload, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
-    """
-    client_id: str
-    client_secret: str
-
-@router.get("/credentials")
-def get_credentials(
-    db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user)
-):
-    """
-    Retorna se o usuário já tem credenciais da WhatsApp API salvas.
-    Não expõe o client_secret completo — apenas os primeiros 8 chars.
-    """
-    user = db.query(User).filter(User.email == current_user).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-
-    account = db.query(WhatsappAccount).filter(
-        WhatsappAccount.user_id == user.id
-    ).first()
-    if not account:
-        return {"configured": False, "client_id": None, "client_secret_preview": None}
-
-    return {
-        "configured": True,
-        "client_id": str(account.idpw) if hasattr(account, "idpw") else None,
-        "client_secret_preview": "••••••••",
-        "created_at": account.created_at.isoformat() if account.created_at else None,
-    }
-
-
-@router.put("/credentials")
-def save_credentials(
-    payload: CredentialsPayload,
-    db: Session = Depends(get_db),
-    current_user: str = Depends(check_crm_permission)
-):
-    """
-    Salva ou atualiza o client_id e client_secret da WhatsApp API para o usuário.
-    """
-    from app.services.whatsapp_service import invalidate_token
-
-    user = db.query(User).filter(User.email == current_user).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-
-    # Valida UUID
-    try:
-        client_id_uuid = _uuid.UUID(payload.client_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="client_id inválido — deve ser um UUID.")
-
-    account = db.query(WhatsappAccount).filter(
-        WhatsappAccount.user_id == user.id
-    ).first()
-
-    print(f"\n[M2M-AUTH-FLOW] >>> Recebendo salvamento MANUAL de credenciais para {user.email}...", flush=True)
-    print(f"[M2M-AUTH-FLOW] >>> client_id: {payload.client_id}", flush=True)
-    print(f"[M2M-AUTH-FLOW] >>> client_secret: {payload.client_secret[:8]}****************", flush=True)
-    if account:
-        print(f"[M2M-AUTH-FLOW] >>> Atualizando registro existente na tabela whatsapp_accounts...", flush=True)
-    else:
-        account = WhatsappAccount(
-            user_id=user.id,
-        )
-        db.add(account)
-        print(f"[M2M-AUTH-FLOW] >>> Criando novo registro na tabela whatsapp_accounts...", flush=True)
-
-    if hasattr(account, "tenant_id") and getattr(user, "tenant_id", None):
-        account.tenant_id = user.tenant_id
-    if hasattr(account, "idpw"):
-        account.idpw = payload.client_id
-    if hasattr(account, "client_id"):
-        account.client_id = payload.client_id
-
-    db.commit()
-    print(f"[M2M-AUTH-FLOW] ✅ Credenciais salvas manualmente no banco de dados Dominus para {user.email}!\n", flush=True)
-
-    # Invalida cache de token OAuth para forçar re-autenticação com as novas credenciais
-    invalidate_token(user.id)
-
-    return {
-        "ok": True,
-        "client_id": None,
-        "client_secret_preview": "••••••••",
-        "message": "Credenciais salvas com sucesso.",
-    }
-
-
-@router.post("/provision")
-async def provision_whatsapp(
-    db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user)
-):
-    """
-    Vincula o usuário com a WhatsApp API realizando o provisionamento automático.
-    Envia o email e a referência do usuário Dominus e salva o client_id/client_secret.
-    """
-    user = db.query(User).filter(User.email == current_user).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-
-    base_url = settings.WHATSAPP_API_URL.rstrip("/")
-    provision_url = f"{base_url}/api/v1/clients/provision"
-
-    print(f"\n[M2M-AUTH-FLOW] >>> Solicitado VÍNCULO MANUAL para {user.email}", flush=True)
-
-    from app.services.whatsapp_service import get_tenant_id_for_user, invalidate_token
-
-    tenant_id = await get_tenant_id_for_user(user, db)
-    try:
-        async with get_async_client(timeout=20.0, service_name="whatsapp") as client:
-            print(f"[M2M-AUTH-FLOW] >>> Enviando solicitação de provisionamento M2M para WhatsApp API: email={user.email}, tenant_id={tenant_id}", flush=True)
-            headers = {"X-Master-API-Key": settings.WHATSAPP_MASTER_SECRET} if getattr(settings, "WHATSAPP_MASTER_SECRET", None) else {}
-            resp = await client.post(
-                provision_url,
-                json={"email": user.email, "tenant_id": tenant_id, "email_ref": user.email},
-                headers=headers
-            )
-
-            # Caso já exista na WhatsApp API (conflito 409), tenta reprovisionar
-            if resp.status_code == 409:
-                print(f"[M2M-AUTH-FLOW] >>> Usuário/Tenant já cadastrado na WhatsApp API (409). Tentando REPROVISIONAR...", flush=True)
-                reprovision_url = f"{base_url}/api/v1/clients/reprovision"
-                resp = await client.post(
-                    reprovision_url,
-                    json={"email": user.email, "tenant_id": tenant_id, "email_ref": user.email},
-                    headers=headers
-                )
-            if resp.status_code not in (200, 201):
-                print(f"[M2M-AUTH-FLOW] >>> ❌ Erro ao vincular/reprovisionar na WhatsApp API: status={resp.status_code} body={resp.text[:300]}", flush=True)
-                raise HTTPException(
-                    status_code=resp.status_code if resp.status_code < 500 else 502,
-                    detail=f"Erro na WhatsApp API: {resp.text[:200]}"
-                )
-
-            data = resp.json()
-            client_id = data.get("client_id")
-            client_secret = data.get("client_secret")
-            if not client_id or not client_secret:
-                print(f"[M2M-AUTH-FLOW] >>> ❌ Resposta inválida da WhatsApp API: {data}", flush=True)
-                raise HTTPException(status_code=502, detail="WhatsApp API retornou resposta incompleta.")
-
-            print(f"[M2M-AUTH-FLOW] >>> Cópia de client_id e client_secret recebida com sucesso!", flush=True)
-
-            # Salva no banco de dados Dominus com vinculação explicita ao tenant_id
-            account = db.query(WhatsappAccount).filter(
-                WhatsappAccount.user_id == user.id
-            ).first()
-            if account:
-                print(f"[M2M-AUTH-FLOW] >>> Atualizando registro existente na tabela whatsapp_accounts...", flush=True)
-            else:
-                account = WhatsappAccount(
-                    user_id=user.id,
-                )
-                db.add(account)
-                print(f"[M2M-AUTH-FLOW] >>> Criando novo registro na tabela whatsapp_accounts...", flush=True)
-
-            if hasattr(account, "tenant_id"):
-                account.tenant_id = tenant_id
-            if hasattr(account, "idpw"):
-                account.idpw = client_id
-            if hasattr(account, "client_id"):
-                account.client_id = client_id
-
-            db.commit()
-            print(f"[M2M-AUTH-FLOW] ✅ Credenciais salvas automaticamente no banco de dados Dominus para {user.email}!\n", flush=True)
-
-            # Invalida cache de token OAuth para forçar re-autenticação com as novas credenciais
-            invalidate_token(user.id)
-
-            return {
-                "ok": True,
-                "client_id": None,
-                "client_secret_preview": "••••••••",
-                "message": "Credenciais salvas com sucesso.",
-    }
-    except httpx.HTTPError as e:
-        print(f"[M2M-AUTH-FLOW] >>> ❌ Erro de conexão com a WhatsApp API: {str(e)}", flush=True)
-        raise HTTPException(status_code=503, detail="Não foi possível conectar à WhatsApp API.")
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        print(f"[M2M-AUTH-FLOW] >>> ❌ Erro inesperado: {str(e)}", flush=True)
-        raise HTTPException(status_code=500, detail=str(e))

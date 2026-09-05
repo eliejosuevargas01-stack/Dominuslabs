@@ -35,7 +35,7 @@ def authenticate_n8n_request(request: Request, raw_body_bytes: bytes) -> Dict[st
     forbidden_query_params = ["token", "api_key", "master_api_key", "x_master_api_key", "secret"]
     for qp in forbidden_query_params:
         if request.query_params.get(qp):
-            log_realtime_event("WEBHOOK_AUTH_FAILED", {
+            log_realtime_event("WEBHOOK_AUTH_FAILED", extra={
                 "reason": f"Credenciais via query parameter '{qp}' não são permitidas",
                 "path": request.url.path
             })
@@ -50,7 +50,7 @@ def authenticate_n8n_request(request: Request, raw_body_bytes: bytes) -> Dict[st
         token_str = auth_header[7:].strip()
         payload = decode_access_token(token_str)
         if payload and payload.get("sub"):
-            log_realtime_event("WEBHOOK_AUTH_FAILED", {
+            log_realtime_event("WEBHOOK_AUTH_FAILED", extra={
                 "reason": "Token JWT de usuário humano rejeitado em webhook n8n",
                 "sub": payload.get("sub"),
                 "path": request.url.path
@@ -64,7 +64,7 @@ def authenticate_n8n_request(request: Request, raw_body_bytes: bytes) -> Dict[st
     master_key = request.headers.get("X-Master-API-Key") or request.headers.get("X-API-Key")
     master_secret = getattr(settings, "WHATSAPP_MASTER_SECRET", None)
     if master_key and master_secret and secrets.compare_digest(master_key.strip(), master_secret.strip()):
-        log_realtime_event("WEBHOOK_AUTH_FAILED", {
+        log_realtime_event("WEBHOOK_AUTH_FAILED", extra={
             "reason": "WHATSAPP_MASTER_SECRET não é permitido em rotas do n8n",
             "path": request.url.path
         })
@@ -76,7 +76,7 @@ def authenticate_n8n_request(request: Request, raw_body_bytes: bytes) -> Dict[st
     # 4. Validar se o N8N_WEBHOOK_SECRET está configurado no servidor
     n8n_secret = getattr(settings, "N8N_WEBHOOK_SECRET", None)
     if not n8n_secret:
-        log_realtime_event("WEBHOOK_AUTH_FAILED", {
+        log_realtime_event("WEBHOOK_AUTH_FAILED", extra={
             "reason": "N8N_WEBHOOK_SECRET não configurado no servidor",
             "path": request.url.path
         })
@@ -85,16 +85,16 @@ def authenticate_n8n_request(request: Request, raw_body_bytes: bytes) -> Dict[st
             detail="Serviço de webhook n8n não autenticado: segredo não configurado."
         )
 
-    # 5. Obter cabeçalhos de assinatura
+    # 5. Obter cabeçalhos de assinatura obrigatórios
     signature = (
-        request.headers.get("X-Signature")
-        or request.headers.get("X-Hub-Signature-256")
+        request.headers.get("X-N8N-Signature")
+        or request.headers.get("X-Signature")
         or request.headers.get("X-Dominus-Signature")
-        or request.headers.get("X-N8N-Signature")
+        or request.headers.get("X-Hub-Signature-256")
         or request.headers.get("X-Webhook-Secret")
     )
     if not signature:
-        log_realtime_event("WEBHOOK_AUTH_FAILED", {
+        log_realtime_event("WEBHOOK_AUTH_FAILED", extra={
             "reason": "Assinatura ausente nos cabeçalhos",
             "path": request.url.path
         })
@@ -107,7 +107,7 @@ def authenticate_n8n_request(request: Request, raw_body_bytes: bytes) -> Dict[st
 
     # Rejeitar explicitamente se a assinatura for o segredo bruto (raw secret)
     if secrets.compare_digest(sig_clean, n8n_secret.strip()):
-        log_realtime_event("WEBHOOK_AUTH_FAILED", {
+        log_realtime_event("WEBHOOK_AUTH_FAILED", extra={
             "reason": "Segredo bruto enviado como assinatura",
             "path": request.url.path
         })
@@ -116,71 +116,72 @@ def authenticate_n8n_request(request: Request, raw_body_bytes: bytes) -> Dict[st
             detail="Assinatura inválida: segredo bruto não é permitido como assinatura HMAC."
         )
 
-    # 6. Validar Timestamp se presente
+    # 6. Validar Timestamp obrigatório
     ts_header = (
-        request.headers.get("X-Timestamp")
+        request.headers.get("X-N8N-Timestamp")
+        or request.headers.get("X-Timestamp")
         or request.headers.get("X-Dominus-Timestamp")
-        or request.headers.get("X-N8N-Timestamp")
     )
+    if not ts_header:
+        log_realtime_event("WEBHOOK_AUTH_FAILED", extra={
+            "reason": "Timestamp ausente nos cabeçalhos",
+            "path": request.url.path
+        })
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Timestamp ausente nos cabeçalhos."
+        )
+
     tolerance = getattr(settings, "N8N_TIMESTAMP_TOLERANCE_SECONDS", 300)
     current_time = int(time.time())
-    parsed_ts = None
-    if ts_header:
-        try:
-            parsed_ts = int(ts_header)
-            if abs(current_time - parsed_ts) > tolerance:
-                log_realtime_event("WEBHOOK_AUTH_FAILED", {
-                    "reason": "Timestamp do webhook expirado ou fora da tolerância",
-                    "timestamp": parsed_ts,
-                    "tolerance": tolerance,
-                    "path": request.url.path
-                })
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Requisição expirada: timestamp fora da janela de tolerância."
-                )
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Formato de timestamp inválido."
-            )
-
-    # 7. Validar Event-ID e Proteção contra Replay
-    event_id = (
-        request.headers.get("X-Event-Id")
-        or request.headers.get("X-Dominus-Event-Id")
-        or request.headers.get("X-N8N-Event-Id")
-        or request.headers.get("X-Delivery-Id")
-    )
-    if event_id:
-        if event_id in _n8n_seen_events:
-            log_realtime_event("WEBHOOK_AUTH_FAILED", {
-                "reason": f"Replay attack detectado para event_id: {event_id}",
-                "event_id": event_id,
+    try:
+        parsed_ts = int(ts_header)
+        if abs(current_time - parsed_ts) > tolerance:
+            log_realtime_event("WEBHOOK_AUTH_FAILED", extra={
+                "reason": "Timestamp do webhook expirado ou fora da tolerância",
+                "timestamp": parsed_ts,
+                "tolerance": tolerance,
                 "path": request.url.path
             })
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Evento duplicado: requisição com este event_id já foi processada recentemente."
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Requisição expirada: timestamp fora da janela de tolerância."
             )
-        _n8n_seen_events[event_id] = current_time
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Formato de timestamp inválido."
+        )
 
-    # 8. Validar Assinatura HMAC
-    valid_sig = False
+    # 7. Validar Event-ID obrigatório
+    event_id = (
+        request.headers.get("X-N8N-Event-Id")
+        or request.headers.get("X-Event-Id")
+        or request.headers.get("X-Dominus-Event-Id")
+        or request.headers.get("X-Delivery-Id")
+    )
+    if not event_id:
+        log_realtime_event("WEBHOOK_AUTH_FAILED", extra={
+            "reason": "Event-ID ausente nos cabeçalhos",
+            "path": request.url.path
+        })
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Event-ID ausente nos cabeçalhos."
+        )
+
+    # 8. Validar Assinatura HMAC ANTES de registrar no cache de replay (anti-poisoning)
+    expected_with_ts = hmac.new(
+        n8n_secret.encode(),
+        f"{ts_header}.".encode() + raw_body_bytes,
+        hashlib.sha256
+    ).hexdigest()
     expected_raw = hmac.new(n8n_secret.encode(), raw_body_bytes, hashlib.sha256).hexdigest()
-    if secrets.compare_digest(sig_clean, expected_raw):
-        valid_sig = True
-    elif ts_header:
-        expected_with_ts = hmac.new(
-            n8n_secret.encode(),
-            f"{ts_header}.".encode() + raw_body_bytes,
-            hashlib.sha256
-        ).hexdigest()
-        if secrets.compare_digest(sig_clean, expected_with_ts):
-            valid_sig = True
+
+    valid_sig = secrets.compare_digest(sig_clean, expected_with_ts) or secrets.compare_digest(sig_clean, expected_raw)
 
     if not valid_sig:
-        log_realtime_event("WEBHOOK_AUTH_FAILED", {
+        log_realtime_event("WEBHOOK_AUTH_FAILED", extra={
             "reason": "Assinatura HMAC inválida",
             "path": request.url.path
         })
@@ -188,6 +189,19 @@ def authenticate_n8n_request(request: Request, raw_body_bytes: bytes) -> Dict[st
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Assinatura HMAC inválida."
         )
+
+    # 9. Proteção contra Replay: validar se event_id já foi visto e registrar APENAS se HMAC foi aprovado
+    if event_id in _n8n_seen_events:
+        log_realtime_event("WEBHOOK_AUTH_FAILED", extra={
+            "reason": f"Replay attack detectado para event_id: {event_id}",
+            "event_id": event_id,
+            "path": request.url.path
+        })
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Evento duplicado: requisição com este event_id já foi processada recentemente."
+        )
+    _n8n_seen_events[event_id] = current_time
 
     return {
         "type": "n8n_service",

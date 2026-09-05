@@ -153,7 +153,7 @@ async def proxy_crm_avatar(
 ):
     """
     Proxy de avatar público para ser consumido por tags <img> no Dominus CRM.
-    Recebe session/session_id e jid, consulta a Whats API via rede Docker mTLS e devolve
+    Recebe session/session_id e jid, consulta a Whats API via HTTPS/TLS e devolve
     o redirecionamento para a CDN oficial do Meta (pps.whatsapp.net) ou a imagem.
     """
     target_session = session or session_id or "default"
@@ -196,7 +196,7 @@ async def proxy_crm_media(
     db: Session = Depends(get_db)
 ):
     """
-    Proxy de mídia (imagens, áudios, vídeos e documentos) da WhatsApp API via mTLS para tags <img>, <video>, <audio> e <a>.
+    Proxy de mídia (imagens, áudios, vídeos e documentos) da WhatsApp API via HTTPS/TLS para tags <img>, <video>, <audio> e <a>.
     """
     target_session = session or session_id or "default"
     target_msg_id = messageId or message_id
@@ -310,7 +310,7 @@ async def send_crm_whatsapp_message(
     current_user: str = Depends(check_crm_permission),
 ):
     """
-    Envia mensagem WhatsApp DIRETAMENTE para a WhatsApp API via mTLS + JWT (Sem n8n).
+    Envia mensagem WhatsApp DIRETAMENTE para a WhatsApp API via HTTPS/TLS com JWT (Sem n8n).
     """
     user = db.query(User).filter(User.email == current_user).first()
     if not user:

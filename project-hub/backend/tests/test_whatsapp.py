@@ -33,12 +33,16 @@ def test_whatsapp_account(db):
 
     existing = db.query(WhatsappAccount).filter(WhatsappAccount.user_id == user.id).first()
     if existing:
+        existing.idpw = "123"
+        existing.tenant_id = user.tenant_id
+        db.commit()
+        db.refresh(existing)
         return existing
 
     account = WhatsappAccount(
         user_id=user.id,
         tenant_id=user.tenant_id,
-        idpw="test_idpw"
+        idpw="123"
     )
     db.add(account)
     db.commit()
@@ -85,40 +89,40 @@ def test_disconnect_session(mock_get_headers, mock_api_request, client: TestClie
     response = client.post(f"{settings.API_V1_STR}/whatsapp/sessions/123/disconnect", headers=auth_headers)
     assert response.status_code == 200
 
-def test_get_credentials(client: TestClient, auth_headers: dict, test_whatsapp_account):
-    response = client.get(f"{settings.API_V1_STR}/whatsapp/credentials", headers=auth_headers)
-    assert response.status_code == 200
-    res_data = response.json()
-    assert res_data.get("configured") is True
-    assert res_data.get("client_id") == "test_idpw"
-    assert "client_secret_preview" in res_data
+def test_legacy_credentials_endpoint_eliminated_returns_404(client: TestClient, auth_headers: dict):
+    # P0: Completely eliminate legacy client_id/client_secret endpoints
+    response_get = client.get(f"{settings.API_V1_STR}/whatsapp/credentials", headers=auth_headers)
+    assert response_get.status_code == 404
 
-def test_save_credentials(client: TestClient, auth_headers: dict, test_whatsapp_account):
-    payload = {
-        "client_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
-        "client_secret": "new_secret"
-    }
-    response = client.put(f"{settings.API_V1_STR}/whatsapp/credentials", json=payload, headers=auth_headers)
-    assert response.status_code == 200
-    assert response.json().get("ok") is True
+    payload = {"client_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", "client_secret": "new_secret"}
+    response_put = client.put(f"{settings.API_V1_STR}/whatsapp/credentials", json=payload, headers=auth_headers)
+    assert response_put.status_code == 404
 
-@patch("app.services.whatsapp_service.get_tenant_id_for_user")
-@patch("app.api.endpoints.whatsapp.get_async_client")
-def test_provision_whatsapp(mock_get_async_client, mock_get_tenant_id, client: TestClient, auth_headers: dict):
-    mock_get_tenant_id.return_value = "admin"
+def test_legacy_provision_endpoint_eliminated_returns_404(client: TestClient, auth_headers: dict):
+    # P0: Legacy provisioning endpoint is permanently removed
+    response = client.post(f"{settings.API_V1_STR}/whatsapp/provision", headers=auth_headers)
+    assert response.status_code == 404
 
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"status": "success", "client_id": "mock_id", "client_secret": "mock_secret"}
+def test_unknown_session_rejected_with_404_across_routes(client: TestClient, auth_headers: dict, test_whatsapp_account):
+    # Non-existent session must return 404 without calling upstream WhatsApp API
+    res_status = client.get(f"{settings.API_V1_STR}/whatsapp/sessions/unknown-sess-999", headers=auth_headers)
+    assert res_status.status_code == 404
 
-    mock_client_instance = MagicMock()
-    mock_client_instance.post = AsyncMock(return_value=mock_response)
-    mock_get_async_client.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
+    res_conn = client.post(f"{settings.API_V1_STR}/whatsapp/sessions/unknown-sess-999/connect", headers=auth_headers)
+    assert res_conn.status_code == 404
 
-    with patch.object(settings, 'WHATSAPP_MASTER_SECRET', 'test_secret'):
-        response = client.post(f"{settings.API_V1_STR}/whatsapp/provision", headers=auth_headers)
+    res_disconn = client.post(f"{settings.API_V1_STR}/whatsapp/sessions/unknown-sess-999/disconnect", headers=auth_headers)
+    assert res_disconn.status_code == 404
 
-    assert response.status_code == 200
+    res_del = client.delete(f"{settings.API_V1_STR}/whatsapp/sessions/unknown-sess-999", headers=auth_headers)
+    assert res_del.status_code == 404
+
+    res_msg = client.post(
+        f"{settings.API_V1_STR}/whatsapp/sessions/unknown-sess-999/messages/send",
+        json={"phone": "5511999999999", "message": "Hi"},
+        headers=auth_headers
+    )
+    assert res_msg.status_code == 404
 
 
 @patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")

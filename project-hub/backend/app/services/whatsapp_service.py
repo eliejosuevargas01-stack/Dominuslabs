@@ -1,12 +1,15 @@
 """
-WhatsApp Service — Arquitetura M2M (mTLS + JWT do Identity Worker)
+WhatsApp Service — Arquitetura M2M (IDPW + Whats API)
 
-Fluxo final de envio:
-1. Dominius identifica o usuário (`user_id`) e o tenant dele (`tenant_id`).
-2. Verifica permissão interna no Dominius (`can_manage_crm` / `messages.send`).
-3. Requisita ao Identity Worker via mTLS um JWT com `tenant_id` e escopo `whatsapp:messages:send`.
-4. Transmite a requisição para a WhatsApp API via mTLS com o cabeçalho `Authorization: Bearer <JWT>`.
-5. A WhatsApp API valida mTLS + JWT + Tenant Lock + executa a ação.
+Comunicação HTTPS/TLS através da infraestrutura configurada.
+A segurança de transporte TLS é responsabilidade do proxy/gateway.
+
+Fluxo de envio:
+1. Dominus identifica o usuário (`user_id`) e o tenant dele (`tenant_id`).
+2. Verifica permissão interna no Dominus (`can_manage_crm` / `messages.send`).
+3. Requisita ao Identity Provider (IDPW) um JWT com `tenant_id` e escopo `whatsapp:messages:send`.
+4. Transmite a requisição para a Whats API com o cabeçalho `Authorization: Bearer <JWT>`.
+5. A Whats API valida JWT + Tenant Lock + executa a ação.
 """
 import logging
 from typing import Optional
@@ -27,82 +30,82 @@ _legacy_token_cache: TTLCache = TTLCache(maxsize=256, ttl=600)
 
 def resolve_owned_whatsapp_session(user: User, session_id: Optional[str], db: Session) -> str:
     """
-    Valida se a sessão WhatsApp pertence ao tenant do usuário autenticado.
-    Rejeita com 403 Forbidden antes de qualquer chamada HTTP à Whats API se pertencer a outro tenant.
+    Valida positivamente se a sessão WhatsApp pertence ao tenant do usuário autenticado.
+    Rejeita com 403 se pertencer a outro tenant e com 404 se a sessão for desconhecida.
+    Não permite bypass global de admin em rotas tenant-scoped.
     """
-    target_session = session_id or user.preferred_session_id
-    if not target_session or target_session == "default":
-        target_session = user.preferred_session_id or "default"
-
-    # Administradores têm permissão de gerenciamento global
-    if user.role == "admin" or user.email == getattr(settings, "ADMIN_USERNAME", "admin"):
-        return target_session
-
     user_tenant = user.tenant_id
     if not user_tenant:
-        logger.warning(f"[WA-OWNERSHIP] Usuário id={user.id} sem tenant_id ao tentar acessar sessão '{target_session}'")
+        logger.warning(f"[WA-OWNERSHIP] Usuário id={user.id} sem tenant_id ao tentar acessar sessão '{session_id}'")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acesso negado: usuário não possui tenant_id configurado."
         )
 
-    # 1. Verificar se outro usuário de outro tenant possui essa sessão como preferida
-    other_user = db.query(User).filter(
-        User.preferred_session_id == target_session,
-        User.tenant_id != user_tenant
+    target_session = session_id or user.preferred_session_id
+    if not target_session or target_session == "default":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nenhuma sessão WhatsApp foi selecionada/configurada."
+        )
+
+    # 1. Prova positiva via WhatsappAccount vinculado ao banco
+    account = db.query(WhatsappAccount).filter(
+        WhatsappAccount.idpw == target_session
     ).first()
-    if other_user:
-        logger.warning(
-            f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Sessão '{target_session}' pertence ao tenant '{other_user.tenant_id}', "
-            f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acesso negado: a sessão informada pertence a outro tenant."
-        )
+    if account:
+        if account.tenant_id != user_tenant:
+            logger.warning(
+                f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Conta '{target_session}' pertence ao tenant '{account.tenant_id}', "
+                f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado: a sessão informada pertence a outro tenant."
+            )
+        return target_session
 
-    # 2. Verificar se uma conta WhatsApp registrada com essa sessão pertence a outro tenant
-    other_account = db.query(WhatsappAccount).filter(
-        WhatsappAccount.idpw == target_session,
-        WhatsappAccount.tenant_id != user_tenant
+    # 2. Prova positiva via preferência de usuário do mesmo tenant
+    session_user = db.query(User).filter(
+        User.preferred_session_id == target_session
     ).first()
-    if other_account:
-        logger.warning(
-            f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Conta WhatsApp '{target_session}' pertence ao tenant '{other_account.tenant_id}', "
-            f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acesso negado: a sessão informada pertence a outro tenant."
-        )
+    if session_user:
+        if session_user.tenant_id != user_tenant:
+            logger.warning(
+                f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Sessão '{target_session}' pertence ao tenant '{session_user.tenant_id}', "
+                f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado: a sessão informada pertence a outro tenant."
+            )
+        return target_session
 
-    # 3. Convenção de prefixo de tenant (ex.: tenant_xxx_session)
-    if target_session.startswith("tenant_") and not target_session.startswith(f"{user_tenant}_"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acesso negado: a sessão informada pertence a outro tenant."
-        )
-
-    return target_session
+    # 3. Nenhuma prova de vínculo positivo encontrada no tenant -> Rejeitar como desconhecida (fail-closed)
+    logger.warning(
+        f"[WA-OWNERSHIP] Sessão '{target_session}' desconhecida para o tenant '{user_tenant}' (user={user.email})."
+    )
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Sessão '{target_session}' não encontrada para o seu tenant."
+    )
 
 
 async def get_tenant_id_for_user(user: User, db: Session) -> str:
     """
     Retorna o tenant_id associado ao usuário.
-    Se o usuário for admin, retorna 'admin' para permitir acesso universal às sessões master.
+    Se o usuário for admin, retorna ADMIN_TENANT_ID se configurado.
+    Usuário comum sem tenant falha fechado (403). Nunca provisiona em runtime.
     """
-    if user.role == "admin" or user.email == settings.ADMIN_USERNAME:
+    if (user.role == "admin" or user.email == settings.ADMIN_USERNAME) and settings.ADMIN_TENANT_ID:
         return settings.ADMIN_TENANT_ID
     if user.tenant_id:
         return user.tenant_id
 
-    tenant_id = f"tenant_{user.id}"
-    user.tenant_id = tenant_id
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    logger.info(f"[WA-M2M] Atribuído tenant_id={tenant_id} para o usuário id={user.id}")
-    return tenant_id
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Acesso negado: usuário não possui tenant_id configurado."
+    )
 
 
 async def check_token_validity(token: str) -> bool:
@@ -134,7 +137,7 @@ async def check_token_validity(token: str) -> bool:
 
 async def get_oauth_token(user: User, db: Session, scope: str = "whatsapp:sessions:read") -> str:
     """
-    Obtém o JWT M2M do Identity Worker para o tenant do usuário.
+    Obtém o JWT M2M do Identity Provider (IDPW) para o tenant do usuário.
     """
     tenant_id = await get_tenant_id_for_user(user, db)
     return await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
@@ -143,7 +146,7 @@ async def get_oauth_token(user: User, db: Session, scope: str = "whatsapp:sessio
 def invalidate_token(user_id: int) -> None:
     """Remove o token do cache."""
     _legacy_token_cache.pop(user_id, None)
-    logger.info(f"[WA-M2M] Cache legado invalidado para user_id={user_id}")
+    logger.info(f"[WA-M2M] Cache invalidado para user_id={user_id}")
 
 
 async def send_whatsapp_message(
@@ -154,14 +157,14 @@ async def send_whatsapp_message(
     session_id: str | None = None
 ) -> dict:
     """
-    Executa o envio DIRETO de mensagem WhatsApp utilizando mTLS + JWT sem n8n:
-    Dominius ⇄ mTLS ⇄ Identity Worker ──(JWT)──► Dominius ⇄ mTLS ⇄ WhatsApp API
+    Executa o envio DIRETO de mensagem WhatsApp via Whats API utilizando IDPW + JWT.
+    Comunicação HTTPS/TLS através da infraestrutura configurada.
     """
     tenant_id = await get_tenant_id_for_user(user, db)
     scope = "whatsapp:messages:send"
     jwt_token = await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
 
-    target_session = session_id or user.preferred_session_id or "default"
+    target_session = resolve_owned_whatsapp_session(user, session_id, db)
 
     from app.api.endpoints.whatsapp import make_whatsapp_api_request
     clean_path = f"/api/sessions/{target_session}/messages/send"
@@ -176,7 +179,7 @@ async def send_whatsapp_message(
     }
 
     logger.info(
-        f"[WA-M2M] Enviando mensagem DIRETA via mTLS + JWT para WhatsApp API. "
+        f"[WA-M2M] Enviando mensagem DIRETA para Whats API. "
         f"Tenant: {tenant_id}, Sessão: {target_session}, Destinatário: {to_phone}"
     )
 
@@ -187,3 +190,4 @@ async def send_whatsapp_message(
         json_data=payload,
         timeout=15.0
     )
+

@@ -1,8 +1,8 @@
 """
-Identity Service (Dominius ⇄ mTLS ⇄ Identity Worker)
+Identity Service (Dominus ⇄ HTTPS/TLS ⇄ Identity Worker)
 
 Responsável por:
-1. Conectar ao Identity Worker via mTLS (`dominus-prod`).
+1. Conectar ao Identity Worker via HTTPS/TLS através da infraestrutura configurada.
 2. Solicitar JWT M2M temporário com claims de tenant (`tenant_id`) e escopo da ação (`scope`).
 3. Manter cache temporário dos tokens gerados para otimizar chamadas subsequentes.
 """
@@ -50,7 +50,7 @@ async def is_token_still_valid(token: str, margin_seconds: int = 30) -> bool:
 async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> str:
     """
     Obtém um JWT M2M estrito para o tenant_id e scope especificados.
-    Tenta primeiro o cache local; se não existir ou estiver próximo de expirar (<30s), chama o Identity Worker via mTLS.
+    Tenta primeiro o cache local; se não existir ou estiver próximo de expirar (<30s), chama o Identity Worker via HTTPS/TLS.
     Sem fallbacks ou bypasses de segurança em caso de falha.
     """
     cache_key = (tenant_id, scope)
@@ -66,9 +66,8 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
     base_url = settings.IDENTITY_WORKER_URL.rstrip("/")
     url = f"{base_url}/v1/tokens"
 
-    # Nota de Arquitetura mTLS: A terminação e validação mTLS do Identity Worker ocorre
-    # na borda via Cloudflare Access/Tunnel ou pelo contexto TLS gerenciado do cliente HTTP (httpx).
-    # Headers simulados cf-client-cert-* foram removidos para evitar fabricação artificial no cliente.
+    # Comunicação HTTPS/TLS através da infraestrutura configurada.
+    # A segurança de transporte TLS é responsabilidade do proxy/gateway.
     headers = {
         "Content-Type": "application/json"
     }
@@ -145,7 +144,7 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
         print(f"[FLOW-STEP 4] ERROR: Identity Worker response failed ({e})", flush=True)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Serviço Identity Worker inacessível ({url}). Verifique a URL e a conexão mTLS."
+            detail=f"Serviço Identity Worker inacessível ({url}). Verifique a URL e a conectividade de rede."
         )
 
 

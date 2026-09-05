@@ -131,20 +131,26 @@ async def notify_order_status(
         "timestamp": current_ts,
     }
     payload_bytes = json.dumps(payload_dict, separators=(',', ':')).encode('utf-8')
-    headers = {
-        "Content-Type": "application/json",
-        "X-Dominus-Event-Id": event_id,
-        "X-Dominus-Timestamp": current_ts,
-    }
-    secret = getattr(settings, "N8N_WEBHOOK_SECRET", None) or getattr(settings, "WEBHOOK_SECRET", "")
-    if secret:
-        signature = hmac.new(
-            secret.encode('utf-8'),
-            payload_bytes,
-            hashlib.sha256
-        ).hexdigest()
-        headers["X-Dominus-Signature"] = f"sha256={signature}"
-        headers["X-Signature"] = f"sha256={signature}"
+    secret = getattr(settings, "N8N_WEBHOOK_SECRET", None)
+    if not secret:
+        from app.core.realtime_logger import log_realtime_event
+        log_realtime_event(
+            "ORDER_CALLBACK_CONFIG_ERROR",
+            tenant_id=tenant_id,
+            pedido_id=pedido_id,
+            event_id=event_id,
+            extra={"error": "N8N_WEBHOOK_SECRET não configurado. Callback abortado (fail-closed)."}
+        )
+        return
+
+    canonical_payload = f"{current_ts}.".encode('utf-8') + payload_bytes
+    signature = hmac.new(
+        secret.encode('utf-8'),
+        canonical_payload,
+        hashlib.sha256
+    ).hexdigest()
+    headers["X-Dominus-Signature"] = f"sha256={signature}"
+    headers["X-Signature"] = f"sha256={signature}"
 
     try:
         async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT) as client:
@@ -328,32 +334,28 @@ def to_utc_iso(value: datetime) -> str:
     return to_utc_naive(value).replace(tzinfo=timezone.utc).isoformat()
 
 
-def valid_master_key(value: Optional[str]) -> bool:
-    expected = settings.WHATSAPP_MASTER_SECRET
-    return bool(expected and value and secrets.compare_digest(value.strip(), expected))
-
-
-def operator_payload(request: Request, token: Optional[str]) -> Optional[dict]:
-    if token and valid_master_key(token):
-        return {"sub": "master", "tenant_id": None}
+def operator_payload(request: Request) -> Optional[dict]:
     auth = request.headers.get("authorization", "")
-    candidate = auth[7:].strip() if auth.lower().startswith("bearer ") else token
+    if not auth.lower().startswith("bearer "):
+        return None
+    candidate = auth[7:].strip()
     return decode_access_token(candidate) if candidate else None
 
 
-def valid_operator(request: Request, token: Optional[str]) -> bool:
-    payload = operator_payload(request, token)
-    return bool(payload and payload.get("sub"))
-
-
-def resolve_tenant_id(request: Request, payload: Optional[dict], credential: Optional[str]) -> Optional[str]:
-    tenant_id = payload.get("tenant_id") if payload else None
-    if tenant_id:
-        return tenant_id
-    master_credential = request.headers.get("X-Master-API-Key") or credential
-    if valid_master_key(master_credential):
-        return request.query_params.get("tenant_id")
-    return None
+def get_operator_tenant_id(request: Request) -> str:
+    payload = operator_payload(request)
+    if not payload or not payload.get("sub"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required"
+        )
+    tenant_id = payload.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: Usuário sem tenant_id configurado."
+        )
+    return tenant_id
 
 
 async def broadcast(event: str, order: Dict[str, Any]) -> None:
@@ -451,11 +453,8 @@ async def receive_order(
 
 
 @router.get("/events")
-async def order_events(request: Request, token: Optional[str] = Query(None)):
-    payload = operator_payload(request, token)
-    tenant_id = payload.get("tenant_id") if payload else None
-    if not payload or not payload.get("sub") or not tenant_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
+async def order_events(request: Request):
+    tenant_id = get_operator_tenant_id(request)
     queue: asyncio.Queue = asyncio.Queue()
     listeners.setdefault(tenant_id, set()).add(queue)
 
@@ -511,17 +510,10 @@ async def order_websocket(websocket: WebSocket, token: Optional[str] = Query(Non
 @router.get("")
 async def list_orders(
     request: Request,
-    token: Optional[str] = Query(None),
-    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
     db: Session = Depends(get_db),
 ):
     """Lista os pedidos que já foram oficialmente entregues ao Order Manager."""
-    if not valid_operator(request, x_master_api_key or token):
-        raise HTTPException(status_code=401, detail="Authentication required")
-    payload = operator_payload(request, x_master_api_key or token)
-    tenant_id = resolve_tenant_id(request, payload, x_master_api_key or token)
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail="tenant_id is required")
+    tenant_id = get_operator_tenant_id(request)
 
     db_orders = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter(
         OrderManagerOrder.tenant_id == tenant_id
@@ -535,16 +527,9 @@ async def list_orders(
 async def get_order(
     order_id: str,
     request: Request,
-    token: Optional[str] = Query(None),
-    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
     db: Session = Depends(get_db),
 ):
-    if not valid_operator(request, x_master_api_key or token):
-        raise HTTPException(status_code=401, detail="Authentication required")
-    payload = operator_payload(request, x_master_api_key or token)
-    tenant_id = resolve_tenant_id(request, payload, x_master_api_key or token)
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail="tenant_id is required")
+    tenant_id = get_operator_tenant_id(request)
 
     db_order = db.query(OrderManagerOrder).options(joinedload(OrderManagerOrder.items)).filter_by(
         tenant_id=tenant_id, pedido_id=order_id
@@ -561,16 +546,9 @@ async def accept_order(
     order_id: str,
     request: Request,
     background_tasks: BackgroundTasks,
-    token: Optional[str] = Query(None),
-    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
     db: Session = Depends(get_db),
 ):
-    if not valid_operator(request, x_master_api_key or token):
-        raise HTTPException(status_code=401, detail="Authentication required")
-    payload = operator_payload(request, x_master_api_key or token)
-    tenant_id = resolve_tenant_id(request, payload, x_master_api_key or token)
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail="tenant_id is required for confirmation")
+    tenant_id = get_operator_tenant_id(request)
     db_order = db.query(OrderManagerOrder).filter_by(
         tenant_id=tenant_id, pedido_id=order_id
     ).with_for_update().first()
@@ -597,17 +575,10 @@ async def reject_order(
     order_id: str,
     request: Request,
     background_tasks: BackgroundTasks,
-    token: Optional[str] = Query(None),
-    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
     db: Session = Depends(get_db),
 ):
     """Rejeita o pedido e notifica ouvintes do websocket e webhook."""
-    if not valid_operator(request, x_master_api_key or token):
-        raise HTTPException(status_code=401, detail="Authentication required")
-    payload = operator_payload(request, x_master_api_key or token)
-    tenant_id = resolve_tenant_id(request, payload, x_master_api_key or token)
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail="tenant_id is required for rejection")
+    tenant_id = get_operator_tenant_id(request)
 
     db_order = db.query(OrderManagerOrder).filter_by(
         tenant_id=tenant_id, pedido_id=order_id
@@ -642,17 +613,10 @@ async def update_order_status(
     request: Request,
     background_tasks: BackgroundTasks,
     order_status: str = Query(..., alias="status"),
-    token: Optional[str] = Query(None),
-    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
     db: Session = Depends(get_db),
 ):
     """Avança o pedido na operação da cozinha e notifica o workflow."""
-    if not valid_operator(request, x_master_api_key or token):
-        raise HTTPException(status_code=401, detail="Authentication required")
-    payload = operator_payload(request, x_master_api_key or token)
-    tenant_id = resolve_tenant_id(request, payload, x_master_api_key or token)
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail="tenant_id is required")
+    tenant_id = get_operator_tenant_id(request)
 
     valid_statuses = set(ORDER_STATUS_TRANSITIONS.keys()) | {
         s for targets in ORDER_STATUS_TRANSITIONS.values() for s in targets

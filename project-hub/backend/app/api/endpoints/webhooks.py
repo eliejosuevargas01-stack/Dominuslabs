@@ -143,10 +143,13 @@ async def notify_crm_chat_listeners(
                             all_jids.append(val)
 
     if not tenant_id:
-        log_realtime_event("TENANT_RESOLUTION_FAILED", {
-            "error": "Mensagem sem tenant_id identificado em notify_crm_chat_listeners",
-            "lead_id": lead_id
-        })
+        log_realtime_event(
+            "TENANT_RESOLUTION_FAILED",
+            extra={
+                "error": "Mensagem sem tenant_id identificado em notify_crm_chat_listeners",
+                "lead_id": lead_id
+            }
+        )
         return
 
     primary_jid = all_jids[0] if all_jids else lead_id
@@ -169,21 +172,16 @@ async def notify_crm_chat_listeners(
 async def lead_events(
     lead_id: str,
     request: Request,
-    token: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
-    Função/Método lead_events.
-
-    O que faz: Processa lead_events com autenticação via cabeçalho Authorization: Bearer ou query param e validação estrita de tenant.
+    Processa lead_events com autenticação via cabeçalho Authorization: Bearer e validação estrita de tenant.
     """
     auth_header = request.headers.get("Authorization")
-    auth_token = token
-    if not auth_token and auth_header and auth_header.lower().startswith("bearer "):
-        auth_token = auth_header[7:].strip()
-
-    if not auth_token:
+    if not auth_header or not auth_header.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Token de autenticação obrigatório.")
+
+    auth_token = auth_header[7:].strip()
 
     payload = decode_access_token(auth_token)
     if not payload or not payload.get("sub"):
@@ -252,20 +250,15 @@ async def lead_events(
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.get("/events/crm-chats")
-async def crm_chats_events(request: Request, token: Optional[str] = Query(None)):
+async def crm_chats_events(request: Request):
     """
-    Função/Método crm_chats_events.
-
-    O que faz: Processa crm_chats_events com autenticação JWT obrigatória e isolamento multi-tenant. Rejeita requisições anônimas.
-    Impacto na regra de negócio: Garante que os eventos de mensagens do CRM sejam transmitidos estritamente para usuários autenticados pertencentes ao mesmo tenant_id.
+    Processa crm_chats_events com autenticação JWT obrigatória via cabeçalho Authorization: Bearer e isolamento multi-tenant. Rejeita requisições anônimas.
     """
     auth_header = request.headers.get("Authorization")
-    auth_token = token
-    if not auth_token and auth_header and auth_header.lower().startswith("bearer "):
-        auth_token = auth_header[7:].strip()
-
-    if not auth_token:
+    if not auth_header or not auth_header.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Token de autenticação obrigatório.")
+
+    auth_token = auth_header[7:].strip()
 
     payload = decode_access_token(auth_token)
     if not payload or not payload.get("sub"):

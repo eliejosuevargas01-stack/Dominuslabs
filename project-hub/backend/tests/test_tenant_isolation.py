@@ -156,6 +156,7 @@ def test_webhook_cross_tenant_rejection(client, db):
         "Content-Type": "application/json",
         "X-Signature": sig_inconsistent,
         "X-Timestamp": str(int(time.time())),
+        "X-Event-Id": "evt-inconsistent-1",
     }
     res = client.post("/api/v1/webhooks/crm/update-chat", content=raw_inconsistent, headers=h_inconsistent)
     assert res.status_code == 400
@@ -176,6 +177,7 @@ def test_webhook_cross_tenant_rejection(client, db):
         "Content-Type": "application/json",
         "X-Signature": sig_own,
         "X-Timestamp": str(int(time.time())),
+        "X-Event-Id": "evt-own-1",
     }
     res = client.post("/api/v1/webhooks/crm/update-chat", content=raw_own, headers=h_own)
     assert res.status_code == 200

@@ -40,7 +40,10 @@ def log_realtime_event(
         "timestamp": time.time(),
         "process_id": os.getpid(),
     }
-    if tenant_id: entry["tenant_id"] = tenant_id
+    if isinstance(tenant_id, dict) and extra is None:
+        extra = tenant_id
+        tenant_id = None
+    if tenant_id: entry["tenant_id"] = str(tenant_id)
     if user_id: entry["user_id"] = user_id
     if service: entry["service"] = service
     if session_id: entry["session_id"] = session_id

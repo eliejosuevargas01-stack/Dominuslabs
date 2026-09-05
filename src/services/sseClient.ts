@@ -1,6 +1,13 @@
 import { fetchEventSource, type EventSourceMessage } from '@microsoft/fetch-event-source';
 import { getValidAccessToken, refreshAuthTokenSilently } from './api';
 
+export class SSEAuthError extends Error {
+  constructor(message = 'SSE authentication failed and refresh token is unavailable') {
+    super(message);
+    this.name = 'SSEAuthError';
+  }
+}
+
 export interface SSEClientOptions {
   url: string;
   onMessage: (data: any, event?: string) => void;
@@ -36,14 +43,18 @@ export class SSEClient {
     }
     if (this.controller) {
       this.controller.abort();
+      this.controller = null;
     }
-    this.controller = new AbortController();
 
     const token = await getValidAccessToken();
     if (!token) {
-      if (this.onError) this.onError(new Error('No valid token available'));
+      const authErr = new SSEAuthError('No valid token available');
+      if (this.onError) this.onError(authErr);
+      this.disconnect();
       return;
     }
+
+    this.controller = new AbortController();
 
     try {
       await fetchEventSource(this.url, {
@@ -65,6 +76,7 @@ export class SSEClient {
             if (newToken) {
               throw new Error('Token refreshed, reconnecting');
             }
+            throw new SSEAuthError('SSE authentication failed: session expired or token refresh failed');
           }
           throw new Error(`SSE open failed with status ${response.status}`);
         },
@@ -87,21 +99,32 @@ export class SSEClient {
         },
         onerror: (err) => {
           if (this.isClosedManually) return;
+          if (err instanceof SSEAuthError || (err as any)?.name === 'SSEAuthError') {
+            if (this.onError) this.onError(err);
+            this.disconnect();
+            throw err;
+          }
           if (this.onError) this.onError(err);
-          this.scheduleReconnect();
           throw err;
         }
       });
-    } catch (e) {
+    } catch (e: any) {
       if (!this.isClosedManually) {
-        this.scheduleReconnect();
+        if (e instanceof SSEAuthError || e?.name === 'SSEAuthError') {
+          this.disconnect();
+        } else {
+          this.scheduleReconnect();
+        }
       }
     }
   }
 
   private scheduleReconnect() {
     if (this.isClosedManually) return;
-    if (this.retryTimeout) clearTimeout(this.retryTimeout);
+    if (this.retryTimeout) {
+      clearTimeout(this.retryTimeout);
+      this.retryTimeout = null;
+    }
 
     const backoff = Math.min(1000 * Math.pow(2, this.retryCount), 30000);
     this.retryCount++;

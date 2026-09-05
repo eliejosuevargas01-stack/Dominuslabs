@@ -245,7 +245,89 @@ def test_n8n_webhook_sanitizes_missing_field_errors(client):
         "Content-Type": "application/json",
         "X-Signature": sig,
         "X-Timestamp": str(int(time.time())),
+        "X-Event-Id": "event-missing-field"
     }
     res = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=headers)
     assert res.status_code == 400
     assert res.json()["detail"] == "Campo obrigatório ausente: session_id"
+
+
+def test_replay_cache_antipoisoning_with_invalid_signature(client):
+    """
+    P0/Section 25: Um request com HMAC inválido NUNCA deve poluir _n8n_seen_events.
+    Um request posterior legítimo com o mesmo event_id deve ser aceito normalmente.
+    """
+    import hmac, hashlib, json, time
+
+    payload = [{
+        "message_id": "m-antipoison-1",
+        "contact_jid": "c1@s.whatsapp.net",
+        "session_id": "s1",
+        "tenant_id": "tenant-antipoison",
+        "text": "Anti-poisoning test",
+        "fromMe": False
+    }]
+    raw_body = json.dumps(payload).encode()
+    valid_sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
+    invalid_sig = "bad0000000000000000000000000000000000000000000000000000000000000"
+
+    event_id = "evt-poison-attempt-999"
+    current_ts = str(int(time.time()))
+
+    # 1. Requisição atacante com HMAC inválido -> deve retornar 401
+    bad_headers = {
+        "Content-Type": "application/json",
+        "X-N8N-Signature": invalid_sig,
+        "X-N8N-Timestamp": current_ts,
+        "X-N8N-Event-Id": event_id
+    }
+    res1 = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=bad_headers)
+    assert res1.status_code == 401
+    assert "Assinatura HMAC inválida" in res1.json()["detail"]
+
+    # 2. Requisição legítima posterior com o MESMO event_id -> deve ser permitida (não foi envenenada)
+    good_headers = {
+        "Content-Type": "application/json",
+        "X-N8N-Signature": valid_sig,
+        "X-N8N-Timestamp": current_ts,
+        "X-N8N-Event-Id": event_id
+    }
+    res2 = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=good_headers)
+    assert res2.status_code == 200
+    assert res2.json()["status"] == "success"
+
+    # 3. Requisição repetida (legítima) com o mesmo event_id -> deve ser rejeitada com 409
+    res3 = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=good_headers)
+    assert res3.status_code == 409
+    assert "Evento duplicado" in res3.json()["detail"]
+
+
+def test_n8n_webhook_mandatory_headers_rejection(client):
+    """
+    P0/Section 26, 27: Testa que a ausência de Timestamp ou Event-Id retorna 401.
+    """
+    import hmac, hashlib, json, time
+
+    payload = [{"message_id": "m1", "contact_jid": "c1", "session_id": "s1", "tenant_id": "t1", "text": "hi"}]
+    raw_body = json.dumps(payload).encode()
+    sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
+
+    # Missing timestamp
+    headers_no_ts = {
+        "Content-Type": "application/json",
+        "X-N8N-Signature": sig,
+        "X-N8N-Event-Id": "evt-123"
+    }
+    res_no_ts = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=headers_no_ts)
+    assert res_no_ts.status_code == 401
+    assert "Timestamp ausente" in res_no_ts.json()["detail"]
+
+    # Missing event-id
+    headers_no_eid = {
+        "Content-Type": "application/json",
+        "X-N8N-Signature": sig,
+        "X-N8N-Timestamp": str(int(time.time()))
+    }
+    res_no_eid = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=headers_no_eid)
+    assert res_no_eid.status_code == 401
+    assert "Event-ID ausente" in res_no_eid.json()["detail"]
