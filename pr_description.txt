@@ -1,7 +1,16 @@
-🔒 Fix token exposure in fetch query parameters
+Title: "🧪 [add tests for Login page]"
 
-🎯 **What:** Moved the authentication token from the URL query parameters to the `Authorization` header in the `fetch` requests within `OrderManagerView.tsx`.
+🎯 What:
+Added a missing test file `src/pages/Login.test.tsx` for the `Login.tsx` component to cover form rendering, input changing, error handling, API submission, and authentication redirections.
 
-⚠️ **Risk:** Including tokens in URL query strings is a security vulnerability. URLs (including query strings) are often logged by servers, proxies, and potentially saved in browser histories. If an attacker gains access to these logs, they can extract the token and impersonate the user, compromising the system.
+📊 Coverage:
+The following scenarios are now tested:
+- Form elements are rendered correctly (inputs and buttons).
+- Toggling the password visibility correctly switches the input type.
+- Form submissions with empty inputs trigger validation error messages and prevent API calls.
+- Successful API call correctly stores tokens in localStorage, navigates to the dashboard, and shows a success toast.
+- Failed API call shows a validation error message in the UI and an error toast.
+- Pre-existing authentication redirects the user to `/project-hub` on component load.
 
-🛡️ **Solution:** Replaced the `?token=` parameter with the secure `Authorization: Bearer <token>` HTTP header when performing REST API calls (`/accept` and `/status`). The WebSocket connection remains unchanged as standard browser WebSockets do not support custom headers and must use query string parameters for authentication.
+✨ Result:
+Improved test coverage, creating a reliable safety net that covers user authentication workflows before accessing the application dashboard, allowing for more confident future refactorings on the Login page.
