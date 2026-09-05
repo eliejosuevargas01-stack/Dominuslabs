@@ -5,6 +5,7 @@ O que faz: Implementa a lógica estrutural e funcional para o módulo core/base 
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o módulo core/base security funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
 import hashlib
+import hmac
 import os
 
 def get_password_hash(password: str) -> str:
@@ -28,6 +29,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
             salt.encode('utf-8'),
             100000
         ).hex()
-        return test_hash == db_hash
+        return hmac.compare_digest(test_hash, db_hash)
     except Exception:
         return False
