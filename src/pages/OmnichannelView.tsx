@@ -23,6 +23,7 @@ import {
   fetchWhatsappSessions,
   API_BASE
 } from '../services/api';
+import { SSEClient } from '../services/sseClient';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -1103,35 +1104,35 @@ function playOutgoingSound() {
 
   const selectedChatRef = useRef<any>(null);
   const knownMessageIds = useRef<Set<string>>(new Set());
+  const lastSoundPlayedAt = useRef<number>(0);
   useEffect(() => {
     selectedChatRef.current = selectedChat;
   }, [selectedChat]);
 
   // Real-time EventSource (SSE) listener for instant n8n webhook notifications
   useEffect(() => {
-    const token = getAuthToken();
-    const sseUrl = `${API_BASE}/webhooks/events/crm-chats${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    let eventSource: EventSource | null = null;
-
-    try {
-      eventSource = new EventSource(sseUrl);
-
-      eventSource.onmessage = (event) => {
-        if (!event.data || event.data.startsWith(':')) return;
+    const sseClient = new SSEClient({
+      url: `${API_BASE}/webhooks/events/crm-chats`,
+      onMessage: (data) => {
         try {
-          const trimmed = event.data.trim();
-          if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return;
-
           let rawEvents: any[] = [];
-          try {
-            const parsedJson = JSON.parse(trimmed);
-            if (Array.isArray(parsedJson)) {
-              rawEvents = parsedJson;
-            } else if (parsedJson && typeof parsedJson === 'object') {
-              rawEvents = [parsedJson];
+          if (Array.isArray(data)) {
+            rawEvents = data;
+          } else if (data && typeof data === 'object') {
+            rawEvents = [data];
+          } else if (typeof data === 'string') {
+            const trimmed = data.trim();
+            if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return;
+            try {
+              const parsedJson = JSON.parse(trimmed);
+              if (Array.isArray(parsedJson)) {
+                rawEvents = parsedJson;
+              } else if (parsedJson && typeof parsedJson === 'object') {
+                rawEvents = [parsedJson];
+              }
+            } catch (e) {
+              return;
             }
-          } catch (e) {
-            return;
           }
 
           let notifiedJids: string[] = [];
@@ -1242,40 +1243,51 @@ function playOutgoingSound() {
             }
           }
 
-          // 1. Check if it's a NEW message and has content (ignore duplicate status updates for sounds)
           let isNewMessageWithContent = false;
           
           for (const m of newMsgs) {
             if (m._encrypted) continue;
             const msgType = String(m.message_type || m.type || '').toLowerCase();
-            if (msgType.includes('reaction') || m.reaction_text) continue;
-
-            const msgId = String(m.message_id || m.id || m.key?.id || '');
-            const c = (m.content || m.message || m.text || m.body || '').trim();
-            const hasMediaOrText = c.length > 0 || m.image_url || m.video_url || m.audio_url || m.document_url || m.media_url || m.media;
+            const hasText = Boolean((m.content || m.text || m.body || '').trim());
+            const hasMedia = Boolean(m.media_url || m.file_url || ['image', 'video', 'audio', 'document', 'sticker'].includes(msgType));
             
-            if (hasMediaOrText) {
-              if (msgId) {
-                if (!knownMessageIds.current.has(msgId)) {
-                  knownMessageIds.current.add(msgId);
-                  isNewMessageWithContent = true;
+            if (hasText || hasMedia) {
+              isNewMessageWithContent = true;
+              break;
+            }
+          }
+
+          // 2. Play Notification Audio for real new messages
+          if (isNewMessageWithContent) {
+            let hasFreshId = false;
+            for (const m of newMsgs) {
+              const id = String(m.message_id || m.id || m.key?.id || '');
+              if (id && !id.startsWith('temp_')) {
+                if (!knownMessageIds.current.has(id)) {
+                  knownMessageIds.current.add(id);
+                  hasFreshId = true;
                 }
               } else {
-                isNewMessageWithContent = true;
+                hasFreshId = true;
+              }
+            }
+
+            if (hasFreshId) {
+              const now = Date.now();
+              if (now - lastSoundPlayedAt.current > 1500) {
+                lastSoundPlayedAt.current = now;
+                if (!isFromMe) {
+                  playIncomingSound();
+                } else {
+                  playOutgoingSound();
+                }
               }
             }
           }
 
-          // Play chime ONLY if it is an entirely new message
-          if (isNewMessageWithContent) {
-            if (!isFromMe) {
-              playIncomingSound();
-            } else {
-              playOutgoingSound();
-            }
-          }
-
-          // 2. Helper to match JIDs
+          // 3. Match conversation with current selection
+          const curChat = selectedChatRef.current;
+          let isCurrentOpenChat = false;
           const matchJids = (a: string, b: string) => {
             if (!a || !b) return false;
             const cleanA = String(a).split('@')[0].split(':')[0].trim().toLowerCase();
@@ -1287,42 +1299,50 @@ function playOutgoingSound() {
             }
             return false;
           };
+          if (curChat && notifiedJids.length > 0) {
+            const currentJids = [
+              curChat.contact_jid,
+              curChat.chat_jid,
+              curChat.group_jid,
+              curChat.lead_id,
+              curChat.id
+            ].filter(Boolean);
 
-          // 3. Smart UX Verification: Is the notified chat CURRENTLY OPEN by the user?
-          const activeChat = selectedChatRef.current;
-          let isCurrentlyOpenChat = false;
-
-          if (activeChat) {
-            const activeJids = [activeChat.contact_jid, activeChat.phone, activeChat.jid, activeChat.chat_jid].filter(Boolean);
-            for (const aJid of activeJids) {
+            for (const cJid of currentJids) {
               for (const nJid of notifiedJids) {
-                if (matchJids(aJid, nJid)) {
-                  isCurrentlyOpenChat = true;
+                if (matchJids(cJid, nJid)) {
+                  isCurrentOpenChat = true;
                   break;
                 }
               }
-              if (isCurrentlyOpenChat) break;
+              if (isCurrentOpenChat) break;
             }
           }
 
-          // 4. CONDITIONAL 1: If chat IS OPEN -> Push message directly into chatMessages! ZERO GET REQUESTS!
-          if (isCurrentlyOpenChat && newMsgs.length > 0) {
-            setChatMessages((prevMsgs) => {
-              const existingIds = new Set(prevMsgs.map((m: any) => String(m.message_id || m.id || m.key?.id)));
+          // 4. CONDITIONAL 1: Append to Current Chat immediately
+          if (isCurrentOpenChat && newMsgs.length > 0) {
+            setChatMessages(prev => {
+              const updatedMsgs = [...prev];
+              const existingIds = new Set(updatedMsgs.map(m => String(m.message_id || m.id || m.key?.id || '')));
               const msgsToAdd: any[] = [];
 
-              let updatedMsgs = [...prevMsgs];
               for (const m of newMsgs) {
-                if (!m) continue;
                 const id = String(m.message_id || m.id || m.key?.id || '');
                 if (id && existingIds.has(id)) {
-                  updatedMsgs = updatedMsgs.map(oldM => {
+                   updatedMsgs.forEach((oldM, idx) => {
+                     const oldId = String(oldM.message_id || oldM.id || oldM.key?.id || '');
+                     if (oldId === id) {
+                        updatedMsgs[idx] = { ...oldM, ...m, status: m.status || oldM.status };
+                     }
+                   });
+                } else if (m._is_evolution_ack && id) {
+                   return updatedMsgs.map(oldM => {
                      const oldId = String(oldM.message_id || oldM.id || oldM.key?.id || '');
                      if (oldId === id) {
                         return { ...oldM, ...m, status: m.status || oldM.status };
                      }
                      return oldM;
-                  });
+                   });
                 } else {
                   const mIsFromMe = m.is_from_me === true || m.fromMe === true || m.from_me === true || m.sender === 'user' || m.sender === 'me';
                   let replacedTemp = false;
@@ -1340,13 +1360,11 @@ function playOutgoingSound() {
                       if (tempIndex !== -1) {
                         updatedMsgs[tempIndex] = { ...updatedMsgs[tempIndex], ...m, status: m.status || updatedMsgs[tempIndex].status };
                         replacedTemp = true;
-                        if (id) existingIds.add(id);
                       }
                     }
                   }
 
                   if (!replacedTemp) {
-                    if (id) existingIds.add(id);
                     msgsToAdd.push(m);
                   }
                 }
@@ -1368,24 +1386,25 @@ function playOutgoingSound() {
               if (typeof m.message === 'string' && m.message.trim()) return m.message.trim();
               if (typeof m.text === 'string' && m.text.trim()) return m.text.trim();
               if (typeof m.body === 'string' && m.body.trim()) return m.body.trim();
-              if (m.image_url) return '[imagem]';
-              if (m.video_url) return '[vídeo]';
-              if (m.audio_url) return '[áudio]';
-              if (m.document_url) return '[documento]';
-              if (m.media_url || m.url || m.file_url) return '[mídia]';
-              if (Array.isArray(m.messages) && m.messages.length > 0) return extractContent(m.messages[m.messages.length - 1]);
-              if (Array.isArray(m.mensagens) && m.mensagens.length > 0) return extractContent(m.mensagens[m.mensagens.length - 1]);
+              if (typeof m.output === 'string' && m.output.trim()) return m.output.trim();
               return '';
             };
-            const validMsgs = newMsgs.filter(m => extractContent(m) !== '');
-            const latestMsg = validMsgs.length > 0 ? validMsgs[validMsgs.length - 1] : newMsgs[newMsgs.length - 1];
-            const rawPreview = extractContent(latestMsg);
-            const msgTs = latestMsg.message_timestamp || latestMsg.created_at || new Date().toISOString();
 
-            setConversations((prevConvs) => {
+            const latestMsg = newMsgs[newMsgs.length - 1];
+            const rawPreview = extractContent(latestMsg);
+            const msgTs = latestMsg.message_timestamp || new Date().toISOString();
+
+            setConversations(prevConvs => {
               let matched = false;
-              const updated = prevConvs.map((conv) => {
-                const convJids = [conv.contact_jid, conv.phone, conv.jid].filter(Boolean);
+              const updated = prevConvs.map(conv => {
+                const convJids = [
+                  conv.contact_jid,
+                  conv.chat_jid,
+                  conv.group_jid,
+                  conv.lead_id,
+                  conv.id
+                ].filter(Boolean);
+
                 let convMatches = false;
                 for (const cJid of convJids) {
                   for (const nJid of notifiedJids) {
@@ -1403,7 +1422,7 @@ function playOutgoingSound() {
                     ...conv,
                     last_message_preview: rawPreview || conv.last_message_preview || 'Nova mensagem',
                     last_message_timestamp: msgTs,
-                    unread_count: isCurrentlyOpenChat ? 0 : ((conv.unread_count || 0) + (rawPreview && !isFromMe ? 1 : 0)),
+                    unread_count: isCurrentOpenChat ? 0 : ((conv.unread_count || 0) + (rawPreview && !isFromMe ? 1 : 0)),
                     participant_pushname: latestMsg.participant_pushname || conv.participant_pushname,
                     last_message_is_from_me: rawPreview ? isFromMe : conv.last_message_is_from_me,
                     last_message_status: (latestMsg.status || (rawPreview ? 'sent' : conv.last_message_status))
@@ -1412,7 +1431,7 @@ function playOutgoingSound() {
                 return conv;
               });
 
-              if (!matched && !isCurrentlyOpenChat) {
+              if (!matched && !isCurrentOpenChat) {
                 loadConversations();
                 return prevConvs;
               }
@@ -1427,17 +1446,16 @@ function playOutgoingSound() {
         } catch (err) {
           // Ignore
         }
-      };
-
-      eventSource.onerror = (err) => {
+      },
+      onError: (err) => {
         console.warn('[OmnichannelView] SSE aviso de rede/reconectando...', err);
-      };
-    } catch (e) {}
+      }
+    });
+
+    sseClient.connect();
 
     return () => {
-      if (eventSource) {
-        eventSource.close();
-      }
+      sseClient.disconnect();
     };
   }, []);
 

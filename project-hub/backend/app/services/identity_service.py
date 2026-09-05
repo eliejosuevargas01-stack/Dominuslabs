@@ -66,11 +66,11 @@ async def get_m2m_jwt(tenant_id: str, scope: str = "whatsapp:sessions:read") -> 
     base_url = settings.IDENTITY_WORKER_URL.rstrip("/")
     url = f"{base_url}/v1/tokens"
 
+    # Nota de Arquitetura mTLS: A terminação e validação mTLS do Identity Worker ocorre
+    # na borda via Cloudflare Access/Tunnel ou pelo contexto TLS gerenciado do cliente HTTP (httpx).
+    # Headers simulados cf-client-cert-* foram removidos para evitar fabricação artificial no cliente.
     headers = {
-        "Content-Type": "application/json",
-        "cf-client-cert-presented": "1",
-        "cf-client-cert-subject-dn": "CN=dominus-prod",
-        "cf-client-cert-issuer-dn": "CN=dominus-prod"
+        "Content-Type": "application/json"
     }
     try:
         payload = {

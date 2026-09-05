@@ -99,7 +99,7 @@ class DecryptionMiddleware(BaseHTTPMiddleware):
                     logger.error(f"Failed to decrypt incoming request: {e}")
                     return JSONResponse(
                         status_code=400,
-                        content={"detail": f"Failed to decrypt the payload. {e}"}
+                        content={"detail": "Não foi possível validar o payload recebido."}
                     )
         
         response = await call_next(request)

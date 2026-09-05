@@ -10,11 +10,15 @@ from typing import Optional, List, Dict, Any
 import json
 import asyncio
 import secrets
+import time
+from cachetools import TTLCache
 
 from app.core.database import get_db
 from app.core.config import settings
 from app.services.webhook_service import webhook_service
 from app.core.auth import decode_access_token
+from app.core.realtime_logger import log_realtime_event
+from app.core.n8n_auth import authenticate_n8n_request
 
 router = APIRouter()
 
@@ -139,7 +143,11 @@ async def notify_crm_chat_listeners(
                             all_jids.append(val)
 
     if not tenant_id:
-        tenant_id = "default"
+        log_realtime_event("TENANT_RESOLUTION_FAILED", {
+            "error": "Mensagem sem tenant_id identificado em notify_crm_chat_listeners",
+            "lead_id": lead_id
+        })
+        return
 
     primary_jid = all_jids[0] if all_jids else lead_id
 
@@ -158,19 +166,33 @@ async def notify_crm_chat_listeners(
             await queue.put(payload)
 
 @router.get("/events/leads/{lead_id}")
-async def lead_events(lead_id: str, token: str, request: Request, db: Session = Depends(get_db)):
+async def lead_events(
+    lead_id: str,
+    request: Request,
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
     """
     Função/Método lead_events.
 
-    O que faz: Processa lead_events recebendo os parâmetros (lead_id, token, request) no contexto de o endpoint de API para webhooks.
-    Impacto na regra de negócio: Assegura que o fluxo da operação lead_events seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    O que faz: Processa lead_events com autenticação via cabeçalho Authorization: Bearer ou query param e validação estrita de tenant.
     """
-    payload = decode_access_token(token)
+    auth_header = request.headers.get("Authorization")
+    auth_token = token
+    if not auth_token and auth_header and auth_header.lower().startswith("bearer "):
+        auth_token = auth_header[7:].strip()
+
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Token de autenticação obrigatório.")
+
+    payload = decode_access_token(auth_token)
     if not payload or not payload.get("sub"):
         raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado")
     
     user_email = payload.get("sub", "unknown")
-    user_tenant_id = payload.get("tenant_id") or "default"
+    user_tenant_id = payload.get("tenant_id")
+    if not user_tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado: token sem tenant_id associado.")
 
     # Validar se o tenant_id do usuário coincide com o tenant do lead consultado no banco
     lead_tenant_id = None
@@ -250,7 +272,9 @@ async def crm_chats_events(request: Request, token: Optional[str] = Query(None))
         raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado.")
 
     user_email = payload.get("sub", "unknown")
-    tenant_id = payload.get("tenant_id") or "default"
+    tenant_id = payload.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado: token sem tenant_id associado.")
 
     queue = asyncio.Queue()
     listener_entry = (user_email, tenant_id, queue)
@@ -301,19 +325,7 @@ async def _process_update_chat(
     Impacto na regra de negócio: Assegura que o fluxo da operação _process_update_chat seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     body_bytes = await request.body()
-    auth_info = _authenticate_webhook_request(request, body_bytes, token, x_master_api_key)
-    if not auth_info:
-        raise HTTPException(
-            status_code=401,
-            detail="Não autenticado. Token JWT ou chave M2M/HMAC inválida ou ausente."
-        )
-
-    auth_type = auth_info.get("type")
-    auth_tenant = auth_info.get("tenant_id")
-    is_admin = auth_info.get("is_admin", False)
-
-    if tenant_id and auth_type == "jwt" and not is_admin and tenant_id != auth_tenant:
-        raise HTTPException(status_code=403, detail="Cross-tenant event injection rejected.")
+    auth_info = authenticate_n8n_request(request, body_bytes)
 
     try:
         raw_body = json.loads(body_bytes) if body_bytes else await request.json()
@@ -321,8 +333,10 @@ async def _process_update_chat(
             raw_body = [raw_body]
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
-    if not isinstance(raw_body, list):
-        raise HTTPException(status_code=400, detail="Payload must be a JSON array of message objects.")
+    if not isinstance(raw_body, list) or len(raw_body) == 0:
+        raise HTTPException(status_code=400, detail="Payload must be a non-empty JSON array of message objects.")
+
+    batch_tenant = None
     for item in raw_body:
         if not isinstance(item, dict):
             raise HTTPException(status_code=400, detail="Each item in the payload array must be a JSON object.")
@@ -337,18 +351,21 @@ async def _process_update_chat(
         if "tenant_id" not in item and "tenant" in item:
             item["tenant_id"] = item["tenant"]
         if "message_id" not in item:
-            raise HTTPException(status_code=400, detail=f"Missing required field: message_id. Received keys: {list(item.keys())} - Item: {item}")
+            raise HTTPException(status_code=400, detail="Campo obrigatório ausente: message_id")
         if "contact_jid" not in item:
-            raise HTTPException(status_code=400, detail=f"Missing required field: contact_jid. Received keys: {list(item.keys())}")
+            raise HTTPException(status_code=400, detail="Campo obrigatório ausente: contact_jid")
         if "session_id" not in item:
-            raise HTTPException(status_code=400, detail=f"Missing required field: session_id. Received keys: {list(item.keys())}")
+            raise HTTPException(status_code=400, detail="Campo obrigatório ausente: session_id")
         if "tenant_id" not in item:
-            raise HTTPException(status_code=400, detail=f"Missing required field: tenant_id. Received keys: {list(item.keys())}")
+            raise HTTPException(status_code=400, detail="Campo obrigatório ausente: tenant_id")
 
-        # Enforce cross-tenant isolation
-        if auth_type == "jwt" and not is_admin:
-            if not auth_tenant or item["tenant_id"] != auth_tenant:
-                raise HTTPException(status_code=403, detail="Cross-tenant event injection rejected.")
+        if batch_tenant is None:
+            batch_tenant = item["tenant_id"]
+        elif item["tenant_id"] != batch_tenant:
+            raise HTTPException(status_code=400, detail="Inconsistência de tenant: todas as mensagens do lote devem pertencer ao mesmo tenant.")
+
+        if tenant_id and item["tenant_id"] != tenant_id:
+            raise HTTPException(status_code=403, detail="Cross-tenant event injection rejected.")
 
     messages_list = raw_body
     
@@ -821,7 +838,9 @@ async def whatsapp_inbound_webhook(request: Request):
     lead_id = payload.get("lead_id")
     message_text = payload.get("message")
     sender = payload.get("sender", "lead")
-    tenant_id = payload.get("tenant_id") or "default"
+    tenant_id = payload.get("tenant_id")
+    if not tenant_id:
+        return {"status": "ignored", "reason": "missing tenant_id"}
     if not lead_id or not message_text:
         return {"status": "ignored", "reason": "missing lead_id or message"}
         
@@ -872,7 +891,9 @@ async def instagram_inbound_webhook(request: Request):
     lead_id = payload.get("lead_id")
     message_text = payload.get("message")
     sender = payload.get("sender", "lead")
-    tenant_id = payload.get("tenant_id") or "default"
+    tenant_id = payload.get("tenant_id")
+    if not tenant_id:
+        return {"status": "ignored", "reason": "missing tenant_id"}
     if not lead_id or not message_text:
         return {"status": "ignored", "reason": "missing lead_id or message"}
         
@@ -921,7 +942,9 @@ async def waha_session_status_webhook(request: Request):
     # WAHA usually sends event="session.status" and payload.status
     inner_payload = payload.get("payload", {})
     status = inner_payload.get("status", "").upper() if isinstance(inner_payload, dict) else ""
-    event_tenant_id = (inner_payload.get("tenant_id") if isinstance(inner_payload, dict) else None) or payload.get("tenant_id") or "default"
+    event_tenant_id = (inner_payload.get("tenant_id") if isinstance(inner_payload, dict) else None) or payload.get("tenant_id")
+    if not event_tenant_id:
+        return {"status": "ignored", "reason": "missing tenant_id"}
     if event_type == "session.status" and status in ["STOPPED", "FAILED", "DISCONNECTED", "UNPAIRED", "TIMEOUT"]:
         # Broadcast to all CRM chat listeners of matching tenant that a session has disconnected
         msg = json.dumps({

@@ -156,3 +156,96 @@ def test_logout_instagram_proxy(mock_get_headers, mock_api_request, client: Test
 
     response = client.post(f"{settings.API_V1_STR}/whatsapp/instagram/sessions/test_user/logout", headers=auth_headers)
     assert response.status_code == 200
+
+
+def test_resolve_owned_whatsapp_session_blocks_cross_tenant_before_api(db):
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    from app.models.user import User
+
+    user_a = User(
+        email="operator_a@tenant-a.com",
+        hashed_password="pw",
+        tenant_id="tenant_a",
+        preferred_session_id="session-a",
+        role="custom",
+        permissions="read,write"
+    )
+    user_b = User(
+        email="operator_b@tenant-b.com",
+        hashed_password="pw",
+        tenant_id="tenant_b",
+        preferred_session_id="session-b",
+        role="custom",
+        permissions="read,write"
+    )
+    db.add(user_a)
+    db.add(user_b)
+    db.commit()
+
+    # User B trying to access User A's session -> raises 403 Forbidden
+    with pytest.raises(Exception) as exc_info:
+        resolve_owned_whatsapp_session(user_b, "session-a", db)
+    assert exc_info.value.status_code == 403
+    assert "Acesso negado" in exc_info.value.detail
+
+    # User B accessing their own session -> succeeds
+    session = resolve_owned_whatsapp_session(user_b, "session-b", db)
+    assert session == "session-b"
+
+
+def test_avatar_and_media_proxy_cross_tenant_rejection_before_api_call(db, client):
+    from app.models.user import User
+    from app.core.auth import create_access_token
+
+    user_a = User(
+        email="owner@tenant-a.com",
+        hashed_password="pw",
+        tenant_id="tenant_a",
+        preferred_session_id="session-a",
+        role="custom",
+        permissions="read,write"
+    )
+    user_b = User(
+        email="attacker@tenant-b.com",
+        hashed_password="pw",
+        tenant_id="tenant_b",
+        preferred_session_id="session-b",
+        role="custom",
+        permissions="read,write"
+    )
+    db.add(user_a)
+    db.add(user_b)
+    db.commit()
+
+    token_b = create_access_token({"sub": user_b.email, "tenant_id": user_b.tenant_id, "role": user_b.role})
+    headers_b = {"Authorization": f"Bearer {token_b}"}
+
+    with patch("app.api.endpoints.whatsapp.make_whatsapp_api_request") as mock_api:
+        # Endpoint in whatsapp router: /api/v1/whatsapp/sessions/{session_id}/avatar
+        res = client.get(
+            f"{settings.API_V1_STR}/whatsapp/sessions/session-a/avatar?jid=contact@s.whatsapp.net",
+            headers=headers_b
+        )
+        assert res.status_code == 403
+        assert "Acesso negado" in res.json()["detail"]
+        mock_api.assert_not_called()
+
+        # Root proxy: /api/sessions/{session_id}/avatar
+        res_root = client.get(
+            "/api/sessions/session-a/avatar?jid=contact@s.whatsapp.net",
+            headers=headers_b
+        )
+        assert res_root.status_code == 403
+        assert "Acesso negado" in res_root.json()["detail"]
+        mock_api.assert_not_called()
+
+
+def test_make_whatsapp_api_request_fails_closed_when_tenant_id_missing():
+    import asyncio
+    from app.api.endpoints.whatsapp import make_whatsapp_api_request
+
+    # Calling without x-tenant-id must fail closed with 403
+    with pytest.raises(Exception) as exc_info:
+        asyncio.run(make_whatsapp_api_request("GET", "/test", headers={"Authorization": "Bearer fake"}))
+    assert exc_info.value.status_code == 403
+    assert "x-tenant-id" in exc_info.value.detail

@@ -2,26 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { 
   API_BASE, 
-  fetchWithAuth, 
-  getStoredAccessToken, 
-  isTokenExpired, 
-  refreshAuthTokenSilently 
+  fetchWithAuth 
 } from '../services/api';
+import { SSEClient } from '../services/sseClient';
 
 // Type from the backend order schema
 interface Order {
   id: string;
   status: string;
 }
-
-const getWebSocketUrl = () => {
-  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
-  const origin = typeof window !== 'undefined' && window.location ? (window.location.origin || 'http://localhost:8000') : 'http://localhost:8000';
-  const resolvedUrl = new URL(API_BASE, origin);
-  const wsProto = resolvedUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-  const pathname = resolvedUrl.pathname.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
-  return `${wsProto}//${resolvedUrl.host}${pathname}`;
-};
 
 export default function GlobalOrderNotification() {
   const [pendingCount, setPendingCount] = useState(0);
@@ -58,86 +47,15 @@ export default function GlobalOrderNotification() {
   };
 
   useEffect(() => {
-    let socket: WebSocket | null = null;
-    let eventSource: EventSource | null = null;
-    let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let sseClient: SSEClient | null = null;
     let disposed = false;
 
     const connectRealtime = () => {
       if (disposed) return;
-
-      const token = getStoredAccessToken();
-      if (!token) return;
-
-      if (isTokenExpired(token)) {
-        refreshAuthTokenSilently().then(newToken => {
-          if (disposed) return;
-          if (newToken) connectRealtime();
-        });
-        return;
-      }
-
-      // Primary: EventSource (SSE) - 100% compatible with reverse proxies, Caddy, Cloudflare, etc.
-      if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
-        try {
-          const sseUrl = `${API_BASE}/orders/events?token=${encodeURIComponent(token)}`;
-          eventSource = new EventSource(sseUrl);
-
-          eventSource.onopen = () => {
-            if (disposed) { eventSource?.close(); return; }
-            console.log('[GlobalOrderNotification] SSE conectado');
-          };
-
-          eventSource.onmessage = (event) => {
-            if (!event.data || event.data.startsWith(':')) return;
-            try {
-              const data = JSON.parse(event.data);
-              if (data.event === 'new_order') {
-                fetchOrders();
-              } else if (data.event === 'order_updated') {
-                if (data.order && data.order.status !== 'pending') {
-                  stopAlarm();
-                  setPendingCount(prev => Math.max(0, prev - 1));
-                }
-                fetchOrders();
-              }
-            } catch (e) {
-              console.error('[GlobalOrderNotification] Erro ao processar mensagem SSE', e);
-            }
-          };
-
-          eventSource.onerror = async () => {
-            try { eventSource?.close(); } catch (_) {}
-            if (disposed) return;
-            console.log('[GlobalOrderNotification] SSE desconectado. Tentando renovação silenciosa...');
-            await refreshAuthTokenSilently();
-            reconnectTimeout = setTimeout(connectRealtime, 5000);
-          };
-          return;
-        } catch (e) {
-          console.warn('[GlobalOrderNotification] Falha ao iniciar SSE, tentando fallback WebSocket...', e);
-        }
-      }
-
-      // Fallback: WebSocket
-      const wsBase = getWebSocketUrl();
-      socket = new WebSocket(`${wsBase}/api/v1/orders/ws?token=${encodeURIComponent(token)}`);
-
-      socket.onopen = () => {
-        if (disposed) {
-          try { socket?.close(1000, 'Unmounted'); } catch (_) {}
-          return;
-        }
-        console.log('[GlobalOrderNotification] WebSocket conectado');
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.event === 'ping') {
-            socket?.send(JSON.stringify({ event: 'pong' }));
-            return;
-          }
+      sseClient = new SSEClient({
+        url: `${API_BASE}/orders/events`,
+        onMessage: (data) => {
+          if (!data) return;
           if (data.event === 'new_order') {
             fetchOrders();
           } else if (data.event === 'order_updated') {
@@ -147,39 +65,21 @@ export default function GlobalOrderNotification() {
             }
             fetchOrders();
           }
-        } catch (e) {
-          console.error('[GlobalOrderNotification] Erro ao processar mensagem WS', e);
+        },
+        onOpen: () => {
+          console.log('[GlobalOrderNotification] SSE conectado via Authorization: Bearer');
+        },
+        onError: (e) => {
+          console.warn('[GlobalOrderNotification] Aviso/reconectando SSE:', e);
         }
-      };
-
-      socket.onclose = async () => {
-        if (disposed) return;
-        console.log('[GlobalOrderNotification] WebSocket desconectado. Tentando renovação silenciosa...');
-        await refreshAuthTokenSilently();
-        reconnectTimeout = setTimeout(connectRealtime, 5000);
-      };
-
-      socket.onerror = () => {
-        if (disposed) return;
-        console.warn('[GlobalOrderNotification] WebSocket aviso/desconexão', {
-          url: socket?.url,
-          readyState: socket?.readyState,
-        });
-      };
+      });
+      sseClient.connect();
     };
 
     const handleTokenRefreshed = () => {
       if (disposed) return;
       console.log('[GlobalOrderNotification] Token renovado detectado por evento. Reconectando...');
-      clearTimeout(reconnectTimeout);
-      if (eventSource) {
-        try { eventSource.close(); } catch (_) {}
-        eventSource = null;
-      }
-      if (socket) {
-        try { socket.close(); } catch (_) {}
-        socket = null;
-      }
+      sseClient?.disconnect();
       connectRealtime();
     };
 
@@ -196,35 +96,16 @@ export default function GlobalOrderNotification() {
     connectRealtime();
     fetchOrders(); // Initial fetch
 
-    // Polling every 2 minutes as fallback
-    const intervalId = setInterval(fetchOrders, 2 * 60 * 1000);
+    // Reconciliação eventual periódica a cada 60s
+    const intervalId = setInterval(fetchOrders, 60 * 1000);
 
     return () => {
       disposed = true;
       window.removeEventListener('token_refreshed', handleTokenRefreshed);
       window.removeEventListener('order_action_taken', handleOrderActionTaken);
-      clearTimeout(reconnectTimeout);
       clearInterval(intervalId);
-      if (eventSource) {
-        eventSource.onopen = null;
-        eventSource.onmessage = null;
-        eventSource.onerror = null;
-        eventSource.close();
-      }
-      if (socket) {
-        socket.onopen = null;
-        socket.onmessage = null;
-        socket.onerror = null;
-        socket.onclose = null;
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.close(1000, 'Unmounted');
-        } else {
-          // If still connecting, wait for open before closing to avoid "closed before established" warning
-          socket.onopen = () => {
-            try { socket?.close(1000, 'Unmounted'); } catch (_) {}
-          };
-        }
-      }
+      sseClient?.disconnect();
+      stopAlarm();
     };
   }, []);
 

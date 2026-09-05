@@ -102,6 +102,8 @@ def test_company_settings_tenant_isolation(client, db):
 
 
 def test_webhook_cross_tenant_rejection(client, db):
+    import hmac, hashlib, json, time
+
     user_b = User(
         email="operator_b@tenant-b.com",
         hashed_password="hash_password_b",
@@ -115,7 +117,7 @@ def test_webhook_cross_tenant_rejection(client, db):
     token_b = create_access_token({"sub": user_b.email, "tenant_id": user_b.tenant_id, "role": user_b.role})
     headers_b = {"Authorization": f"Bearer {token_b}"}
 
-    # Cross-tenant injection attempt: User B sends payload targeting tenant_a
+    # 1. Human JWT is rejected on n8n webhook with 403 Forbidden
     cross_tenant_msg = [{
         "message_id": "msg-999",
         "contact_jid": "5511999998888@s.whatsapp.net",
@@ -127,9 +129,39 @@ def test_webhook_cross_tenant_rejection(client, db):
 
     res = client.post("/api/v1/webhooks/crm/update-chat", json=cross_tenant_msg, headers=headers_b)
     assert res.status_code == 403
-    assert "Cross-tenant" in res.json()["detail"]
+    assert "Webhooks n8n aceitam exclusivamente identidade de serviço" in res.json()["detail"]
 
-    # In-tenant message succeeds
+    # 2. Batch with inconsistent tenants is rejected with 400 Bad Request
+    inconsistent_batch = [
+        {
+            "message_id": "msg-1",
+            "contact_jid": "5511999998888@s.whatsapp.net",
+            "session_id": "sess-tenant-a",
+            "tenant_id": "tenant_a",
+            "fromMe": False,
+            "text": "Tenant A msg"
+        },
+        {
+            "message_id": "msg-2",
+            "contact_jid": "5511999998888@s.whatsapp.net",
+            "session_id": "sess-tenant-b",
+            "tenant_id": "tenant_b",
+            "fromMe": False,
+            "text": "Tenant B msg"
+        }
+    ]
+    raw_inconsistent = json.dumps(inconsistent_batch).encode()
+    sig_inconsistent = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), raw_inconsistent, hashlib.sha256).hexdigest()
+    h_inconsistent = {
+        "Content-Type": "application/json",
+        "X-Signature": sig_inconsistent,
+        "X-Timestamp": str(int(time.time())),
+    }
+    res = client.post("/api/v1/webhooks/crm/update-chat", content=raw_inconsistent, headers=h_inconsistent)
+    assert res.status_code == 400
+    assert "Inconsistência de tenant" in res.json()["detail"]
+
+    # 3. Legitimate single-tenant message with valid HMAC succeeds
     own_tenant_msg = [{
         "message_id": "msg-1000",
         "contact_jid": "5511999998888@s.whatsapp.net",
@@ -138,7 +170,14 @@ def test_webhook_cross_tenant_rejection(client, db):
         "fromMe": False,
         "text": "Legitimate tenant message"
     }]
-    res = client.post("/api/v1/webhooks/crm/update-chat", json=own_tenant_msg, headers=headers_b)
+    raw_own = json.dumps(own_tenant_msg).encode()
+    sig_own = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), raw_own, hashlib.sha256).hexdigest()
+    h_own = {
+        "Content-Type": "application/json",
+        "X-Signature": sig_own,
+        "X-Timestamp": str(int(time.time())),
+    }
+    res = client.post("/api/v1/webhooks/crm/update-chat", content=raw_own, headers=h_own)
     assert res.status_code == 200
     assert res.json()["status"] == "success"
     assert res.json()["tenant_id"] == "tenant_b"

@@ -5,7 +5,7 @@ O que faz: Implementa a lógica estrutural e funcional para o endpoint de API pa
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para whatsapp funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
 from fastapi.concurrency import run_in_threadpool
-from fastapi import APIRouter, Depends, HTTPException, status, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Query, Request
 from sqlalchemy.orm import Session
 import httpx
 from typing import Optional, Dict, Any
@@ -102,6 +102,14 @@ async def make_whatsapp_api_request(
     url = f"{base_url}{clean_path}"
 
     req_headers = dict(headers) if headers else {}
+    tenant_id = req_headers.get("x-tenant-id")
+    if not tenant_id:
+        logger.error("[make_whatsapp_api_request] Chamada à Whats API sem x-tenant-id explícito. Operação fail-closed.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: x-tenant-id obrigatório para chamadas à Whats API."
+        )
+
     if "x-session-token" in req_headers:
         token = req_headers["x-session-token"]
         if "Authorization" not in req_headers and token:
@@ -109,7 +117,6 @@ async def make_whatsapp_api_request(
     if "Authorization" not in req_headers or not req_headers.get("Authorization"):
         try:
             from app.services.identity_service import get_m2m_jwt
-            tenant_id = req_headers.get("x-tenant-id") or getattr(settings, "ADMIN_TENANT_ID", "admin") or "admin"
             if "messages" in clean_path or "send" in clean_path:
                 scope = "whatsapp:messages:send"
             elif method.upper() in ("POST", "PUT", "DELETE", "PATCH"):
@@ -120,8 +127,9 @@ async def make_whatsapp_api_request(
             if token:
                 req_headers["x-session-token"] = token
                 req_headers["Authorization"] = f"Bearer {token}"
-                if "x-tenant-id" not in req_headers:
-                    req_headers["x-tenant-id"] = tenant_id
+                req_headers["x-tenant-id"] = tenant_id
+        except HTTPException:
+            raise
         except Exception as e:
             logger.warning(f"[make_whatsapp_api_request] Não foi possível obter JWT M2M do Identity Provider: {e}")
 
@@ -156,98 +164,67 @@ async def make_whatsapp_api_request(
                 logger.warning(f"WhatsApp API request failed: {e}. Retrying {attempt+1}/{MAX_RETRIES}...")
                 import asyncio
                 await asyncio.sleep(RETRY_DELAY * (2 ** attempt))
-        if response is None and last_exception:
-            logger.error(f"[FLOW-STEP 6] ERROR: WhatsApp API request failed ({last_exception})")
-            print(f"[FLOW-STEP 6] ERROR: WhatsApp API request failed ({last_exception})", flush=True)
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Não foi possível conectar à API de WhatsApp: {str(last_exception)}"
-            )
-        elif response is None or response.status_code in (502, 503, 504, 408):
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="A API de WhatsApp está indisponível no momento após várias tentativas."
-            )
-        if response.status_code == 401:
-            logger.warning("[FLOW-STEP 6] WhatsApp API retornou 401. Invalidando cache de JWT e renovando...")
-            try:
-                from app.services.identity_service import invalidate_m2m_token, get_m2m_jwt
-                tenant_id = req_headers.get("x-tenant-id") or getattr(settings, "ADMIN_TENANT_ID", "admin") or "admin"
-                if "messages" in clean_path or "send" in clean_path:
-                    scope = "whatsapp:messages:send"
-                elif method.upper() in ("POST", "PUT", "DELETE", "PATCH"):
-                    scope = "whatsapp:sessions:write"
-                else:
-                    scope = "whatsapp:sessions:read"
-                
-                invalidate_m2m_token(tenant_id=tenant_id, scope=scope)
-                fresh_token = await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
-                if fresh_token:
-                    req_headers["x-session-token"] = fresh_token
-                    req_headers["Authorization"] = f"Bearer {fresh_token}"
-                    req_headers["x-tenant-id"] = tenant_id
-                    
-                    response = await client.request(
-                        method,
-                        url,
-                        headers=req_headers,
-                        json=json_data
-                    )
-            except Exception as retry_err:
-                logger.warning(f"[make_whatsapp_api_request] Falha no retry com token renovado: {retry_err}")
-        if response.status_code >= 400:
-            logger.error(f"[FLOW-STEP 6] ERROR: WhatsApp API authentication with JWT failed (status {response.status_code})")
-            print(f"[FLOW-STEP 6] ERROR: WhatsApp API authentication with JWT failed (status {response.status_code})", flush=True)
-        else:
-            logger.info("[FLOW-STEP 6] Authenticated with WhatsApp API using JWT")
-            print("[FLOW-STEP 6] Authenticated with WhatsApp API using JWT", flush=True)
-        if response.status_code in (301, 302, 303, 307) and response.headers.get("location"):
-            return {"url": response.headers.get("location")}
-
-        content_type = response.headers.get("content-type", "").lower()
         
-        # Try decoding JSON if content-type is json or by default
-        try:
-            res_data = response.json()
-            if isinstance(res_data, dict) and res_data.get("_encrypted") is True:
-                from app.core.crypto import decrypt_payload
-                res_data = decrypt_payload(res_data)
-            if response.status_code >= 400:
-                detail_msg = res_data.get("message") or res_data.get("detail") or "Erro na API de WhatsApp."
-                raise HTTPException(status_code=response.status_code, detail=detail_msg)
-            return res_data
-        except (ValueError, TypeError):
-            # If not JSON, but status is 200 OK, return binary data structure
-            if response.status_code < 400:
-                return {
-                    "_is_binary": True,
-                    "content": response.content,
-                    "content_type": content_type,
-                    "status_code": response.status_code,
-                    "url": response.headers.get("location") or str(response.url)
-                }
+        if response is None:
+            logger.error(f"[FLOW-STEP 6] ERROR: WhatsApp API request failed ({last_exception})")
             raise HTTPException(
-                status_code=response.status_code if response.status_code >= 400 else status.HTTP_502_BAD_GATEWAY,
-                detail=f"A API de WhatsApp retornou erro (status {response.status_code}): {response.text[:200]}"
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Falha de comunicação com WhatsApp API após retentativas: {str(last_exception)}"
             )
+
+        if response.status_code >= 400:
+            logger.error(f"[FLOW-STEP 6] WhatsApp API returned error {response.status_code}: {response.text}")
+            try:
+                error_data = response.json()
+            except Exception:
+                error_data = {"detail": response.text}
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=error_data.get("detail", error_data.get("message", "WhatsApp API error"))
+            )
+
+        content_type = response.headers.get("content-type", "")
+        if "application/json" in content_type:
+            return response.json()
+        elif "image/" in content_type or "audio/" in content_type or "video/" in content_type or "application/pdf" in content_type or "application/octet-stream" in content_type:
+            return {
+                "_is_binary": True,
+                "content": response.content,
+                "content_type": content_type
+            }
+        else:
+            try:
+                return response.json()
+            except Exception:
+                return response.text
 
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 
 @router.get("/sessions/{session_id}/avatar")
 async def get_session_avatar(
+    request: Request,
     session_id: str,
     jid: str,
-    token: str = Query(...),
+    token: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
     Proxy de imagem de perfil de contato/grupo via mTLS.
     Evita erros de NS_BINDING_ABORTED e SSL em requisições cross-origin do navegador.
-    Requer validação de token JWT via parâmetro de consulta 'token'.
+    Aceita Authorization: Bearer ou parâmetro de consulta 'token'.
     """
+    auth_header = request.headers.get("Authorization", "")
+    effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
+    if not effective_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de autenticação inválido ou ausente."
+        )
+
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-        sub = payload.get("sub")
+        from app.core.auth import decode_access_token
+        payload = decode_access_token(effective_token) or jwt.decode(effective_token, settings.SECRET_KEY, algorithms=["HS256"])
+        sub = payload.get("sub") if payload else None
         if not sub:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -263,6 +240,8 @@ async def get_session_avatar(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Usuário não encontrado."
             )
+        from app.services.whatsapp_service import resolve_owned_whatsapp_session
+        resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
         user_headers = await get_user_m2m_headers(user.email, db)
     except HTTPException:
         raise
@@ -273,28 +252,41 @@ async def get_session_avatar(
         )
 
     try:
-        clean_path = f"/api/sessions/{session_id}/avatar?jid={jid}&json=true"
+        clean_path = f"/api/sessions/{resolved_session}/avatar?jid={jid}&json=true"
         res = await make_whatsapp_api_request(
             "GET",
             clean_path,
             headers=user_headers
         )
-        if isinstance(res, dict) and res.get("url"):
-            return RedirectResponse(
-                res["url"],
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Cache-Control": "public, max-age=86400"
-                }
-            )
+        if isinstance(res, dict):
+            if res.get("_is_binary") and res.get("content"):
+                return Response(
+                    content=res["content"],
+                    media_type=res.get("content_type") or "image/jpeg",
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Cache-Control": "public, max-age=86400"
+                    }
+                )
+            url_target = res.get("url") or res.get("avatar_url") or res.get("profile_pic_url") or res.get("profile_url") or res.get("avatar")
+            if url_target and str(url_target).startswith("http"):
+                return RedirectResponse(
+                    url_target,
+                    status_code=302,
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Cache-Control": "public, max-age=86400"
+                    }
+                )
     except Exception as e:
         pass
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar não encontrado.")
 
 @router.get("/sessions/{session_id}/media")
 async def get_session_media(
+    request: Request,
     session_id: str,
-    token: str = Query(...),
+    token: Optional[str] = Query(None),
     messageId: Optional[str] = None,
     message_id: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -302,11 +294,20 @@ async def get_session_media(
     """
     Proxy de mídia (imagens, áudios, vídeos e documentos) da WhatsApp API via mTLS.
     Retorna o streaming de binário com o Content-Type correto usando StreamingResponse.
-    Requer validação de token JWT via parâmetro de consulta 'token'.
+    Aceita Authorization: Bearer ou parâmetro de consulta 'token'.
     """
+    auth_header = request.headers.get("Authorization", "")
+    effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
+    if not effective_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de autenticação inválido ou ausente."
+        )
+
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-        sub = payload.get("sub")
+        from app.core.auth import decode_access_token
+        payload = decode_access_token(effective_token) or jwt.decode(effective_token, settings.SECRET_KEY, algorithms=["HS256"])
+        sub = payload.get("sub") if payload else None
         if not sub:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -322,6 +323,8 @@ async def get_session_media(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Usuário não encontrado."
             )
+        from app.services.whatsapp_service import resolve_owned_whatsapp_session
+        resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
         user_headers = await get_user_m2m_headers(user.email, db)
     except HTTPException:
         raise
@@ -339,7 +342,7 @@ async def get_session_media(
     if base_url.startswith("http://") and ":3000" in base_url:
         base_url = base_url.replace("http://", "https://", 1)
 
-    clean_path = f"/api/sessions/{session_id}/media?messageId={target_msg_id}"
+    clean_path = f"/api/sessions/{resolved_session}/media?messageId={target_msg_id}"
     url = f"{base_url}{clean_path}"
 
     req_headers = dict(user_headers) if user_headers else {}

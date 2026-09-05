@@ -1,10 +1,27 @@
 import asyncio
+import hmac
+import hashlib
+import json
+import time
 from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
 from app.api.endpoints import orders
+
+
+def make_n8n_post_args(payload: dict) -> tuple[bytes, dict]:
+    from app.core.config import settings
+    body_bytes = json.dumps(payload).encode()
+    secret = settings.N8N_WEBHOOK_SECRET
+    sig = hmac.new(secret.encode(), body_bytes, hashlib.sha256).hexdigest()
+    headers = {
+        "Content-Type": "application/json",
+        "X-Signature": sig,
+        "X-Timestamp": str(int(time.time())),
+    }
+    return body_bytes, headers
 
 
 class FakeWebSocket:
@@ -162,18 +179,17 @@ def test_same_external_item_id_is_scoped_to_each_order(client, monkeypatch):
     second_payload["pedido"]["id"] = "order-scope-b"
     second_payload["itens"][0]["pedido_id"] = "order-scope-b"
 
-    first = client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"})
-    second = client.post("/api/v1/orders", json=second_payload, headers={"X-Master-API-Key": "super-secret-key"})
+    body1, h1 = make_n8n_post_args(payload)
+    body2, h2 = make_n8n_post_args(second_payload)
+    first = client.post("/api/v1/orders", content=body1, headers=h1)
+    second = client.post("/api/v1/orders", content=body2, headers=h2)
 
     assert first.status_code == 201
     assert second.status_code == 201
     assert second.json()["order"]["items"][0]["id"] == "item-1"
 
 
-def test_replaying_order_snapshot_replaces_removed_items(client, monkeypatch):
-    from app.core.config import settings
-
-    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
+def test_replaying_order_snapshot_replaces_removed_items(client):
     payload = {
         "pedido": {
             "id": "order-snapshot", "tenant_id": "admin", "cliente_id": "client@lid",
@@ -187,10 +203,12 @@ def test_replaying_order_snapshot_replaces_removed_items(client, monkeypatch):
             {"id": "item-removed", "tenant_id": "admin", "pedido_id": "order-snapshot", "produto_id": "prod-2", "nome_produto": "Produto 2", "quantidade": 1, "preco_unitario": "10.00", "subtotal": "10.00", "observacoes": None, "created_at": "2026-08-31T14:48:07.915Z"},
         ],
     }
-    assert client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"}).status_code == 201
+    body1, h1 = make_n8n_post_args(payload)
+    assert client.post("/api/v1/orders", content=body1, headers=h1).status_code == 201
 
     payload["itens"] = [{**payload["itens"][0], "quantidade": 2, "subtotal": "40.00"}]
-    replay = client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"})
+    body2, h2 = make_n8n_post_args(payload)
+    replay = client.post("/api/v1/orders", content=body2, headers=h2)
 
     assert replay.status_code == 201
     assert replay.json()["duplicate"] is True
@@ -201,10 +219,10 @@ def test_replaying_order_snapshot_replaces_removed_items(client, monkeypatch):
     assert replay.json()["order"]["items"][0]["subtotal"] == 40.0
 
 
-def test_receive_order_returns_duplicate_after_a_concurrent_integrity_error(monkeypatch):
+def test_receive_order_returns_duplicate_after_a_concurrent_integrity_error():
     from app.core.config import settings
+    from starlette.requests import Request
 
-    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
     payload = orders.AgentOrderPayload.model_validate({
         "pedido": {
             "id": "order-race", "tenant_id": "admin", "cliente_id": "125203162075156@lid",
@@ -264,18 +282,30 @@ def test_receive_order_returns_duplicate_after_a_concurrent_integrity_error(monk
         def rollback(self):
             self.rolled_back = True
 
-    response = asyncio.run(orders.receive_order(payload, x_master_api_key="super-secret-key", db=DuplicateOnCommitDb()))
+    body_bytes = payload.model_dump_json().encode()
+    sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), body_bytes, hashlib.sha256).hexdigest()
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/v1/orders",
+        "headers": [
+            (b"content-type", b"application/json"),
+            (b"x-signature", sig.encode()),
+            (b"x-timestamp", str(int(time.time())).encode()),
+        ],
+        "query_string": b"",
+    }
+    async def receive():
+        return {"type": "http.request", "body": body_bytes}
+
+    req = Request(scope, receive)
+    response = asyncio.run(orders.receive_order(req, payload, db=DuplicateOnCommitDb()))
 
     assert response["duplicate"] is True
     assert response["order"]["customerName"] == "Cliente"
 
 
-def test_reject_inconsistent_tenant_id_or_pedido_id_in_items(client, monkeypatch):
-    from app.core.config import settings
-    import secrets
-
-    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
-
+def test_reject_inconsistent_tenant_id_or_pedido_id_in_items(client):
     payload = {
         "pedido": {
             "id": "order-123",
@@ -301,17 +331,13 @@ def test_reject_inconsistent_tenant_id_or_pedido_id_in_items(client, monkeypatch
         ],
     }
 
-    response = client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"})
+    body, h = make_n8n_post_args(payload)
+    response = client.post("/api/v1/orders", content=body, headers=h)
     assert response.status_code == 400
     assert "Scope inconsistency" in response.json()["detail"]
 
 
-def test_receive_real_order_with_valid_contract(client, monkeypatch):
-    from app.core.config import settings
-    import secrets
-
-    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
-
+def test_receive_real_order_with_valid_contract(client):
     payload = {
         "pedido": {
             "id": "order-456",
@@ -337,7 +363,8 @@ def test_receive_real_order_with_valid_contract(client, monkeypatch):
         ],
     }
 
-    response = client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"})
+    body, h = make_n8n_post_args(payload)
+    response = client.post("/api/v1/orders", content=body, headers=h)
     assert response.status_code == 201
     data = response.json()
     assert data["ok"] is True
@@ -395,10 +422,7 @@ def test_websocket_heartbeat_removes_a_half_open_connection(monkeypatch):
     finally:
         orders.websocket_listeners.pop(tenant_id, None)
 
-def test_total_derived_when_subtotals_are_zero(client, monkeypatch):
-    from app.core.config import settings
-
-    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
+def test_total_derived_when_subtotals_are_zero(client):
     payload = {
         "pedido": {
             "id": "order-zero-totals", "tenant_id": "admin", "cliente_id": "client@lid",
@@ -412,9 +436,33 @@ def test_total_derived_when_subtotals_are_zero(client, monkeypatch):
             {"id": "item-2", "tenant_id": "admin", "pedido_id": "order-zero-totals", "produto_id": "prod-2", "nome_produto": "Produto 2", "quantidade": 1, "preco_unitario": "10.00", "subtotal": "10.00", "observacoes": None, "created_at": "2026-08-31T14:48:07.915Z"},
         ],
     }
-    response = client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"})
+    body, h = make_n8n_post_args(payload)
+    response = client.post("/api/v1/orders", content=body, headers=h)
     assert response.status_code == 201
 
     data = response.json()
     # 2 * 15.00 + 1 * 10.00 + 5.00 (taxa) = 45.00
     assert data["order"]["total"] == 45.0
+
+
+def test_receive_order_rejects_whatsapp_master_secret(client, monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
+    payload = {
+        "pedido": {
+            "id": "order-reject", "tenant_id": "admin", "cliente_id": "client@lid",
+            "status": "ativo", "metodo_pagamento": "padrao", "tipo_entrega": "padrao",
+            "endereco_entrega": {"endereco_completo": "rua 1"}, "taxa_entrega": "0.00",
+            "subtotal": "10.00", "valor_total": "10.00",
+            "created_at": "2026-08-31T14:48:07.915Z", "updated_at": "2026-08-31T14:48:07.916Z",
+        },
+        "itens": [{
+            "id": "item-1", "tenant_id": "admin", "pedido_id": "order-reject",
+            "produto_id": "prod-1", "nome_produto": "Produto 1", "quantidade": 1,
+            "preco_unitario": "10.00", "subtotal": "10.00", "observacoes": None,
+            "created_at": "2026-08-31T14:48:07.915Z",
+        }],
+    }
+    res = client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"})
+    assert res.status_code == 401
+    assert "WHATSAPP_MASTER_SECRET não é permitido" in res.json()["detail"]

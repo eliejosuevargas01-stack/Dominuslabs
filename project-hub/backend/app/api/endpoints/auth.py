@@ -39,7 +39,13 @@ def _build_token_data(user: User) -> dict:
     is_admin = role == "admin"
     tenant_id = getattr(user, "tenant_id", None)
     if not tenant_id:
-        tenant_id = settings.ADMIN_TENANT_ID if is_admin else "default"
+        if is_admin:
+            tenant_id = getattr(settings, "ADMIN_TENANT_ID", "admin")
+        else:
+            raise HTTPException(
+                status_code=403,
+                detail="Acesso negado: Usuário sem tenant_id associado."
+            )
     return {
         "sub": user.email,
         "role": role,

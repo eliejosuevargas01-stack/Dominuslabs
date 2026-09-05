@@ -3,6 +3,9 @@
 import asyncio
 import json
 import secrets
+import time
+import hmac
+import hashlib
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
@@ -18,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.auth import decode_access_token
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.n8n_auth import authenticate_n8n_request
 from app.models.order_manager import OrderManagerOrder, OrderManagerOrderItem, utc_now
 from sqlalchemy.orm import Session, joinedload
 
@@ -107,30 +111,67 @@ def public_order(order: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def notify_order_status(pedido_id: str, tenant_id: str, order_status: str, client_jid: str) -> None:
-    """Notifica o workflow externo após uma mudança operacional de status."""
+async def notify_order_status(
+    pedido_id: str,
+    tenant_id: str,
+    order_status: str,
+    client_jid: str,
+    event_id: Optional[str] = None
+) -> None:
+    """Notifica o workflow externo (n8n) com assinatura HMAC, timestamp e event_id idempotente."""
+    if not event_id:
+        event_id = f"evt_{secrets.token_hex(12)}"
+    current_ts = str(int(time.time()))
+    payload_dict = {
+        "pedido_id": pedido_id,
+        "tenant_id": tenant_id,
+        "client_jid": client_jid,
+        "status": order_status,
+        "event_id": event_id,
+        "timestamp": current_ts,
+    }
+    payload_bytes = json.dumps(payload_dict, separators=(',', ':')).encode('utf-8')
+    headers = {
+        "Content-Type": "application/json",
+        "X-Dominus-Event-Id": event_id,
+        "X-Dominus-Timestamp": current_ts,
+    }
+    secret = getattr(settings, "N8N_WEBHOOK_SECRET", None) or getattr(settings, "WEBHOOK_SECRET", "")
+    if secret:
+        signature = hmac.new(
+            secret.encode('utf-8'),
+            payload_bytes,
+            hashlib.sha256
+        ).hexdigest()
+        headers["X-Dominus-Signature"] = f"sha256={signature}"
+        headers["X-Signature"] = f"sha256={signature}"
+
     try:
         async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT) as client:
             response = await client.post(
                 settings.ACCEPT_ORDER_WEBHOOK_URL,
-                json={
-                    "pedido_id": pedido_id,
-                    "tenant_id": tenant_id,
-                    "client_jid": client_jid,
-                    "status": order_status,
-                },
+                content=payload_bytes,
+                headers=headers,
             )
             response.raise_for_status()
     except httpx.HTTPError as exc:
         raise exc
 
 
-async def retry_order_status_webhook(pedido_id: str, tenant_id: str, order_status: str, client_jid: str) -> None:
+async def retry_order_status_webhook(
+    pedido_id: str,
+    tenant_id: str,
+    order_status: str,
+    client_jid: str,
+    event_id: Optional[str] = None
+) -> None:
+    if not event_id:
+        event_id = f"evt_{secrets.token_hex(12)}"
     for delay in (0, *WEBHOOK_RETRY_DELAYS):
         if delay:
             await asyncio.sleep(delay)
         try:
-            await notify_order_status(pedido_id, tenant_id, order_status, client_jid)
+            await notify_order_status(pedido_id, tenant_id, order_status, client_jid, event_id=event_id)
             return
         except httpx.HTTPError:
             continue
@@ -333,13 +374,13 @@ async def broadcast(event: str, order: Dict[str, Any]) -> None:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def receive_order(
+    request: Request,
     payload: AgentOrderPayload,
-    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
     db: Session = Depends(get_db),
 ):
     """Recebe o pedido ESTRITO do agente IA (N8N) e publica no Order Manager."""
-    if not valid_master_key(x_master_api_key):
-        raise HTTPException(status_code=401, detail="Invalid or missing Master API Key")
+    raw_body = await request.body()
+    authenticate_n8n_request(request, raw_body)
         
     external_item_ids = set()
     for item in payload.itens:
@@ -546,7 +587,8 @@ async def accept_order(
     order = order_to_record(db_order)
     orders[f"{tenant_id}:{order_id}"] = order
     await broadcast("order_updated", order)
-    background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, "order_accepted", db_order.client_jid or db_order.cliente_id)
+    event_id = f"evt_{secrets.token_hex(12)}"
+    background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, "order_accepted", db_order.client_jid or db_order.cliente_id, event_id)
     return {"ok": True, "order": public_order(order)}
 
 
@@ -589,7 +631,8 @@ async def reject_order(
     order = order_to_record(db_order)
     orders[f"{tenant_id}:{order_id}"] = order
     await broadcast("order_updated", order)
-    background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, "order_rejected", db_order.client_jid or db_order.cliente_id)
+    event_id = f"evt_{secrets.token_hex(12)}"
+    background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, "order_rejected", db_order.client_jid or db_order.cliente_id, event_id)
     return {"ok": True, "order": public_order(order)}
 
 
@@ -634,7 +677,8 @@ async def update_order_status(
     order = order_to_record(db_order)
     orders[f"{tenant_id}:{order_id}"] = order
     await broadcast("order_updated", order)
-    background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, order_status, db_order.client_jid or db_order.cliente_id)
+    event_id = f"evt_{secrets.token_hex(12)}"
+    background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, order_status, db_order.client_jid or db_order.cliente_id, event_id)
     return {"ok": True, "order": public_order(order)}
 
 @router.get("/{order_id}/tts-alarm")

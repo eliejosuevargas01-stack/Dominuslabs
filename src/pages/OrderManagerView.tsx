@@ -15,11 +15,9 @@ import { toast } from 'sonner';
 // API Base URL (adjust for testing/prod)
 import { 
   API_BASE, 
-  fetchWithAuth, 
-  getStoredAccessToken, 
-  isTokenExpired, 
-  refreshAuthTokenSilently 
+  fetchWithAuth 
 } from "../services/api";
+import { SSEClient } from "../services/sseClient";
 
 interface OrderItem {
   name: string;
@@ -74,9 +72,7 @@ function useOrdersWebSocket() {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
 
   useEffect(() => {
-    let websocket: WebSocket | null = null;
-    let eventSource: EventSource | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let sseClient: SSEClient | null = null;
     let pollingTimer: ReturnType<typeof setInterval> | null = null;
     let disposed = false;
 
@@ -115,176 +111,58 @@ function useOrdersWebSocket() {
 
     const connect = () => {
       if (disposed) return;
-
-      const token = getStoredAccessToken();
-      if (!token) {
-        setConnectionStatus('disconnected');
-        return;
-      }
-
-      if (isTokenExpired(token)) {
-        refreshAuthTokenSilently().then(newToken => {
-          if (disposed) return;
-          if (newToken) connect();
-        });
-        return;
-      }
-
       setConnectionStatus('connecting');
 
-      // Primary: EventSource (SSE) - 100% compatible with reverse proxies, Caddy, Cloudflare, etc.
-      if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
-        try {
-          const sseUrl = `${API_BASE}/orders/events?token=${encodeURIComponent(token)}`;
-          const es = new EventSource(sseUrl);
-          eventSource = es;
-
-          es.onopen = () => {
-            if (disposed) {
-              es.close();
-              return;
+      sseClient = new SSEClient({
+        url: `${API_BASE}/orders/events`,
+        onOpen: () => {
+          if (!disposed) setConnectionStatus('connected');
+        },
+        onClose: () => {
+          if (!disposed) setConnectionStatus('disconnected');
+        },
+        onError: () => {
+          if (!disposed) setConnectionStatus('disconnected');
+        },
+        onMessage: (data) => {
+          if (!data) return;
+          if (data.event === 'new_order' && data.order) {
+            setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
+            setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
+          } else if (data.event === 'order_updated' && data.order) {
+            if (data.order.status !== 'pending') {
+              setAnnouncedOrderIds(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(data.order.id);
+                return newSet;
+              });
+              window.dispatchEvent(new CustomEvent('order_action_taken', { detail: { orderId: data.order.id, status: data.order.status } }));
             }
-            setConnectionStatus('connected');
-          };
-
-          es.onmessage = (event) => {
-            if (!event.data || event.data.startsWith(':')) return;
-            try {
-              const data = JSON.parse(event.data);
-              if (data.event === 'new_order' && data.order) {
-                setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
-                setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
-              } else if (data.event === 'order_updated' && data.order) {
-                if (data.order.status !== 'pending') {
-                  setAnnouncedOrderIds(prev => {
-                    const newSet = new Set(prev);
-                    newSet.delete(data.order.id);
-                    return newSet;
-                  });
-                  window.dispatchEvent(new CustomEvent('order_action_taken', { detail: { orderId: data.order.id, status: data.order.status } }));
-                }
-                setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
-              }
-            } catch (error) {
-              console.error('Erro ao processar evento SSE de pedidos:', error);
-            }
-          };
-
-          es.onerror = async () => {
-            try { es.close(); } catch (_) {}
-            if (disposed) return;
-            setConnectionStatus('disconnected');
-            // Tenta renovar silenciosamente por baixo dos panos antes da próxima tentativa
-            await refreshAuthTokenSilently();
-            reconnectTimer = setTimeout(connect, 5000);
-          };
-          return;
-        } catch (error) {
-          console.warn('[OrderManager] Falha ao iniciar SSE, tentando WebSocket fallback...', error);
+            setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
+          }
         }
-      }
-
-      // Fallback: WebSocket
-      try {
-        const websocketBase = API_BASE.replace(/^http/, 'ws');
-        websocket = new WebSocket(`${websocketBase}/orders/ws?token=${encodeURIComponent(token || '')}`);
-        websocket.onopen = () => {
-          if (disposed) {
-            try { websocket?.close(1000, 'Unmounted'); } catch (_) {}
-            return;
-          }
-          setConnectionStatus('connected');
-        };
-        websocket.onmessage = event => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.event === 'ping') {
-              websocket?.send(JSON.stringify({ event: 'pong' }));
-            } else if (data.event === 'new_order' && data.order) {
-              setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
-              setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
-            } else if (data.event === 'order_updated' && data.order) {
-              if (data.order.status !== 'pending') {
-                setAnnouncedOrderIds(prev => {
-                  const newSet = new Set(prev);
-                  newSet.delete(data.order.id);
-                  return newSet;
-                });
-                window.dispatchEvent(new CustomEvent('order_action_taken', { detail: { orderId: data.order.id, status: data.order.status } }));
-              }
-              setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
-            }
-          } catch (error) {
-            console.error('Erro ao processar mensagem do WebSocket:', error);
-          }
-        };
-        websocket.onerror = () => {
-          if (disposed) return;
-          console.warn('[OrderManager] WebSocket aviso/desconexão', {
-            url: websocket?.url,
-            readyState: websocket?.readyState,
-          });
-          websocket?.close();
-        };
-        websocket.onclose = async () => {
-          if (disposed) return;
-          setConnectionStatus('disconnected');
-          await refreshAuthTokenSilently();
-          reconnectTimer = setTimeout(connect, 5000);
-        };
-      } catch (error) {
-        console.error('Falha ao iniciar WebSocket:', error);
-        setConnectionStatus('disconnected');
-      }
+      });
+      sseClient.connect();
     };
 
     const handleTokenRefreshed = () => {
       if (disposed) return;
       console.log('[OrderManager] Token renovado detectado por evento global. Reconectando...');
-      if (eventSource) {
-        try { eventSource.close(); } catch (_) {}
-        eventSource = null;
-      }
-      if (websocket) {
-        try { websocket.close(); } catch (_) {}
-        websocket = null;
-      }
+      sseClient?.disconnect();
       connect();
     };
 
     window.addEventListener('token_refreshed', handleTokenRefreshed);
 
-    // The database is the durable source of truth. This reconciliation keeps
-    // the screen current even when a WebSocket is connected to another app
-    // worker than the one which received the n8n webhook.
     fetchOrders();
-    pollingTimer = setInterval(fetchOrders, 120000);
+    pollingTimer = setInterval(fetchOrders, 30000); // 30s reconciliation polling
     connect();
 
     return () => {
       disposed = true;
       window.removeEventListener('token_refreshed', handleTokenRefreshed);
-      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (pollingTimer) clearInterval(pollingTimer);
-      if (eventSource) {
-        eventSource.onopen = null;
-        eventSource.onmessage = null;
-        eventSource.onerror = null;
-        eventSource.close();
-      }
-      if (websocket) {
-        websocket.onopen = null;
-        websocket.onmessage = null;
-        websocket.onerror = null;
-        websocket.onclose = null;
-        if (websocket.readyState === WebSocket.OPEN) {
-          websocket.close(1000, 'Unmounted');
-        } else {
-          websocket.onopen = () => {
-            try { websocket?.close(1000, 'Unmounted'); } catch (_) {}
-          };
-        }
-      }
+      sseClient?.disconnect();
     };
   }, []);
 

@@ -12,9 +12,16 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from app.main import app
 from app.core.database import Base, get_db
 from app.core.limiter import limiter
+from app.core.config import settings
 
 # Disable rate limiting for pytest suite
 limiter.enabled = False
+
+# Ensure test secrets are available for test suite
+if not settings.N8N_WEBHOOK_SECRET:
+    settings.N8N_WEBHOOK_SECRET = "test-n8n-webhook-secret"
+if not settings.WHATSAPP_MASTER_SECRET:
+    settings.WHATSAPP_MASTER_SECRET = "test-whatsapp-master-secret"
 
 # Create an in-memory SQLite database for testing
 SQLALCHEMY_DATABASE_URL = "sqlite://"

@@ -2,41 +2,59 @@ import '@testing-library/jest-dom';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
+const { toastError, MockSSEClient } = vi.hoisted(() => {
+  class MockSSEClient {
+    static instances: MockSSEClient[] = [];
+
+    url: string;
+    onMessage: (data: any, event?: string) => void;
+    onOpen?: () => void;
+    onError?: (error: any) => void;
+    onClose?: () => void;
+    isClosed = false;
+
+    constructor(options: {
+      url: string;
+      onMessage: (data: any, event?: string) => void;
+      onOpen?: () => void;
+      onError?: (error: any) => void;
+      onClose?: () => void;
+    }) {
+      this.url = options.url;
+      this.onMessage = options.onMessage;
+      this.onOpen = options.onOpen;
+      this.onError = options.onError;
+      this.onClose = options.onClose;
+      MockSSEClient.instances.push(this);
+    }
+
+    async connect(): Promise<void> {
+      this.isClosed = false;
+    }
+
+    disconnect(): void {
+      this.isClosed = true;
+      this.onClose?.();
+    }
+
+    open(): void {
+      this.onOpen?.();
+    }
+
+    message(data: unknown, event?: string): void {
+      this.onMessage(data, event);
+    }
+  }
+
+  return { toastError: vi.fn(), MockSSEClient };
+});
+
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: toastError } }));
+vi.mock('../services/sseClient', () => ({
+  SSEClient: MockSSEClient,
+}));
 
 import OrderManagerView from './OrderManagerView';
-
-class MockWebSocket {
-  static instances: MockWebSocket[] = [];
-
-  onopen: (() => void) | null = null;
-  onmessage: ((event: MessageEvent<string>) => void) | null = null;
-  onerror: (() => void) | null = null;
-  onclose: (() => void) | null = null;
-  isClosed = false;
-  sentMessages: string[] = [];
-
-  constructor(public url: string) {
-    MockWebSocket.instances.push(this);
-  }
-
-  close() {
-    this.isClosed = true;
-  }
-
-  send(data: string) {
-    this.sentMessages.push(data);
-  }
-
-  open() {
-    this.onopen?.();
-  }
-
-  message(data: unknown) {
-    this.onmessage?.({ data: JSON.stringify(data) } as MessageEvent<string>);
-  }
-}
 
 const pendingOrder = {
   id: 'pedido-pendente',
@@ -50,9 +68,8 @@ const pendingOrder = {
 
 describe('OrderManagerView', () => {
   beforeEach(() => {
-    MockWebSocket.instances = [];
+    MockSSEClient.instances = [];
     localStorage.setItem('admin_token', 'fake_token');
-    vi.stubGlobal('WebSocket', MockWebSocket);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ orders: [] }),
@@ -66,19 +83,19 @@ describe('OrderManagerView', () => {
     localStorage.clear();
   });
 
-  it('connects to the authenticated Order Manager WebSocket', async () => {
-    await act(async () => { render(<OrderManagerView />); })
+  it('connects to the authenticated Order Manager SSE', async () => {
+    await act(async () => { render(<OrderManagerView />); });
 
-    expect(MockWebSocket.instances).toHaveLength(1);
-    expect(MockWebSocket.instances[0].url).toEqual(expect.stringContaining('/api/v1/orders/ws?token=fake_token'));
+    expect(MockSSEClient.instances).toHaveLength(1);
+    expect(MockSSEClient.instances[0].url).toEqual(expect.stringContaining('/api/v1/orders/events'));
 
-    act(() => MockWebSocket.instances[0].open());
+    act(() => MockSSEClient.instances[0].open());
     expect(screen.getAllByText('Conectado (Ao Vivo)')[0]).toBeInTheDocument();
   });
 
   it('renders new orders and applies updates received from another screen', async () => {
-    await act(async () => { render(<OrderManagerView />); })
-    const socket = MockWebSocket.instances[0];
+    await act(async () => { render(<OrderManagerView />); });
+    const sse = MockSSEClient.instances[0];
     const order = {
       id: 'pedido-123',
       customerName: 'Cliente',
@@ -89,7 +106,7 @@ describe('OrderManagerView', () => {
       createdAt: '2026-08-31T14:48:07.915Z',
     };
 
-    act(() => socket.message({ event: 'new_order', order }));
+    act(() => sse.message({ event: 'new_order', order }));
     expect(screen.getAllByText('Pedido #PEDIDO')[0]).toBeInTheDocument();
     expect(screen.getAllByText('Aceito')[0]).toBeInTheDocument();
     const wazeUrl = new URL(screen.getAllByText('Abrir no Waze')[0].getAttribute('href')!);
@@ -99,30 +116,30 @@ describe('OrderManagerView', () => {
     expect(wazeUrl.searchParams.get('navigate')).toBe('yes');
     expect(wazeUrl.searchParams.get('utm_source')).toBe('dominuslabs_order_manager');
 
-    act(() => socket.message({ event: 'order_updated', order: { ...order, status: 'delivered' } }));
+    act(() => sse.message({ event: 'order_updated', order: { ...order, status: 'delivered' } }));
     expect(screen.getAllByText('Entregue')[0]).toBeInTheDocument();
   });
 
-  it('closes the socket when the screen is unmounted', async () => {
-    let unmount: any; await act(async () => { unmount = render(<OrderManagerView />).unmount; });
-    const socket = MockWebSocket.instances[0];
+  it('closes the SSE connection when the screen is unmounted', async () => {
+    let unmount: any;
+    await act(async () => { unmount = render(<OrderManagerView />).unmount; });
+    const sse = MockSSEClient.instances[0];
 
     unmount();
 
-    expect(socket.isClosed).toBe(true);
+    expect(sse.isClosed).toBe(true);
   });
 
-  it('answers the server heartbeat without treating it as an order event', async () => {
-    await act(async () => { render(<OrderManagerView />); })
-    const socket = MockWebSocket.instances[0];
+  it('ignores ping events without treating it as an order event', async () => {
+    await act(async () => { render(<OrderManagerView />); });
+    const sse = MockSSEClient.instances[0];
 
-    act(() => socket.message({ event: 'ping' }));
+    act(() => sse.message({ event: 'ping' }));
 
-    expect(socket.sentMessages).toEqual([JSON.stringify({ event: 'pong' })]);
     expect(screen.getAllByText('Nenhum pedido no momento.')[0]).toBeInTheDocument();
   });
 
-  it('polling brings pending orders even before websocket connects', async () => {
+  it('polling brings pending orders even before SSE connects', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ orders: [{ ...pendingOrder, id: 'pedido-poll' }] }),
@@ -156,7 +173,8 @@ describe('OrderManagerView', () => {
 
   it('cleans up polling interval on unmount', async () => {
     vi.spyOn(global, 'clearInterval');
-    let unmount: any; await act(async () => { unmount = render(<OrderManagerView />).unmount; });
+    let unmount: any;
+    await act(async () => { unmount = render(<OrderManagerView />).unmount; });
 
     unmount();
 

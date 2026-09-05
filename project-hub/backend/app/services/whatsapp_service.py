@@ -9,6 +9,7 @@ Fluxo final de envio:
 5. A WhatsApp API valida mTLS + JWT + Tenant Lock + executa a ação.
 """
 import logging
+from typing import Optional
 import httpx
 from cachetools import TTLCache
 from sqlalchemy.orm import Session
@@ -22,6 +23,67 @@ from app.services.identity_service import get_m2m_jwt, invalidate_m2m_token
 logger = logging.getLogger("whatsapp")
 
 _legacy_token_cache: TTLCache = TTLCache(maxsize=256, ttl=600)
+
+
+def resolve_owned_whatsapp_session(user: User, session_id: Optional[str], db: Session) -> str:
+    """
+    Valida se a sessão WhatsApp pertence ao tenant do usuário autenticado.
+    Rejeita com 403 Forbidden antes de qualquer chamada HTTP à Whats API se pertencer a outro tenant.
+    """
+    target_session = session_id or user.preferred_session_id
+    if not target_session or target_session == "default":
+        target_session = user.preferred_session_id or "default"
+
+    # Administradores têm permissão de gerenciamento global
+    if user.role == "admin" or user.email == getattr(settings, "ADMIN_USERNAME", "admin"):
+        return target_session
+
+    user_tenant = user.tenant_id
+    if not user_tenant:
+        logger.warning(f"[WA-OWNERSHIP] Usuário id={user.id} sem tenant_id ao tentar acessar sessão '{target_session}'")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: usuário não possui tenant_id configurado."
+        )
+
+    # 1. Verificar se outro usuário de outro tenant possui essa sessão como preferida
+    other_user = db.query(User).filter(
+        User.preferred_session_id == target_session,
+        User.tenant_id != user_tenant
+    ).first()
+    if other_user:
+        logger.warning(
+            f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Sessão '{target_session}' pertence ao tenant '{other_user.tenant_id}', "
+            f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: a sessão informada pertence a outro tenant."
+        )
+
+    # 2. Verificar se uma conta WhatsApp registrada com essa sessão pertence a outro tenant
+    other_account = db.query(WhatsappAccount).filter(
+        WhatsappAccount.idpw == target_session,
+        WhatsappAccount.tenant_id != user_tenant
+    ).first()
+    if other_account:
+        logger.warning(
+            f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Conta WhatsApp '{target_session}' pertence ao tenant '{other_account.tenant_id}', "
+            f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: a sessão informada pertence a outro tenant."
+        )
+
+    # 3. Convenção de prefixo de tenant (ex.: tenant_xxx_session)
+    if target_session.startswith("tenant_") and not target_session.startswith(f"{user_tenant}_"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: a sessão informada pertence a outro tenant."
+        )
+
+    return target_session
 
 
 async def get_tenant_id_for_user(user: User, db: Session) -> str:

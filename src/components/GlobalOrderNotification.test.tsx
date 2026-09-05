@@ -12,32 +12,63 @@ const waitForCustom = async (cb) => {
 };
 import '@testing-library/jest-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import GlobalOrderNotification from './GlobalOrderNotification';
+const { toastError, toastDismiss, MockSSEClient } = vi.hoisted(() => {
+  class MockSSEClient {
+    static instances: MockSSEClient[] = [];
 
-const { toastError, toastDismiss } = vi.hoisted(() => ({
-  toastError: vi.fn().mockReturnValue('toast-id'),
-  toastDismiss: vi.fn()
-}));
+    url: string;
+    onMessage: (data: any, event?: string) => void;
+    onOpen?: () => void;
+    onError?: (error: any) => void;
+    onClose?: () => void;
+    isClosed = false;
+
+    constructor(options: {
+      url: string;
+      onMessage: (data: any, event?: string) => void;
+      onOpen?: () => void;
+      onError?: (error: any) => void;
+      onClose?: () => void;
+    }) {
+      this.url = options.url;
+      this.onMessage = options.onMessage;
+      this.onOpen = options.onOpen;
+      this.onError = options.onError;
+      this.onClose = options.onClose;
+      MockSSEClient.instances.push(this);
+    }
+
+    async connect(): Promise<void> {
+      this.isClosed = false;
+    }
+
+    disconnect(): void {
+      this.isClosed = true;
+      this.onClose?.();
+    }
+
+    open(): void {
+      this.onOpen?.();
+    }
+
+    message(data: unknown, event?: string): void {
+      this.onMessage(data, event);
+    }
+  }
+
+  return {
+    toastError: vi.fn().mockReturnValue('toast-id'),
+    toastDismiss: vi.fn(),
+    MockSSEClient,
+  };
+});
+
 vi.mock('sonner', () => ({ toast: { error: toastError, dismiss: toastDismiss } }));
+vi.mock('../services/sseClient', () => ({
+  SSEClient: MockSSEClient,
+}));
 
-class MockWebSocket {
-  static instances: MockWebSocket[] = [];
-  onopen: (() => void) | null = null;
-  onmessage: ((event: MessageEvent<string>) => void) | null = null;
-  onclose: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  isClosed = false;
-
-  constructor(public url: string) {
-    MockWebSocket.instances.push(this);
-  }
-
-  close() {
-    this.isClosed = true;
-  }
-
-  send() {}
-}
+import GlobalOrderNotification from './GlobalOrderNotification';
 
 const mockOscillator = {
   type: '',
@@ -76,10 +107,9 @@ class MockAudioContext {
 
 describe('GlobalOrderNotification', () => {
   beforeEach(() => {
-    MockWebSocket.instances = [];
+    MockSSEClient.instances = [];
     MockAudioContext.instances = [];
     localStorage.setItem('admin_token', 'fake_token');
-    vi.stubGlobal('WebSocket', MockWebSocket);
     vi.stubGlobal('AudioContext', MockAudioContext);
     vi.stubGlobal('window', { ...window, AudioContext: MockAudioContext, addEventListener: vi.fn(), removeEventListener: vi.fn() });
 
@@ -93,7 +123,7 @@ describe('GlobalOrderNotification', () => {
     localStorage.clear();
   });
 
-  it('fetches orders on mount and sets up WebSocket', async () => {
+  it('fetches orders on mount and sets up SSE', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve({
       ok: true,
       json: async () => ({ ok: true, orders: [] })
@@ -106,8 +136,8 @@ describe('GlobalOrderNotification', () => {
       expect(fetchMock).toHaveBeenCalled();
     });
 
-    expect(MockWebSocket.instances.length).toBe(1);
-    expect(MockWebSocket.instances[0].url).toContain('/api/v1/orders/ws?token=fake_token');
+    expect(MockSSEClient.instances.length).toBe(1);
+    expect(MockSSEClient.instances[0].url).toContain('/api/v1/orders/events');
   });
 
   it('plays alarm when there are pending orders', async () => {
@@ -144,10 +174,10 @@ describe('GlobalOrderNotification', () => {
 
     isPending = false;
 
-    // Simulate websocket message that triggers a re-fetch
-    const ws = MockWebSocket.instances[0];
+    // Simulate SSE message that triggers a re-fetch
+    const sse = MockSSEClient.instances[0];
     await act(async () => {
-      ws.onmessage?.({ data: JSON.stringify({ event: 'order_updated' }) } as MessageEvent);
+      sse.message({ event: 'order_updated' });
     });
 
     await waitForCustom(() => {
@@ -181,7 +211,7 @@ describe('GlobalOrderNotification', () => {
     });
   });
 
-  it('polls every 2 minutes', async () => {
+  it('polls periodically for reconciliation', async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve({
       ok: true,
@@ -196,7 +226,7 @@ describe('GlobalOrderNotification', () => {
     });
 
     await act(async () => {
-      vi.advanceTimersByTime(120000);
+      vi.advanceTimersByTime(60000);
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);

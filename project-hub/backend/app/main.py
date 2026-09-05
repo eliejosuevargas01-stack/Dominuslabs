@@ -204,7 +204,8 @@ async def root_avatar_proxy(
     session_id: Optional[str] = None,
     session: Optional[str] = None,
     jid: Optional[str] = None,
-    token: Optional[str] = Query(None)
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
 ):
     """
     Proxy de avatar direto consumido pelo frontend sem necessidade de pré-processamento.
@@ -228,19 +229,29 @@ async def root_avatar_proxy(
     target_session = session_id or session
     if not jid:
         raise HTTPException(status_code=400, detail="Parâmetro 'jid' é obrigatório.")
+    from app.models.user import User
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    from app.api.endpoints.whatsapp import get_user_m2m_headers, make_whatsapp_api_request
+
+    user_email = payload.get("sub")
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuário não encontrado.")
+    resolved_session = resolve_owned_whatsapp_session(user, target_session, db)
+    user_headers = await get_user_m2m_headers(user.email, db)
+
     try:
-        from app.api.endpoints.whatsapp import make_whatsapp_api_request
         paths_to_try = []
-        if target_session and target_session != "default":
-            paths_to_try.append(f"/api/sessions/{target_session}/avatar?jid={jid}&json=true")
-            paths_to_try.append(f"/avatar?session={target_session}&jid={jid}&json=true")
-            paths_to_try.append(f"/api/sessions/{target_session}/avatar?jid={jid}")
-            paths_to_try.append(f"/avatar?session={target_session}&jid={jid}")
+        if resolved_session and resolved_session != "default":
+            paths_to_try.append(f"/api/sessions/{resolved_session}/avatar?jid={jid}&json=true")
+            paths_to_try.append(f"/avatar?session={resolved_session}&jid={jid}&json=true")
+            paths_to_try.append(f"/api/sessions/{resolved_session}/avatar?jid={jid}")
+            paths_to_try.append(f"/avatar?session={resolved_session}&jid={jid}")
         paths_to_try.append(f"/avatar?jid={jid}&json=true")
         paths_to_try.append(f"/avatar?jid={jid}")
         for clean_path in paths_to_try:
             try:
-                res = await make_whatsapp_api_request("GET", clean_path)
+                res = await make_whatsapp_api_request("GET", clean_path, headers=user_headers)
                 if isinstance(res, dict):
                     if res.get("_is_binary") and res.get("content"):
                         return Response(
@@ -264,6 +275,8 @@ async def root_avatar_proxy(
             except Exception:
                 continue
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[ROOT-AVATAR-PROXY] Erro ao buscar avatar para jid={jid}: {e}", flush=True)
 
@@ -282,7 +295,8 @@ async def root_media_proxy(
     session: Optional[str] = None,
     messageId: Optional[str] = None,
     message_id: Optional[str] = None,
-    token: Optional[str] = Query(None)
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
 ):
     """
     Proxy de mídias (imagem, áudio, vídeo, documentos) consumido pelo frontend.
@@ -303,21 +317,30 @@ async def root_media_proxy(
 
     target_session = session_id or session
     msg_id = messageId or message_id
-# Se o frontend tentar carregar mídia de uma mensagem fantasma, aborta imediatamente com 400. Evita ping desnecessário na API de WhatsApp.
     if not msg_id:
         raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
+
+    from app.models.user import User
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    from app.api.endpoints.whatsapp import get_user_m2m_headers, make_whatsapp_api_request
+
+    user_email = payload.get("sub")
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuário não encontrado.")
+    resolved_session = resolve_owned_whatsapp_session(user, target_session, db)
+    user_headers = await get_user_m2m_headers(user.email, db)
+
     try:
-        from app.api.endpoints.whatsapp import make_whatsapp_api_request
         paths_to_try = []
-        if target_session and target_session != "default":
-            paths_to_try.append(f"/api/sessions/{target_session}/media?messageId={msg_id}")
-            paths_to_try.append(f"/media?session={target_session}&messageId={msg_id}")
+        if resolved_session and resolved_session != "default":
+            paths_to_try.append(f"/api/sessions/{resolved_session}/media?messageId={msg_id}")
+            paths_to_try.append(f"/media?session={resolved_session}&messageId={msg_id}")
 
         paths_to_try.append(f"/media?messageId={msg_id}")
-        paths_to_try.append(f"/api/sessions/default/media?messageId={msg_id}")
         for clean_path in paths_to_try:
             try:
-                res = await make_whatsapp_api_request("GET", clean_path)
+                res = await make_whatsapp_api_request("GET", clean_path, headers=user_headers)
                 if isinstance(res, dict):
                     if res.get("_is_binary") and res.get("content"):
                         content_type = res.get("content_type") or "audio/ogg"
@@ -344,6 +367,8 @@ async def root_media_proxy(
             except Exception:
                 continue
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[ROOT-MEDIA-PROXY] Erro ao carregar mídia para msg_id={msg_id}: {e}", flush=True)
 
