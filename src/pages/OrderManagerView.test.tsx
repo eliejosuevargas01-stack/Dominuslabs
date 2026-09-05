@@ -1,9 +1,14 @@
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 import '@testing-library/jest-dom';
 import { act, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, beforeAll, afterAll } from 'vitest';
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: toastError } }));
+
+vi.mock('@microsoft/fetch-event-source', () => ({
+  fetchEventSource: vi.fn().mockImplementation(() => { throw new Error('SSE Fallback'); })
+}));
 
 import OrderManagerView from './OrderManagerView';
 
@@ -49,10 +54,14 @@ const pendingOrder = {
 };
 
 describe('OrderManagerView', () => {
+  beforeAll(() => { vi.spyOn(console, 'warn').mockImplementation(() => {}); vi.spyOn(console, 'error').mockImplementation(() => {}); });
+  afterAll(() => { vi.restoreAllMocks(); });
+
   beforeEach(() => {
     MockWebSocket.instances = [];
     localStorage.setItem('admin_token', 'fake_token');
     vi.stubGlobal('WebSocket', MockWebSocket);
+
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ orders: [] }),
