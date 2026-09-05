@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from app.schemas.logs import CommitLogCreate, DeployLogCreate
 from app.repositories.log_repo import log_repo
 from app.repositories.task_repo import task_repo
-from app.schemas.task import ProjectTaskUpdate
 from app.models.task import TaskStatus
 
 class WebhookService:
