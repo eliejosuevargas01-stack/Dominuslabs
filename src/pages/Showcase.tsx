@@ -29,14 +29,43 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+
+export interface ShowcaseAsset {
+  id: string;
+  file_type: string;
+  file_path: string;
+}
+
+export interface ShowcaseProject {
+  id: string;
+  name: string;
+  project_type: string;
+  status: string;
+  description: string;
+  deploy_url?: string;
+  assets: ShowcaseAsset[];
+}
+
+export interface ShowcaseTestimonial {
+  project_name: string;
+  comment: string;
+  rating: number;
+  client_name: string;
+}
+
+export interface ShowcaseData {
+  projects: ShowcaseProject[];
+  testimonials: ShowcaseTestimonial[];
+}
+
 export default function Showcase({ isDashboard = false }: { isDashboard?: boolean }) {
-  const [data, setData] = useState<{ projects: any[]; testimonials: any[] } | null>(null);
+  const [data, setData] = useState<ShowcaseData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'completed' | 'ongoing'>('completed');
   
   // Modal states for full case view
-  const [selectedProject, setSelectedProject] = useState<any | null>(null);
+  const [selectedProject, setSelectedProject] = useState<ShowcaseProject | null>(null);
   const [currentMediaIndex, setCurrentMediaIndex] = useState<number>(0);
 
   useEffect(() => {
@@ -210,8 +239,8 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {completedProjects.map((proj, idx) => {
                   const media = proj.assets || [];
-                  const imageAssets = media.filter((a: any) => a.file_type === 'images');
-                  const videoAssets = media.filter((a: any) => a.file_type === 'videos');
+                  const imageAssets = media.filter((a: ShowcaseAsset) => a.file_type === 'images');
+                  const videoAssets = media.filter((a: ShowcaseAsset) => a.file_type === 'videos');
                   const firstImage = imageAssets[0];
                   const firstVideo = videoAssets[0];
                   
@@ -320,8 +349,8 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {ongoingProjects.map((proj, idx) => {
                   const media = proj.assets || [];
-                  const imageAssets = media.filter((a: any) => a.file_type === 'images');
-                  const videoAssets = media.filter((a: any) => a.file_type === 'videos');
+                  const imageAssets = media.filter((a: ShowcaseAsset) => a.file_type === 'images');
+                  const videoAssets = media.filter((a: ShowcaseAsset) => a.file_type === 'videos');
                   const firstImage = imageAssets[0];
                   const firstVideo = videoAssets[0];
                   
@@ -569,7 +598,7 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
                   {selectedProject.assets.length > 1 && (
                     <div className="absolute bottom-4 inset-x-0 flex flex-col items-center gap-1.5 z-20">
                       <div className="flex gap-1.5">
-                        {selectedProject.assets.map((_: any, idx: number) => (
+                        {selectedProject.assets.map((_: ShowcaseAsset, idx: number) => (
                           <button
                             key={idx}
                             onClick={() => setCurrentMediaIndex(idx)}
