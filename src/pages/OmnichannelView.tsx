@@ -1289,13 +1289,14 @@ function playOutgoingSound() {
           };
 
           // 3. Smart UX Verification: Is the notified chat CURRENTLY OPEN by the user?
+          const uniqueNotifiedJids = new Set(notifiedJids);
           const activeChat = selectedChatRef.current;
           let isCurrentlyOpenChat = false;
 
           if (activeChat) {
             const activeJids = [activeChat.contact_jid, activeChat.phone, activeChat.jid, activeChat.chat_jid].filter(Boolean);
             for (const aJid of activeJids) {
-              for (const nJid of notifiedJids) {
+              for (const nJid of uniqueNotifiedJids) {
                 if (matchJids(aJid, nJid)) {
                   isCurrentlyOpenChat = true;
                   break;
@@ -1388,7 +1389,7 @@ function playOutgoingSound() {
                 const convJids = [conv.contact_jid, conv.phone, conv.jid].filter(Boolean);
                 let convMatches = false;
                 for (const cJid of convJids) {
-                  for (const nJid of notifiedJids) {
+                  for (const nJid of uniqueNotifiedJids) {
                     if (matchJids(cJid, nJid)) {
                       convMatches = true;
                       break;
