@@ -56,7 +56,7 @@ class DecryptionMiddleware(BaseHTTPMiddleware):
         O que faz: Processa dispatch recebendo os parâmetros (request, call_next) no contexto de o módulo core/base middleware.
         Impacto na regra de negócio: Assegura que o fluxo da operação dispatch seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
-        if request.method in ["POST", "PUT", "PATCH"]:
+        if request.method in {"POST", "PUT", "PATCH"}:
             content_type = request.headers.get("Content-Type", "")
             if "application/json" in content_type:
                 try:
