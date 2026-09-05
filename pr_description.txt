@@ -1,7 +1,4 @@
-🔒 Fix token exposure in fetch query parameters
-
-🎯 **What:** Moved the authentication token from the URL query parameters to the `Authorization` header in the `fetch` requests within `OrderManagerView.tsx`.
-
-⚠️ **Risk:** Including tokens in URL query strings is a security vulnerability. URLs (including query strings) are often logged by servers, proxies, and potentially saved in browser histories. If an attacker gains access to these logs, they can extract the token and impersonate the user, compromising the system.
-
-🛡️ **Solution:** Replaced the `?token=` parameter with the secure `Authorization: Bearer <token>` HTTP header when performing REST API calls (`/accept` and `/status`). The WebSocket connection remains unchanged as standard browser WebSockets do not support custom headers and must use query string parameters for authentication.
+🎯 **What:** The code health issue addressed is the usage of generic \`any\` and \`any[]\` types in \`useState\` hooks within \`AdminProjectView.tsx\`. We added explicit DTO typings (\`ProjectDTO\`, \`AssetDTO\`, \`CommitDTO\`, \`DeployDTO\`) and typed the respective state variables.
+💡 **Why:** Explicit typing ensures compiler checks which helps prevent runtime crashes due to undefined properties, improves maintainability, and provides better IDE intellisense over using \`any\`.
+✅ **Verification:** Verified by running \`npx tsc --noEmit\` to ensure type safety and \`pnpm test\` to ensure no functional regressions occurred within the test suite.
+✨ **Result:** The component states are now strictly typed improving overall code health without breaking behavior.
