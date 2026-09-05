@@ -33,3 +33,4 @@ certs/
 # Git worktrees & Aider
 test-integration/
 .aider*
+scripts/

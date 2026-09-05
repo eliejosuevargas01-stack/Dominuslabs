@@ -121,12 +121,15 @@ def seed_database_users():
             admin_user = User(
                 email=admin_email,
                 hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+                tenant_id=settings.ADMIN_TENANT_ID,
                 role="admin",
                 permissions="read,write,update,delete",
                 whatsapp_token=f"wa_tok_{secrets.token_hex(16)}"
             )
             db.add(admin_user)
         else:
+            if not existing_admin.tenant_id:
+                existing_admin.tenant_id = settings.ADMIN_TENANT_ID
             if not existing_admin.whatsapp_token:
                 existing_admin.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
             
@@ -140,12 +143,15 @@ def seed_database_users():
             viewer_user = User(
                 email=viewer_email,
                 hashed_password=get_password_hash(settings.VIEWER_PASSWORD),
+                tenant_id=settings.ADMIN_TENANT_ID,
                 role="custom",
                 permissions="read,write",
                 whatsapp_token=f"wa_tok_{secrets.token_hex(16)}"
             )
             db.add(viewer_user)
         else:
+            if not existing_viewer.tenant_id:
+                existing_viewer.tenant_id = settings.ADMIN_TENANT_ID
             if not existing_viewer.whatsapp_token:
                 existing_viewer.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
             

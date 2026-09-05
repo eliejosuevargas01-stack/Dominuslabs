@@ -370,14 +370,14 @@ export async function uploadProductMedia(file: File, productId: string, tenantId
   return res.json();
 }
 
-export async function fetchCompanySettings(tenantId: string = "default"): Promise<CompanySettings> {
-  const res = await fetchWithAuth(`${API_BASE}/company-settings/?tenant_id=${tenantId}`);
+export async function fetchCompanySettings(_tenantId?: string): Promise<CompanySettings> {
+  const res = await fetchWithAuth(`${API_BASE}/company-settings/`);
   if (!res.ok) throw new Error("Falha ao carregar configurações da empresa.");
   return res.json();
 }
 
-export async function updateCompanySettings(settings: CompanySettings, tenantId: string = "default"): Promise<CompanySettings> {
-  const res = await fetchWithAuth(`${API_BASE}/company-settings/?tenant_id=${tenantId}`, {
+export async function updateCompanySettings(settings: CompanySettings, _tenantId?: string): Promise<CompanySettings> {
+  const res = await fetchWithAuth(`${API_BASE}/company-settings/`, {
     method: "PUT",
     body: JSON.stringify(settings),
   });

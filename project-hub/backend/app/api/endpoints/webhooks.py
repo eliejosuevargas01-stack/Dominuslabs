@@ -35,13 +35,19 @@ global_listeners = []   # [asyncio.Queue]
 lead_listeners = {}     # {lead_id: [(user_email, queue)]}
 crm_chat_listeners: List[tuple] = [] # [(user_email, tenant_id, queue)]
 
-def _is_valid_m2m_or_hmac(
+def _authenticate_webhook_request(
     request: Request,
     raw_body_bytes: bytes,
     token: Optional[str] = None,
     x_master_api_key: Optional[str] = None
-) -> bool:
-    """Valida se a requisição possui chave M2M, HMAC signature válida ou token JWT válido."""
+) -> Optional[Dict[str, Any]]:
+    """
+    Autentica requisição de webhook por:
+    1. Master API Key (WHATSAPP_MASTER_SECRET) -> auth_type: 'master', is_admin: True
+    2. Webhook Secret / HMAC (WEBHOOK_SECRET ou N8N_WEBHOOK_SECRET) -> auth_type: 'webhook_secret', is_admin: True
+    3. JWT Token válido -> auth_type: 'jwt', tenant_id: payload.tenant_id, is_admin: (role == 'admin')
+    Retorna dicionário com os dados de autenticação ou None se inválido/ausente.
+    """
     # 1. Master API Key
     master_secret = getattr(settings, "WHATSAPP_MASTER_SECRET", None)
     if master_secret:
@@ -49,22 +55,22 @@ def _is_valid_m2m_or_hmac(
         query_key = request.query_params.get("x_master_api_key") or request.query_params.get("master_api_key") or request.query_params.get("api_key")
         candidate_key = header_key or query_key
         if candidate_key and secrets.compare_digest(candidate_key.strip(), master_secret.strip()):
-            return True
+            return {"type": "master", "is_admin": True, "tenant_id": None}
 
     # 2. Webhook Secret / HMAC
-    webhook_secret = getattr(settings, "WEBHOOK_SECRET", None) or master_secret
-    if webhook_secret:
-        signature = request.headers.get("X-Signature") or request.headers.get("X-Webhook-Secret") or request.headers.get("X-Hub-Signature-256")
-        if signature:
-            sig_clean = signature.replace("sha256=", "").strip()
-            if secrets.compare_digest(sig_clean, webhook_secret.strip()):
-                return True
+    webhook_secrets = [s for s in [getattr(settings, "WEBHOOK_SECRET", None), getattr(settings, "N8N_WEBHOOK_SECRET", None), master_secret] if s]
+    signature = request.headers.get("X-Signature") or request.headers.get("X-Webhook-Secret") or request.headers.get("X-Hub-Signature-256")
+    if signature and webhook_secrets:
+        sig_clean = signature.replace("sha256=", "").strip()
+        for w_secret in webhook_secrets:
+            if secrets.compare_digest(sig_clean, w_secret.strip()):
+                return {"type": "webhook_secret", "is_admin": True, "tenant_id": None}
             if raw_body_bytes:
                 import hmac
                 import hashlib
-                expected = hmac.new(webhook_secret.encode(), raw_body_bytes, hashlib.sha256).hexdigest()
+                expected = hmac.new(w_secret.encode(), raw_body_bytes, hashlib.sha256).hexdigest()
                 if secrets.compare_digest(sig_clean, expected):
-                    return True
+                    return {"type": "webhook_secret", "is_admin": True, "tenant_id": None}
 
     # 3. JWT Token
     auth_header = request.headers.get("Authorization")
@@ -74,9 +80,26 @@ def _is_valid_m2m_or_hmac(
     if auth_token:
         payload = decode_access_token(auth_token)
         if payload and payload.get("sub"):
-            return True
+            role = payload.get("role", "")
+            tenant_id = payload.get("tenant_id")
+            is_admin = role == "admin" or tenant_id == getattr(settings, "ADMIN_TENANT_ID", "admin")
+            return {
+                "type": "jwt",
+                "is_admin": is_admin,
+                "tenant_id": tenant_id,
+                "sub": payload.get("sub")
+            }
 
-    return False
+    return None
+
+def _is_valid_m2m_or_hmac(
+    request: Request,
+    raw_body_bytes: bytes,
+    token: Optional[str] = None,
+    x_master_api_key: Optional[str] = None
+) -> bool:
+    """Valida se a requisição possui chave M2M, HMAC signature válida ou token JWT válido."""
+    return _authenticate_webhook_request(request, raw_body_bytes, token, x_master_api_key) is not None
 
 async def notify_lead_listeners(lead_id: str, event: str = "reload"):
     """
@@ -278,11 +301,19 @@ async def _process_update_chat(
     Impacto na regra de negócio: Assegura que o fluxo da operação _process_update_chat seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     body_bytes = await request.body()
-    if not _is_valid_m2m_or_hmac(request, body_bytes, token, x_master_api_key):
+    auth_info = _authenticate_webhook_request(request, body_bytes, token, x_master_api_key)
+    if not auth_info:
         raise HTTPException(
             status_code=401,
             detail="Não autenticado. Token JWT ou chave M2M/HMAC inválida ou ausente."
         )
+
+    auth_type = auth_info.get("type")
+    auth_tenant = auth_info.get("tenant_id")
+    is_admin = auth_info.get("is_admin", False)
+
+    if tenant_id and auth_type == "jwt" and not is_admin and tenant_id != auth_tenant:
+        raise HTTPException(status_code=403, detail="Cross-tenant event injection rejected.")
 
     try:
         raw_body = json.loads(body_bytes) if body_bytes else await request.json()
@@ -313,6 +344,11 @@ async def _process_update_chat(
             raise HTTPException(status_code=400, detail=f"Missing required field: session_id. Received keys: {list(item.keys())}")
         if "tenant_id" not in item:
             raise HTTPException(status_code=400, detail=f"Missing required field: tenant_id. Received keys: {list(item.keys())}")
+
+        # Enforce cross-tenant isolation
+        if auth_type == "jwt" and not is_admin:
+            if not auth_tenant or item["tenant_id"] != auth_tenant:
+                raise HTTPException(status_code=403, detail="Cross-tenant event injection rejected.")
 
     messages_list = raw_body
     

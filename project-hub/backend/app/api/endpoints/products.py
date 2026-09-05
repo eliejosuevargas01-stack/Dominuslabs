@@ -11,7 +11,13 @@ import uuid
 import re
 
 from app.core.database import get_db
-from app.core.auth import get_current_user, check_crm_permission
+from app.core.auth import (
+    get_current_user,
+    check_product_read_permission,
+    check_product_create_permission,
+    check_product_update_permission,
+    check_product_delete_permission,
+)
 from app.models.user import User
 from app.models.product import Product
 from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
@@ -51,7 +57,7 @@ def _serialize_product(p: Product) -> dict:
 @router.get("", response_model=List[ProductResponse])
 async def get_products(
     db: Session = Depends(get_db),
-    current_user: str = Depends(check_crm_permission)
+    current_user: str = Depends(check_product_read_permission)
 ):
     """
     Função/Método get_products.
@@ -68,7 +74,7 @@ async def get_products(
 async def create_product(
     product_in: ProductCreate,
     db: Session = Depends(get_db),
-    current_user: str = Depends(check_crm_permission)
+    current_user: str = Depends(check_product_create_permission)
 ):
     """
     Função/Método create_product.
@@ -101,7 +107,7 @@ async def update_product(
     product_id: str,
     product_in: ProductUpdate,
     db: Session = Depends(get_db),
-    current_user: str = Depends(check_crm_permission)
+    current_user: str = Depends(check_product_update_permission)
 ):
     """
     Função/Método update_product.
@@ -133,7 +139,7 @@ async def update_product(
 async def delete_product(
     product_id: str,
     db: Session = Depends(get_db),
-    current_user: str = Depends(check_crm_permission)
+    current_user: str = Depends(check_product_delete_permission)
 ):
     """
     Função/Método delete_product.

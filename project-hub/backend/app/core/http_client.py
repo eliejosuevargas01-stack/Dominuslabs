@@ -51,8 +51,8 @@ class EncryptedAsyncClient(httpx.AsyncClient):
                         kwargs["json"] = encrypted_json
                         logger.debug(f"[Zero-Trust] Payload criptografado para o serviço {self.service_name}")
                     except Exception as e:
-                        logger.error(f"[Zero-Trust] Erro ao criptografar payload para {self.service_name}: {e}")
-                        pass
+                        logger.error(f"[Zero-Trust] Erro fatal ao criptografar payload para {self.service_name}: {e}")
+                        raise RuntimeError(f"[Zero-Trust] Failed to encrypt payload for {self.service_name}: {e}") from e
 
         return await super().request(method, url, **kwargs)
 

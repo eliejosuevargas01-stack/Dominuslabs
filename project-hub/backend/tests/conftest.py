@@ -45,6 +45,7 @@ def db():
         admin_user = User(
             email=admin_email,
             hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+            tenant_id=settings.ADMIN_TENANT_ID,
             role="admin",
             permissions="read,write,update,delete"
         )
@@ -57,6 +58,7 @@ def db():
         viewer_user = User(
             email=viewer_email,
             hashed_password=get_password_hash(settings.VIEWER_PASSWORD),
+            tenant_id="viewer_tenant",
             role="custom",
             permissions="read,write"
         )

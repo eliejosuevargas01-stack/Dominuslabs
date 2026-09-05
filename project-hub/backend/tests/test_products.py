@@ -8,13 +8,23 @@ client = TestClient(app)
 def mock_auth(mocker):
     # Mocking the dependency directly on the router or through override
     # Since FastAPI uses Depends, we can override app.dependency_overrides
-    from app.core.auth import check_crm_permission
+    from app.core.auth import (
+        check_crm_permission,
+        check_product_read_permission,
+        check_product_create_permission,
+        check_product_update_permission,
+        check_product_delete_permission,
+    )
     from app.api.endpoints.products import get_tenant_id_for_user
     
-    async def override_check_crm_permission():
+    async def override_permission():
         return "test@example.com"
         
-    app.dependency_overrides[check_crm_permission] = override_check_crm_permission
+    app.dependency_overrides[check_crm_permission] = override_permission
+    app.dependency_overrides[check_product_read_permission] = override_permission
+    app.dependency_overrides[check_product_create_permission] = override_permission
+    app.dependency_overrides[check_product_update_permission] = override_permission
+    app.dependency_overrides[check_product_delete_permission] = override_permission
     
     # Mock get_tenant_id_for_user and db queries
     mocker.patch("app.api.endpoints.products.get_tenant_id_for_user", return_value="tenant-123")

@@ -1,25 +1,29 @@
-from fastapi.testclient import TestClient
-from app.main import app
 from app.core.auth import create_access_token
-from datetime import datetime, timezone
+from app.models.user import User
 
-client = TestClient(app)
+def test_company_settings_crud(client, db):
+    test_tenant = "tenant_settings_123"
+    test_user = User(
+        email="test_settings@example.com",
+        hashed_password="hashed_pass_test",
+        tenant_id=test_tenant,
+        role="admin",
+        permissions="read,write,update,delete"
+    )
+    db.add(test_user)
+    db.commit()
 
-def test_company_settings_crud(db):
-    # 1. Generate auth header
-    token = create_access_token({"sub": "admin@example.com"})
+    token = create_access_token({"sub": test_user.email, "tenant_id": test_user.tenant_id, "role": "admin"})
     headers = {"Authorization": f"Bearer {token}"}
 
-    test_tenant = f"tenant_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}"
-
-    # 2. Get initial settings (should auto-create default tenant settings)
-    res = client.get(f"/api/v1/company-settings/?tenant_id={test_tenant}", headers=headers)
+    # 1. Get initial settings without query params (should auto-create default tenant settings)
+    res = client.get("/api/v1/company-settings/", headers=headers)
     assert res.status_code == 200
     data = res.json()
     assert data["tenant_id"] == test_tenant
     assert data["company_name"] is None
 
-    # 3. Update settings
+    # 2. Update settings
     update_payload = {
         "company_name": "Dominus AI Tech",
         "cnpj_cpf": "12.345.678/0001-90",
@@ -47,7 +51,7 @@ def test_company_settings_crud(db):
         ]
     }
 
-    put_res = client.put(f"/api/v1/company-settings/?tenant_id={test_tenant}", json=update_payload, headers=headers)
+    put_res = client.put("/api/v1/company-settings/", json=update_payload, headers=headers)
     assert put_res.status_code == 200
     updated_data = put_res.json()
     assert updated_data["company_name"] == "Dominus AI Tech"
@@ -56,8 +60,8 @@ def test_company_settings_crud(db):
     assert len(updated_data["menu_catalog"]) == 1
     assert updated_data["menu_catalog"][0]["name"] == "Plano Pro Agente IA"
 
-    # 4. Get updated settings again
-    get_res = client.get(f"/api/v1/company-settings/?tenant_id={test_tenant}", headers=headers)
+    # 3. Get updated settings again
+    get_res = client.get("/api/v1/company-settings/", headers=headers)
     assert get_res.status_code == 200
     fetched_data = get_res.json()
     assert fetched_data["company_name"] == "Dominus AI Tech"

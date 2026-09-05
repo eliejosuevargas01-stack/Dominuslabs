@@ -74,6 +74,7 @@ class Settings(BaseSettings):
 
     # N8N Integration Webhooks
     WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "")
+    N8N_WEBHOOK_SECRET: str = os.getenv("N8N_WEBHOOK_SECRET", os.getenv("WEBHOOK_SECRET", ""))
     SCRAPPER_META_WEBHOOK_URL: str = os.getenv("SCRAPPER_META_WEBHOOK_URL", "https://scrapper.dominuslabs.online/scrape/meta_ads")
     SCRAPPER_MAPS_WEBHOOK_URL: str = os.getenv("SCRAPPER_MAPS_WEBHOOK_URL", "https://scrapper.dominuslabs.online/scrape/google_maps")
     CRM_GET_LEADS_WEBHOOK_URL: str = os.getenv("CRM_GET_LEADS_WEBHOOK_URL", "https://myn8n.seommerce.shop/webhook/crm")

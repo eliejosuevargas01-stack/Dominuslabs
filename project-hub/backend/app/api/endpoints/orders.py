@@ -427,7 +427,7 @@ async def order_events(request: Request, token: Optional[str] = Query(None)):
                 try:
                     yield await asyncio.wait_for(queue.get(), timeout=20)
                 except asyncio.TimeoutError:
-                    yield ": keepalive\n\n"
+                    yield ": ping\n\n"
         finally:
             tenant_listeners = listeners.get(tenant_id)
             if tenant_listeners is not None:

@@ -96,8 +96,6 @@ def create_refresh_token(data: dict, expires_in: int = 604800) -> str:
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
     token = credentials.credentials
-    if token == getattr(settings, "WHATSAPP_MASTER_KEY", getattr(settings, "WHATSAPP_MASTER_SECRET", None)) or token == settings.WEBHOOK_SECRET:
-        return "admin@dominuslabs.online"
     payload = decode_access_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Token de acesso inválido ou expirado.")
@@ -105,10 +103,33 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
         raise HTTPException(status_code=401, detail="Token de acesso inválido (enviado token de atualização)")
     return payload.get("sub", "")
 
+def get_current_active_user(
+    credentials: HTTPAuthorizationCredentials = Security(security),
+    db: Session = Depends(get_db)
+) -> User:
+    token = credentials.credentials
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token de acesso inválido ou expirado.")
+    if payload.get("type") == "refresh":
+        raise HTTPException(status_code=401, detail="Token de acesso inválido (enviado token de atualização)")
+    email = payload.get("sub", "")
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuário não encontrado.")
+    return user
+
+def resolve_tenant_from_user(user: User) -> str:
+    tenant_id = getattr(user, "tenant_id", None)
+    if not tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Acesso negado: tenant_id não configurado para este usuário."
+        )
+    return tenant_id
+
 def check_admin_role(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
     token = credentials.credentials
-    if token == getattr(settings, "WHATSAPP_MASTER_KEY", getattr(settings, "WHATSAPP_MASTER_SECRET", None)) or token == settings.WEBHOOK_SECRET:
-        return "admin@dominuslabs.online"
     payload = decode_access_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Token de acesso inválido ou expirado.")
@@ -132,12 +153,23 @@ def user_has_permission(user: User, required_perm: str) -> bool:
     if not user.permissions:
         return False
     perms = [p.strip().lower() for p in user.permissions.split(",")]
-    return required_perm.lower() in perms or "*" in perms
+    if required_perm.lower() in perms or "*" in perms:
+        return True
+    
+    # Suporte a compatibilidade e granularidade
+    aliases = {
+        "product.read": ["read"],
+        "product.create": ["write"],
+        "product.update": ["update"],
+        "product.delete": ["delete"],
+    }
+    for alias in aliases.get(required_perm.lower(), []):
+        if alias in perms:
+            return True
+    return False
 
 def check_permission(required_perm: str, credentials: HTTPAuthorizationCredentials, db: Session) -> str:
     token = credentials.credentials
-    if token == getattr(settings, "WHATSAPP_MASTER_KEY", getattr(settings, "WHATSAPP_MASTER_SECRET", None)) or token == settings.WEBHOOK_SECRET:
-        return "admin@dominuslabs.online"
     payload = decode_access_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Token de acesso inválido ou expirado.")
@@ -184,6 +216,18 @@ def check_delete_permission(credentials: HTTPAuthorizationCredentials = Security
     Impacto na regra de negócio: Assegura que o fluxo da operação check_delete_permission seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     return check_permission("delete", credentials, db)
+
+def check_product_read_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+    return check_permission("product.read", credentials, db)
+
+def check_product_create_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+    return check_permission("product.create", credentials, db)
+
+def check_product_update_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+    return check_permission("product.update", credentials, db)
+
+def check_product_delete_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
+    return check_permission("product.delete", credentials, db)
 
 # Compatibility aliases for existing endpoint dependencies
 def check_project_create_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:

@@ -10,25 +10,26 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.schemas.company_setting import CompanySettingResponse, CompanySettingUpdate
 from app.repositories.company_setting_repo import company_setting_repo
-from app.core.auth import get_current_user
+from app.core.auth import get_current_active_user, resolve_tenant_from_user
+from app.models.user import User
 
 router = APIRouter()
 
 @router.get("/", response_model=CompanySettingResponse)
 def get_company_settings(
-    tenant_id: str = "default",
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
-    """Retrieve company settings for a given tenant."""
+    """Retrieve company settings for the authenticated tenant."""
+    tenant_id = resolve_tenant_from_user(current_user)
     return company_setting_repo.get_by_tenant(db, tenant_id=tenant_id)
 
 @router.put("/", response_model=CompanySettingResponse)
 def update_company_settings(
     setting_in: CompanySettingUpdate,
-    tenant_id: str = "default",
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
-    """Update or upsert company settings for a given tenant."""
+    """Update or upsert company settings for the authenticated tenant."""
+    tenant_id = resolve_tenant_from_user(current_user)
     return company_setting_repo.upsert(db, obj_in=setting_in, tenant_id=tenant_id)
