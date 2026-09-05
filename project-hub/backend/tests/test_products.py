@@ -116,7 +116,6 @@ def test_update_product(mock_auth, mocker):
     })
     
     assert response.status_code == 200
-    data = response.json()
     assert mock_product.nome == "Updated Product"
     assert mock_product.preco == 15.0
     
