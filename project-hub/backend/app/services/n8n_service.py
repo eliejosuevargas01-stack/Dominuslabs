@@ -1883,7 +1883,7 @@ class N8NService:
                         is_auth_error = True
                     else:
                         resp_text = response.text
-                        if any(kw in resp_text.lower() for kw in ["401", "unauthorized", "invalid_token", "token verification failed", "missing token"]):
+                        if any(kw in resp_text.lower() for kw in {"401", "unauthorized", "invalid_token", "token verification failed", "missing token"}):
                             is_auth_error = True
                 except Exception:
                     pass
