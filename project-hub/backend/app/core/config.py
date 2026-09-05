@@ -22,6 +22,7 @@ for k, v in list(os.environ.items()):
 from pydantic_settings import BaseSettings
 from typing import List, Optional, Union
 from pydantic import AnyHttpUrl, validator
+import secrets
 
 class Settings(BaseSettings):
     """
@@ -38,10 +39,10 @@ class Settings(BaseSettings):
 
     # Authentication
     ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
-    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", secrets.token_urlsafe(32))
     ADMIN_TENANT_ID: str = os.getenv("ADMIN_TENANT_ID", os.getenv("MASTER_TENANT_ID", "admin"))
     VIEWER_USERNAME: str = os.getenv("VIEWER_USERNAME", "patrik182rodrigues@gmail.com")
-    VIEWER_PASSWORD: str = os.getenv("VIEWER_PASSWORD", "")
+    VIEWER_PASSWORD: str = os.getenv("VIEWER_PASSWORD", secrets.token_urlsafe(32))
     SECRET_KEY: str = os.getenv("JWT_SECRET", "")
 
     # LiteLLM TTS
