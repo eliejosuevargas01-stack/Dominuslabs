@@ -17,7 +17,7 @@ from fastapi import HTTPException, status
 from app.core.config import settings
 from app.models.user import User
 from app.models.whatsapp_account import WhatsappAccount
-from app.services.identity_service import get_m2m_jwt, invalidate_m2m_token
+from app.services.identity_service import get_m2m_jwt
 
 logger = logging.getLogger("whatsapp")
 
