@@ -1,48 +1,12 @@
-name: CI
+name: CI Frontend
 
 on:
   push:
-    branches: [ main ]
+    branches: [ frontend ]
   pull_request:
-    branches: [ main ]
+    branches: [ frontend ]
 
 jobs:
-  backend:
-    name: Backend (Tests & Security)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: project-hub/backend
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
-
-      - name: Run Pytest Suite
-        env:
-          SECRET_KEY: test-secret-key-for-ci-minimum-32-chars-long
-          ADMIN_TENANT_ID: test-admin-tenant
-          N8N_WEBHOOK_SECRET: test-n8n-webhook-secret-32-chars-min
-          WHATSAPP_MASTER_SECRET: test-whatsapp-master-secret-32-chars
-          ENCRYPTION_MASTER_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-        run: |
-          pytest tests -v
-
-      - name: Basic SAST (Bandit)
-        run: |
-          bandit -r app -ll -ii
-
   frontend:
     name: Frontend (Lint, Build & Tests)
     runs-on: ubuntu-latest

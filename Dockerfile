@@ -1,21 +1,22 @@
-FROM python:3.11-slim
-
+# --- Build Stage ---
+FROM node:22-alpine AS builder
 WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci || npm install
+COPY . .
+RUN npm run build
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libpq-dev curl \
-    && rm -rf /var/lib/apt/lists/*
+# --- Production Nginx Stage ---
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+RUN echo 'server { \
+    listen 80; \
+    location / { \
+        root /usr/share/nginx/html; \
+        index index.html; \
+        try_files $uri $uri/ /index.html; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
 
-COPY project-hub/backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY project-hub/backend/app ./app
-COPY project-hub/backend/alembic ./alembic
-COPY project-hub/backend/alembic.ini ./
-
-ENV UPLOAD_DIR=/app/uploads
-ENV PORT=8000
-
-EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--limit-concurrency", "100", "--timeout-keep-alive", "30"]
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
