@@ -29,14 +29,37 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+
+export interface ProjectAsset {
+  id: string | number;
+  file_type: string;
+  file_path: string;
+}
+
+export interface ShowcaseProject {
+  name: string;
+  description?: string;
+  project_type: string;
+  status: string;
+  deploy_url?: string;
+  assets?: ProjectAsset[];
+}
+
+export interface ShowcaseTestimonial {
+  project_name: string;
+  client_name: string;
+  comment: string;
+  rating: number;
+}
+
 export default function Showcase({ isDashboard = false }: { isDashboard?: boolean }) {
-  const [data, setData] = useState<{ projects: any[]; testimonials: any[] } | null>(null);
+  const [data, setData] = useState<{ projects: ShowcaseProject[]; testimonials: ShowcaseTestimonial[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'completed' | 'ongoing'>('completed');
   
   // Modal states for full case view
-  const [selectedProject, setSelectedProject] = useState<any | null>(null);
+  const [selectedProject, setSelectedProject] = useState<ShowcaseProject | null>(null);
   const [currentMediaIndex, setCurrentMediaIndex] = useState<number>(0);
 
   useEffect(() => {
@@ -46,7 +69,7 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
         const res = await fetchShowcaseData();
         setData(res);
         setError('');
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(err); toast.error("Ocorreu um erro na operacao.");
         setError('Não foi possível carregar os cases de sucesso.');
       } finally {
@@ -210,8 +233,8 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {completedProjects.map((proj, idx) => {
                   const media = proj.assets || [];
-                  const imageAssets = media.filter((a: any) => a.file_type === 'images');
-                  const videoAssets = media.filter((a: any) => a.file_type === 'videos');
+                  const imageAssets = media.filter((a: ProjectAsset) => a.file_type === 'images');
+                  const videoAssets = media.filter((a: ProjectAsset) => a.file_type === 'videos');
                   const firstImage = imageAssets[0];
                   const firstVideo = videoAssets[0];
                   
@@ -320,8 +343,8 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {ongoingProjects.map((proj, idx) => {
                   const media = proj.assets || [];
-                  const imageAssets = media.filter((a: any) => a.file_type === 'images');
-                  const videoAssets = media.filter((a: any) => a.file_type === 'videos');
+                  const imageAssets = media.filter((a: ProjectAsset) => a.file_type === 'images');
+                  const videoAssets = media.filter((a: ProjectAsset) => a.file_type === 'videos');
                   const firstImage = imageAssets[0];
                   const firstVideo = videoAssets[0];
                   
@@ -569,7 +592,7 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
                   {selectedProject.assets.length > 1 && (
                     <div className="absolute bottom-4 inset-x-0 flex flex-col items-center gap-1.5 z-20">
                       <div className="flex gap-1.5">
-                        {selectedProject.assets.map((_: any, idx: number) => (
+                        {selectedProject.assets.map((_: ProjectAsset, idx: number) => (
                           <button
                             key={idx}
                             onClick={() => setCurrentMediaIndex(idx)}
