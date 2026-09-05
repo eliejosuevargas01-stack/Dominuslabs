@@ -15,22 +15,22 @@ new_query = "user = await run_in_threadpool(lambda: db.query(User).filter(User.e
 content = content.replace(old_query, new_query)
 
 # Fix 2: save_credentials Data Loss
-old_save = """    if account:
-        print("Atualizando...")
-    else:
-        account = WhatsappAccount(user_id=user.id)
-        db.add(account)
+old_save = """    if hasattr(account, "tenant_id") and getattr(user, "tenant_id", None):
+        account.tenant_id = user.tenant_id
+    if hasattr(account, "idpw"):
+        account.idpw = payload.client_id
+    if hasattr(account, "client_id"):
+        account.client_id = payload.client_id
 
     db.commit()"""
-new_save = """    if account:
-        print("Atualizando...")
-    else:
-        account = WhatsappAccount(user_id=user.id)
-        db.add(account)
+new_save = """    if hasattr(account, "tenant_id") and getattr(user, "tenant_id", None):
+        account.tenant_id = user.tenant_id
+    if hasattr(account, "idpw"):
+        account.idpw = payload.client_id
+    if hasattr(account, "client_id"):
+        account.client_id = payload.client_id
     
-    account.idpw = payload.client_id
     account.client_secret = payload.client_secret
-    account.tenant_id = "admin" # Default
 
     db.commit()"""
 content = content.replace(old_save, new_save)

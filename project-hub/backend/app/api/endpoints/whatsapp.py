@@ -715,6 +715,8 @@ def save_credentials(
     if hasattr(account, "client_id"):
         account.client_id = payload.client_id
 
+    account.client_secret = payload.client_secret
+
     db.commit()
     print(f"[M2M-AUTH-FLOW] ✅ Credenciais salvas manualmente no banco de dados Dominus para {user.email}!\n", flush=True)
 
