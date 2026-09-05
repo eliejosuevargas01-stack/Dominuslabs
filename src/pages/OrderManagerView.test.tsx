@@ -53,6 +53,12 @@ describe('OrderManagerView', () => {
     MockWebSocket.instances = [];
     localStorage.setItem('admin_token', 'fake_token');
     vi.stubGlobal('WebSocket', MockWebSocket);
+
+    // Test logic expects fallback WebSocket. We simulate fetchEventSource failing synchronously to trigger it.
+    vi.mock('@microsoft/fetch-event-source', () => ({
+      fetchEventSource: () => { throw new Error('simulated sse error'); }
+    }));
+
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ orders: [] }),
@@ -69,6 +75,7 @@ describe('OrderManagerView', () => {
   it('connects to the authenticated Order Manager WebSocket', async () => {
     await act(async () => { render(<OrderManagerView />); })
 
+    // fallback logic in the test relies on fetchEventSource failure or not existing, mock global fetchEventSource
     expect(MockWebSocket.instances).toHaveLength(1);
     expect(MockWebSocket.instances[0].url).toEqual(expect.stringContaining('/api/v1/orders/ws?token=fake_token'));
 

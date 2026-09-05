@@ -1,3 +1,4 @@
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { useState, useEffect, useRef } from 'react';
 import { ShoppingBag, Check, MapPin, DollarSign, Clock } from 'lucide-react';
 import { toast } from 'sonner';
@@ -76,6 +77,7 @@ function useOrdersWebSocket() {
   useEffect(() => {
     let websocket: WebSocket | null = null;
     let eventSource: EventSource | null = null;
+    let sseAbortController: AbortController | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let pollingTimer: ReturnType<typeof setInterval> | null = null;
     let disposed = false;
@@ -132,26 +134,24 @@ function useOrdersWebSocket() {
 
       setConnectionStatus('connecting');
 
-      // Primary: EventSource (SSE) - 100% compatible with reverse proxies, Caddy, Cloudflare, etc.
-      if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
+      const startWebSocket = () => {
+        // Fallback: WebSocket
         try {
-          const sseUrl = `${API_BASE}/orders/events?token=${encodeURIComponent(token)}`;
-          const es = new EventSource(sseUrl);
-          eventSource = es;
-
-          es.onopen = () => {
+          const websocketBase = API_BASE.replace(/^http/, 'ws');
+          websocket = new WebSocket(`${websocketBase}/orders/ws?token=${encodeURIComponent(token || '')}`);
+          websocket.onopen = () => {
             if (disposed) {
-              es.close();
+              try { websocket?.close(1000, 'Unmounted'); } catch (_) {}
               return;
             }
             setConnectionStatus('connected');
           };
-
-          es.onmessage = (event) => {
-            if (!event.data || event.data.startsWith(':')) return;
+          websocket.onmessage = event => {
             try {
               const data = JSON.parse(event.data);
-              if (data.event === 'new_order' && data.order) {
+              if (data.event === 'ping') {
+                websocket?.send(JSON.stringify({ event: 'pong' }));
+              } else if (data.event === 'new_order' && data.order) {
                 setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
                 setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
               } else if (data.event === 'order_updated' && data.order) {
@@ -166,75 +166,101 @@ function useOrdersWebSocket() {
                 setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
               }
             } catch (error) {
-              console.error('Erro ao processar evento SSE de pedidos:', error);
+              console.error('Erro ao processar mensagem do WebSocket:', error);
             }
           };
-
-          es.onerror = async () => {
-            try { es.close(); } catch (_) {}
+          websocket.onerror = () => {
+            if (disposed) return;
+            console.warn('[OrderManager] WebSocket aviso/desconexão', {
+              url: websocket?.url,
+              readyState: websocket?.readyState,
+            });
+            websocket?.close();
+          };
+          websocket.onclose = async () => {
             if (disposed) return;
             setConnectionStatus('disconnected');
-            // Tenta renovar silenciosamente por baixo dos panos antes da próxima tentativa
             await refreshAuthTokenSilently();
             reconnectTimer = setTimeout(connect, 5000);
           };
-          return;
         } catch (error) {
-          console.warn('[OrderManager] Falha ao iniciar SSE, tentando WebSocket fallback...', error);
-        }
-      }
-
-      // Fallback: WebSocket
-      try {
-        const websocketBase = API_BASE.replace(/^http/, 'ws');
-        websocket = new WebSocket(`${websocketBase}/orders/ws?token=${encodeURIComponent(token || '')}`);
-        websocket.onopen = () => {
-          if (disposed) {
-            try { websocket?.close(1000, 'Unmounted'); } catch (_) {}
-            return;
-          }
-          setConnectionStatus('connected');
-        };
-        websocket.onmessage = event => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.event === 'ping') {
-              websocket?.send(JSON.stringify({ event: 'pong' }));
-            } else if (data.event === 'new_order' && data.order) {
-              setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
-              setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
-            } else if (data.event === 'order_updated' && data.order) {
-              if (data.order.status !== 'pending') {
-                setAnnouncedOrderIds(prev => {
-                  const newSet = new Set(prev);
-                  newSet.delete(data.order.id);
-                  return newSet;
-                });
-                window.dispatchEvent(new CustomEvent('order_action_taken', { detail: { orderId: data.order.id, status: data.order.status } }));
-              }
-              setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
-            }
-          } catch (error) {
-            console.error('Erro ao processar mensagem do WebSocket:', error);
-          }
-        };
-        websocket.onerror = () => {
-          if (disposed) return;
-          console.warn('[OrderManager] WebSocket aviso/desconexão', {
-            url: websocket?.url,
-            readyState: websocket?.readyState,
-          });
-          websocket?.close();
-        };
-        websocket.onclose = async () => {
-          if (disposed) return;
+          console.error('Falha ao iniciar WebSocket:', error);
           setConnectionStatus('disconnected');
-          await refreshAuthTokenSilently();
-          reconnectTimer = setTimeout(connect, 5000);
-        };
-      } catch (error) {
-        console.error('Falha ao iniciar WebSocket:', error);
-        setConnectionStatus('disconnected');
+        }
+      };
+
+      // Primary: EventSource (SSE) with fetchEventSource to support headers
+      if (typeof window !== 'undefined') {
+        sseAbortController = new AbortController();
+        try {
+          fetchEventSource(`${API_BASE}/orders/events`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'text/event-stream',
+            },
+            signal: sseAbortController.signal,
+            async onopen(response) {
+              if (disposed) {
+                sseAbortController?.abort();
+                return;
+              }
+              if (response.ok) {
+                setConnectionStatus('connected');
+              } else if (response.status === 401) {
+                throw new Error('Unauthorized');
+              } else {
+                throw new Error(`Connection error: ${response.status}`);
+              }
+            },
+            onmessage(event) {
+              if (!event.data || event.data.startsWith(':')) return;
+              try {
+                const data = JSON.parse(event.data);
+                if (data.event === 'new_order' && data.order) {
+                  setAnnouncedOrderIds(prev => new Set(prev).add(data.order.id));
+                  setOrders(prev => prev.some(order => order.id === data.order.id) ? prev : [data.order, ...prev]);
+                } else if (data.event === 'order_updated' && data.order) {
+                  if (data.order.status !== 'pending') {
+                    setAnnouncedOrderIds(prev => {
+                      const newSet = new Set(prev);
+                      newSet.delete(data.order.id);
+                      return newSet;
+                    });
+                    window.dispatchEvent(new CustomEvent('order_action_taken', { detail: { orderId: data.order.id, status: data.order.status } }));
+                  }
+                  setOrders(prev => prev.map(order => order.id === data.order.id ? data.order : order));
+                }
+              } catch (error) {
+                console.error('Erro ao processar evento SSE de pedidos:', error);
+              }
+            },
+            onclose() {
+              if (disposed) return;
+              setConnectionStatus('disconnected');
+            },
+            onerror(err) {
+              console.error('SSE Error:', err);
+              if (disposed) return;
+              setConnectionStatus('disconnected');
+              if (err instanceof Error && err.message === 'Unauthorized') {
+                refreshAuthTokenSilently().then(newToken => {
+                  if (!disposed && newToken) connect();
+                });
+                throw err; // throw to stop fetchEventSource internal retry
+              }
+              return 5000; // retry after 5s
+            }
+          }).catch(error => {
+            console.warn('[OrderManager] Falha ao iniciar SSE, tentando WebSocket fallback...', error);
+            startWebSocket();
+          });
+        } catch (error) {
+          console.warn('[OrderManager] Falha ao iniciar SSE (catch sincrono), tentando WebSocket fallback...', error);
+          startWebSocket();
+        }
+      } else {
+        startWebSocket();
       }
     };
 
@@ -244,6 +270,10 @@ function useOrdersWebSocket() {
       if (eventSource) {
         try { eventSource.close(); } catch (_) {}
         eventSource = null;
+      }
+      if (sseAbortController) {
+        try { sseAbortController.abort(); } catch (_) {}
+        sseAbortController = null;
       }
       if (websocket) {
         try { websocket.close(); } catch (_) {}
@@ -271,6 +301,9 @@ function useOrdersWebSocket() {
         eventSource.onmessage = null;
         eventSource.onerror = null;
         eventSource.close();
+      }
+      if (sseAbortController) {
+        try { sseAbortController.abort(); } catch (_) {}
       }
       if (websocket) {
         websocket.onopen = null;
