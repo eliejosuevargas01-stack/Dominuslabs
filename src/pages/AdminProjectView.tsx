@@ -62,15 +62,54 @@ const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 const API_BASE_URL = API_BASE;
 
+export interface ProjectDTO {
+  id?: number | string;
+  name: string;
+  client_name: string;
+  description: string;
+  project_type: string;
+  value: number | string;
+  status: string;
+  github_url: string;
+  deploy_url: string;
+  public_token?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AssetDTO {
+  id: number | string;
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  file_type: string;
+}
+
+export interface CommitDTO {
+  id: number | string;
+  author: string;
+  commit_hash: string;
+  message: string;
+  commit_date: string;
+}
+
+export interface DeployDTO {
+  id: number | string;
+  provider: string;
+  status: string;
+  deploy_url?: string;
+  deploy_date: string;
+}
+
 export default function AdminProjectView() {
   const isViewer = getUserRole() === 'viewer';
   const isAdmin = getUserRole() === 'admin';
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [project, setProject] = useState<any>(null);
-  const [assets, setAssets] = useState<any[]>([]);
-  const [commits, setCommits] = useState<any[]>([]);
-  const [deploys, setDeploys] = useState<any[]>([]);
+  const [project, setProject] = useState<ProjectDTO | null>(null);
+  const [assets, setAssets] = useState<AssetDTO[]>([]);
+  const [commits, setCommits] = useState<CommitDTO[]>([]);
+  const [deploys, setDeploys] = useState<DeployDTO[]>([]);
   const [progress, setProgress] = useState(0);
   
   const [loading, setLoading] = useState(true);
