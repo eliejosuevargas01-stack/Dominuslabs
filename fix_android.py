@@ -67,7 +67,7 @@ with open(fcm_file, "r") as f:
     fcm_code = f.read()
 
 # Fix 3: FLAG_MUTABLE -> FLAG_IMMUTABLE
-fcm_code = fcm_code.replace("PendingIntent.FLAG_MUTABLE", "PendingIntent.FLAG_IMMUTABLE")
+fcm_code = fcm_code.replace("PendingIntent.FLAG_MUTABLE", "if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else PendingIntent.FLAG_UPDATE_CURRENT")
 with open(fcm_file, "w") as f:
     fcm_code = fcm_code.replace("import android.app.PendingIntent", "import android.app.PendingIntent\nimport android.os.Build")
     f.write(fcm_code)
