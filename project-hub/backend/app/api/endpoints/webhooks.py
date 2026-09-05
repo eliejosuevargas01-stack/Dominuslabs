@@ -886,7 +886,7 @@ async def waha_session_status_webhook(request: Request):
     inner_payload = payload.get("payload", {})
     status = inner_payload.get("status", "").upper() if isinstance(inner_payload, dict) else ""
     event_tenant_id = (inner_payload.get("tenant_id") if isinstance(inner_payload, dict) else None) or payload.get("tenant_id") or "default"
-    if event_type == "session.status" and status in ["STOPPED", "FAILED", "DISCONNECTED", "UNPAIRED", "TIMEOUT"]:
+    if event_type == "session.status" and status in {"STOPPED", "FAILED", "DISCONNECTED", "UNPAIRED", "TIMEOUT"}:
         # Broadcast to all CRM chat listeners of matching tenant that a session has disconnected
         msg = json.dumps({
             "action": "session_disconnected",
