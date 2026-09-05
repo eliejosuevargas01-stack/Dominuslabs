@@ -12,3 +12,4 @@ cachetools
 slowapi
 cryptography
 python-jose
+alembic
