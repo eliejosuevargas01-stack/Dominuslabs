@@ -8,16 +8,14 @@ Fluxo final de envio:
 4. Transmite a requisição para a WhatsApp API via mTLS com o cabeçalho `Authorization: Bearer <JWT>`.
 5. A WhatsApp API valida mTLS + JWT + Tenant Lock + executa a ação.
 """
+
 import logging
-import httpx
 from cachetools import TTLCache
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
 
 from app.core.config import settings
 from app.models.user import User
-from app.models.whatsapp_account import WhatsappAccount
-from app.services.identity_service import get_m2m_jwt, invalidate_m2m_token
+from app.services.identity_service import get_m2m_jwt
 
 logger = logging.getLogger("whatsapp")
 
@@ -70,7 +68,9 @@ async def check_token_validity(token: str) -> bool:
         return False
 
 
-async def get_oauth_token(user: User, db: Session, scope: str = "whatsapp:sessions:read") -> str:
+async def get_oauth_token(
+    user: User, db: Session, scope: str = "whatsapp:sessions:read"
+) -> str:
     """
     Obtém o JWT M2M do Identity Worker para o tenant do usuário.
     """
@@ -89,7 +89,7 @@ async def send_whatsapp_message(
     db: Session,
     to_phone: str,
     message_text: str,
-    session_id: str | None = None
+    session_id: str | None = None,
 ) -> dict:
     """
     Executa o envio DIRETO de mensagem WhatsApp utilizando mTLS + JWT sem n8n:
@@ -102,15 +102,13 @@ async def send_whatsapp_message(
     target_session = session_id or user.preferred_session_id or "default"
 
     from app.api.endpoints.whatsapp import make_whatsapp_api_request
+
     clean_path = f"/api/sessions/{target_session}/messages/send"
-    payload = {
-        "number": to_phone,
-        "message": message_text
-    }
+    payload = {"number": to_phone, "message": message_text}
     headers = {
         "x-session-token": jwt_token,
         "x-tenant-id": tenant_id,
-        "Authorization": f"Bearer {jwt_token}"
+        "Authorization": f"Bearer {jwt_token}",
     }
 
     logger.info(
@@ -119,9 +117,5 @@ async def send_whatsapp_message(
     )
 
     return await make_whatsapp_api_request(
-        "POST",
-        clean_path,
-        headers=headers,
-        json_data=payload,
-        timeout=15.0
+        "POST", clean_path, headers=headers, json_data=payload, timeout=15.0
     )
