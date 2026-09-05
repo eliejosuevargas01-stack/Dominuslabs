@@ -954,7 +954,7 @@ async def n8n_outbound_whatsapp_send(
         json_data["media"] = media
         
     for k, v in payload.items():
-        if k not in ["phone", "number", "message", "text", "session_id", "tenant_id", "jid", "contact_jid", "master_api_key", "x_master_api_key", "base64_content", "media", "mimeType", "fileName", "kind"]:
+        if k not in {"phone", "number", "message", "text", "session_id", "tenant_id", "jid", "contact_jid", "master_api_key", "x_master_api_key", "base64_content", "media", "mimeType", "fileName", "kind"}:
             json_data[k] = v
 
     res = await make_whatsapp_api_request(
