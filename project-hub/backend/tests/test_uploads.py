@@ -86,3 +86,22 @@ def test_get_uploaded_file(mock_file_response, mock_exists, client: TestClient):
 def test_get_uploaded_file_not_found(client: TestClient):
     response = client.get(f"{settings.API_V1_STR}/uploads/images/nonexistent.png")
     assert response.status_code == 404
+
+@patch("app.api.endpoints.uploads.os.makedirs")
+@patch("app.api.endpoints.uploads.shutil.copyfileobj")
+@patch("app.api.endpoints.uploads.os.path.getsize")
+def test_upload_file_path_traversal_sanitization(mock_getsize, mock_copy, mock_makedirs, client: TestClient, auth_headers: dict, test_project):
+    mock_getsize.return_value = 1024
+
+    file_content = b"fake data"
+    # Provide a filename with path traversal characters
+    files = {"file": ("../../../etc/passwd", file_content, "text/plain")}
+    data = {"project_id": test_project.id}
+
+    with patch("builtins.open", mock_open()):
+        response = client.post(f"{settings.API_V1_STR}/uploads/", files=files, data=data, headers=auth_headers)
+
+    assert response.status_code == 200
+    res_data = response.json()
+    assert "passwd" in res_data["file_name"]
+    assert "../" not in res_data["file_name"]

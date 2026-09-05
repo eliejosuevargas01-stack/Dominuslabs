@@ -58,7 +58,8 @@ def upload_file(
     subfolder = get_upload_subfolder(file_type)
 
     # Generate unique filename
-    ext = os.path.splitext(file.filename)[1] if file.filename else ""
+    safe_filename = os.path.basename(file.filename.replace("\\", "/")) if file.filename else ""
+    ext = os.path.splitext(safe_filename)[1] if safe_filename else ""
     filename = f"{uuid.uuid4()}{ext}"
 
     folder_path = os.path.join(settings.UPLOAD_DIR, subfolder)
@@ -75,7 +76,7 @@ def upload_file(
 
     asset_in = ProjectAssetCreate(
         project_id=project_id,
-        file_name=file.filename or filename,
+        file_name=safe_filename or filename,
         file_type=subfolder,
         file_path=relative_path,
         file_size=file_size

@@ -104,3 +104,31 @@ def test_upload_product_media_invalid_type(client: TestClient, auth_headers: dic
 
     assert response.status_code == 400
     assert "supported" in response.json()["detail"].lower()
+
+@patch("app.api.endpoints.product_media.os.makedirs")
+@patch("app.api.endpoints.product_media.shutil.copyfileobj")
+def test_upload_product_media_path_traversal_sanitization(mock_copy, mock_makedirs, client: TestClient, auth_headers: dict):
+    mock_db = MagicMock()
+    def mock_refresh(obj):
+        obj.id = 3
+    mock_db.refresh.side_effect = mock_refresh
+
+    from app.main import app
+    from app.core.database import get_db
+    app.dependency_overrides[get_db] = override_get_db(mock_db)
+    app.dependency_overrides[check_crm_permission] = lambda: True
+
+    file_content = b"fake image data"
+    # Provide a filename with path traversal characters
+    files = {"file": ("../../../etc/malicious.png", file_content, "image/png")}
+    data = {"product_id": "c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a44", "tenant_id": "test_tenant"}
+
+    with patch("builtins.open", mock_open()):
+        response = client.post(f"{settings.API_V1_STR}/product-media/", files=files, data=data, headers=auth_headers)
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    res_data = response.json()
+    assert ".png" in res_data["media_url"]
+    assert "../" not in res_data["media_url"]

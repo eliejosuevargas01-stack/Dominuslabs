@@ -42,7 +42,8 @@ def upload_product_media(
     else:
         raise HTTPException(status_code=400, detail="Only images and videos are supported")
 
-    ext = os.path.splitext(file.filename)[1] if file.filename else ""
+    safe_filename = os.path.basename(file.filename.replace("\\", "/")) if file.filename else ""
+    ext = os.path.splitext(safe_filename)[1] if safe_filename else ""
     filename = f"prod_{uuid.uuid4()}{ext}"
     
     folder_path = os.path.join(settings.UPLOAD_DIR, "products")
