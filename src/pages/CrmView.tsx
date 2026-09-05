@@ -410,9 +410,11 @@ export default function CrmView() {
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <button
                       type="button"
+                      aria-label="Página anterior"
+                      title="Página anterior"
                       onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                       disabled={currentPage === 1}
-                      className="p-2 rounded-xl border border-zinc-200  hover:bg-purple-50 text-zinc-600 disabled:opacity-40 disabled:hover: transition-all cursor-pointer flex items-center justify-center"
+                      className="p-2 rounded-xl border border-zinc-200 hover:bg-purple-50 text-zinc-600 disabled:opacity-40 disabled:hover:bg-transparent transition-all cursor-pointer flex items-center justify-center focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:outline-none"
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
@@ -436,11 +438,13 @@ export default function CrmView() {
                         <button
                           key={page}
                           type="button"
+                          aria-label={`Ir para a página ${page}`}
+                          aria-current={isCurrent ? 'page' : undefined}
                           onClick={() => setCurrentPage(page)}
-                          className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                          className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:outline-none ${
                             isCurrent
                               ? 'border-purple-600 bg-purple-600 text-white shadow-md shadow-purple-200'
-                              : 'border-zinc-200  hover:bg-purple-50 text-zinc-600'
+                              : 'border-zinc-200 hover:bg-purple-50 text-zinc-600'
                           }`}
                         >
                           {page}
@@ -450,9 +454,11 @@ export default function CrmView() {
 
                     <button
                       type="button"
+                      aria-label="Próxima página"
+                      title="Próxima página"
                       onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                       disabled={currentPage === totalPages}
-                      className="p-2 rounded-xl border border-zinc-200  hover:bg-purple-50 text-zinc-600 disabled:opacity-40 disabled:hover: transition-all cursor-pointer flex items-center justify-center"
+                      className="p-2 rounded-xl border border-zinc-200 hover:bg-purple-50 text-zinc-600 disabled:opacity-40 disabled:hover:bg-transparent transition-all cursor-pointer flex items-center justify-center focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:outline-none"
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>
