@@ -86,3 +86,22 @@ def test_get_uploaded_file(mock_file_response, mock_exists, client: TestClient):
 def test_get_uploaded_file_not_found(client: TestClient):
     response = client.get(f"{settings.API_V1_STR}/uploads/images/nonexistent.png")
     assert response.status_code == 404
+
+def test_path_traversal_validation(client: TestClient):
+    # In FastAPI TestClient, url parsing might swallow the .. if not careful,
+    # but since our router captures {subfolder}/{filename}, if we pass '..' as subfolder it should hit.
+    # Note that URL paths with .. are usually resolved by the client before being sent.
+    # To test the regex validation, we can just send something with a character not allowed.
+
+    response = client.get(f"{settings.API_V1_STR}/uploads/images/../../etc/passwd")
+    # If the client resolves it, it might result in 404. Let's just test characters that fail regex.
+    assert response.status_code in (404, 400) # Accept 404 because testclient strips path
+
+    response = client.get(f"{settings.API_V1_STR}/uploads/images/test%20file.png")
+    # %20 becomes space, which is not in our regex [a-zA-Z0-9_.-]
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid file name"}
+
+    response2 = client.get(f"{settings.API_V1_STR}/uploads/images!/test.png")
+    assert response2.status_code == 400
+    assert response2.json() == {"detail": "Invalid subfolder name"}

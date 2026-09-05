@@ -5,6 +5,7 @@ O que faz: Implementa a lógica estrutural e funcional para o endpoint de API pa
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para uploads funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
 import os
+import re
 import shutil
 import uuid
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
@@ -91,10 +92,18 @@ def get_uploaded_file(subfolder: str, filename: str):
     O que faz: Recuperação de dados cadastrados para get_uploaded_file recebendo os parâmetros (subfolder, filename) no contexto de o endpoint de API para uploads.
     Impacto na regra de negócio: Assegura que o fluxo da operação get_uploaded_file seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
+    if not re.match(r"^[a-zA-Z0-9_-]+$", subfolder):
+        raise HTTPException(status_code=400, detail="Invalid subfolder name")
+
+    if not re.match(r"^[a-zA-Z0-9_.-]+$", filename):
+        raise HTTPException(status_code=400, detail="Invalid file name")
+
     base_dir = os.path.realpath(settings.UPLOAD_DIR)
     target_path = os.path.realpath(os.path.join(base_dir, subfolder, filename))
+
     if not target_path.startswith(base_dir + os.sep) and target_path != base_dir:
         raise HTTPException(status_code=403, detail="Acesso negado")
+
     if not os.path.exists(target_path) or not os.path.isfile(target_path):
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
     return FileResponse(target_path)
