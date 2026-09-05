@@ -39,7 +39,7 @@ class EncryptedAsyncClient(httpx.AsyncClient):
         Impacto na regra de negócio: Assegura que o fluxo da operação request seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         # Intercepta POST, PUT, PATCH se houver JSON no kwargs
-        if method.upper() in ["POST", "PUT", "PATCH"]:
+        if method.upper() in {"POST", "PUT", "PATCH"}:
             if "json" in kwargs and kwargs["json"] is not None:
                 if self.service_name == "whatsapp":
                     logger.debug(f"[Zero-Trust] Bypass de criptografia para {self.service_name} (chaves RSA não configuradas no destino)")
