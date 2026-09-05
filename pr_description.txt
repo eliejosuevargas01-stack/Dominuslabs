@@ -1,7 +1,11 @@
-🔒 Fix token exposure in fetch query parameters
+🎯 **What:** The testing gap addressed was the missing test file for the `TaskChecklist` component (`src/components/TaskChecklist.tsx`), leaving the component's API interactions, optimistic UI updates, and permission-based rendering untested.
 
-🎯 **What:** Moved the authentication token from the URL query parameters to the `Authorization` header in the `fetch` requests within `OrderManagerView.tsx`.
+📊 **Coverage:** The new test file (`TaskChecklist.test.tsx`) covers:
+- Loading state visualization
+- Successful task rendering (including Github completed tasks)
+- Empty state rendering
+- Admin permissions (successfully adding and toggling tasks)
+- Non-admin restrictions (cannot see add form, cannot toggle tasks)
+- Error handling (graceful toast and error messages when API calls fail)
 
-⚠️ **Risk:** Including tokens in URL query strings is a security vulnerability. URLs (including query strings) are often logged by servers, proxies, and potentially saved in browser histories. If an attacker gains access to these logs, they can extract the token and impersonate the user, compromising the system.
-
-🛡️ **Solution:** Replaced the `?token=` parameter with the secure `Authorization: Bearer <token>` HTTP header when performing REST API calls (`/accept` and `/status`). The WebSocket connection remains unchanged as standard browser WebSockets do not support custom headers and must use query string parameters for authentication.
+✨ **Result:** A robust suite of 12 tests using `vitest` and `@testing-library/react` providing 100% conceptual coverage of the `TaskChecklist` component's behaviors, allowing for confident future refactoring and guaranteeing reliable functionality.
