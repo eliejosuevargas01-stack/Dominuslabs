@@ -1,0 +1,5 @@
+🎯 What: Fixed a path traversal vulnerability in the file download endpoint by explicitly validating the `subfolder` and `filename` parameters using strict alphanumeric and extension regex patterns.
+
+⚠️ Risk: The endpoint was directly passing user input (`subfolder` and `filename`) to `os.path.join`, relying on a potentially flawed `startswith` evaluation. This could have allowed an attacker to read arbitrary files by navigating outside the upload directory using relative paths (e.g., `../../etc/passwd`).
+
+🛡️ Solution: Implemented regex validation for `subfolder` (`r"^[a-zA-Z0-9_-]+$"`) and `filename` (`r"^[a-zA-Z0-9_.-]+$"` and ensuring `..` is not in the filename). If invalid inputs are provided, the endpoint immediately returns a 400 Bad Request error. The existing `realpath` and `startswith` checks have been preserved as a defense-in-depth measure. Also added tests to verify that invalid paths are caught by these validations.

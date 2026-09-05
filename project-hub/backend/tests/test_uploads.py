@@ -86,3 +86,19 @@ def test_get_uploaded_file(mock_file_response, mock_exists, client: TestClient):
 def test_get_uploaded_file_not_found(client: TestClient):
     response = client.get(f"{settings.API_V1_STR}/uploads/images/nonexistent.png")
     assert response.status_code == 404
+
+def test_get_uploaded_file_path_traversal_subfolder(client: TestClient):
+    response = client.get(f"{settings.API_V1_STR}/uploads/images/..test.png")
+    assert response.status_code == 400
+
+def test_get_uploaded_file_path_traversal_filename(client: TestClient):
+    response = client.get(f"{settings.API_V1_STR}/uploads/images/test..png")
+    assert response.status_code == 400
+
+def test_get_uploaded_file_invalid_subfolder(client: TestClient):
+    response = client.get(f"{settings.API_V1_STR}/uploads/images!/test.png")
+    assert response.status_code == 400
+
+def test_get_uploaded_file_invalid_filename(client: TestClient):
+    response = client.get(f"{settings.API_V1_STR}/uploads/images/test*.png")
+    assert response.status_code == 400
