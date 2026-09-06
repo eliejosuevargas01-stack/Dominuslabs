@@ -43,9 +43,6 @@ export default function Login() {
       if (data.refresh_token) {
         localStorage.setItem("admin_refresh_token", data.refresh_token);
       }
-      if (data.whatsapp_token) {
-        localStorage.setItem("whatsapp_token", data.whatsapp_token);
-      }
       navigate('/project-hub');
       toast.success('Login efetuado com sucesso!');
     } catch (err: unknown) {

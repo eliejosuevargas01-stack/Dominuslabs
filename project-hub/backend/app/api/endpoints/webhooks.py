@@ -981,19 +981,12 @@ async def n8n_outbound_whatsapp_send(
     cleaned_phone = "".join(filter(str.isdigit, str(phone)))
     final_jid = phone if "@" in str(phone) else f"{cleaned_phone}@s.whatsapp.net"
     
-    from app.api.endpoints.whatsapp import make_whatsapp_api_request
-    from app.services.identity_service import get_m2m_jwt
+    from app.services.whatsapp_client import whatsapp_client
     
     tenant_id = payload.get("tenant_id") or getattr(settings, "ADMIN_TENANT_ID", "admin") or "admin"
-    jwt_token = await get_m2m_jwt(tenant_id=tenant_id, scope="whatsapp:messages:send")
-    
-    headers = {
-        "X-Master-API-Key": settings.WHATSAPP_MASTER_SECRET,
-        "x-tenant-id": tenant_id,
-        "x-session-token": jwt_token,
-        "Authorization": f"Bearer {jwt_token}"
-    }
-    
+    session_id = payload.get("session_id") or "default_session"
+
+
     json_data = {
         "phone": cleaned_phone,
         "number": cleaned_phone,
@@ -1009,12 +1002,11 @@ async def n8n_outbound_whatsapp_send(
         if k not in ["phone", "number", "message", "text", "session_id", "tenant_id", "jid", "contact_jid", "master_api_key", "x_master_api_key", "base64_content", "media", "mimeType", "fileName", "kind"]:
             json_data[k] = v
 
-    res = await make_whatsapp_api_request(
-        "POST",
-        f"/api/sessions/{session_id}/messages/send",
-        headers=headers,
-        json_data=json_data,
-        timeout=30.0
+    res = await whatsapp_client.send_message(
+        tenant_id=tenant_id,
+        session_id=session_id,
+        message_data=json_data
     )
     
     return JSONResponse(status_code=200, content=res)
+

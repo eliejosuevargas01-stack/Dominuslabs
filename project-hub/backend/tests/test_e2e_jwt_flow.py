@@ -46,7 +46,7 @@ async def test_full_m2m_flow():
         wa_account = WhatsappAccount(
             user_id=user.id,
             tenant_id=user.tenant_id,
-            idpw="test_session_id"
+            session_id="test_session_id"
         )
         db.add(wa_account)
         db.commit()
@@ -66,25 +66,29 @@ async def test_full_m2m_flow():
             algorithm="HS256"
         )
 
-        async def mock_post(url, json=None, headers=None):
+        async def mock_post(url, **kwargs):
             if "tokens" in url:
                 return httpx.Response(200, json={"access_token": fake_jwt, "expires_in": 300})
             elif "messages/send" in url:
                 return httpx.Response(200, json={"status": "success", "message_id": f"msg_{user.tenant_id}"})
             return httpx.Response(404, json={"detail": "Not found"})
 
+
         mock_client_instance = AsyncMock()
         mock_client_instance.post = mock_post
-        mock_client_instance.request = AsyncMock(side_effect=lambda method, url, **kwargs: mock_post(url, **kwargs))
 
-        with patch("app.services.identity_service.get_async_client") as mock_async_client, \
-             patch("app.api.endpoints.whatsapp.get_async_client", create=True) as mock_async_client_wa, \
-             patch("app.api.endpoints.whatsapp.make_whatsapp_api_request", new_callable=AsyncMock) as mock_make_request:
+        async def mock_request(method, url, **kwargs):
+            return await mock_post(url, **kwargs)
 
-            mock_make_request.return_value = {"status": "success", "message_id": f"msg_{user.tenant_id}"}
-            
+        mock_client_instance.request = mock_request
+
+
+        with patch("app.services.identity_client.get_async_client") as mock_async_client, \
+             patch("app.services.whatsapp_client.get_async_client") as mock_async_client_wa:
+
             mock_async_client.return_value.__aenter__.return_value = mock_client_instance
             mock_async_client_wa.return_value.__aenter__.return_value = mock_client_instance
+
 
             # 3. Solicitação do JWT M2M ao Identity Worker
             scope = "whatsapp:messages:send"

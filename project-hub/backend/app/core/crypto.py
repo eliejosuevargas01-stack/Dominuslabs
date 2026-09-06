@@ -218,3 +218,31 @@ def decrypt_payload(encrypted_data: Any) -> Any:
     except Exception as e:
         logger.error(f"Error decrypting payload: {e}")
         raise ValueError(f"Decryption failed: {e}")
+
+
+def sign_payload(payload_dict: Dict[str, Any]) -> str:
+    """
+    Assina digitalmente um payload JSON utilizando a chave privada do Dominus (DOMINUS_PRIVATE_KEY) via RSA-SHA256 (RS256).
+    Retorna a assinatura codificada em Base64.
+    """
+    private_key_pem = clean_pem(settings.DOMINUS_PRIVATE_KEY)
+    if not private_key_pem:
+        logger.warning("DOMINUS_PRIVATE_KEY não configurada. Assinatura vazia gerada.")
+        return ""
+    try:
+        try:
+            private_key = load_pem_private_key(private_key_pem, password=None)
+        except Exception:
+            from cryptography.hazmat.primitives.serialization import load_ssh_private_key
+            private_key = load_ssh_private_key(private_key_pem, password=None)
+
+        canonical_bytes = json.dumps(payload_dict, sort_keys=True, separators=(',', ':')).encode('utf-8')
+        signature = private_key.sign(
+            canonical_bytes,
+            padding.PKCS1v15(),
+            hashes.SHA256()
+        )
+        return base64.b64encode(signature).decode('utf-8')
+    except Exception as e:
+        logger.error(f"Erro ao assinar payload digitalmente: {e}")
+        raise e

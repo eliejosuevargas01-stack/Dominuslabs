@@ -108,7 +108,6 @@ def anonymize_my_data(
     anonymous_id = str(uuid.uuid4())
     user.email = f"anonymized_{anonymous_id}@deleted.local"
     user.hashed_password = "DELETED_VIA_GDPR"
-    user.whatsapp_token = None
     user.access_token = None
     user.refresh_token = None
     user.role = "anonymized"

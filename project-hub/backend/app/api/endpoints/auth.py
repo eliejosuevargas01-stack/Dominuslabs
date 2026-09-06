@@ -85,10 +85,6 @@ def login(
     logger.info("[FLOW-STEP 1] User logged in successfully")
     print("[FLOW-STEP 1] User logged in successfully", flush=True)
 
-    # Garante whatsapp_token local
-    if not user.whatsapp_token:
-        user.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
-
     token_data = _build_token_data(user)
     access_token = create_access_token(data=token_data, expires_in=3600)
     refresh_token = create_refresh_token(data=token_data, expires_in=604800)
@@ -107,7 +103,6 @@ def login(
         "token_type": "bearer",
         "expires_in": 3600,
         "reauth_at_seconds": 3599,
-        "whatsapp_token": user.whatsapp_token,
     }
 
 
@@ -124,9 +119,6 @@ def refresh(
     user = db.query(User).filter(User.email == email).first()
     if not user:
         raise HTTPException(status_code=401, detail="Usuário não encontrado.")
-    if not user.whatsapp_token:
-        user.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
-
     token_data = _build_token_data(user)
     new_access_token = create_access_token(data=token_data, expires_in=3600)
     new_refresh_token = create_refresh_token(data=token_data, expires_in=604800)
@@ -145,5 +137,4 @@ def refresh(
         "token_type": "bearer",
         "expires_in": 3600,
         "reauth_at_seconds": 3599,
-        "whatsapp_token": user.whatsapp_token,
     }

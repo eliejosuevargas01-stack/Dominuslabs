@@ -45,7 +45,6 @@ export function decodeJwtExp(token: string): number | null {
 export function handleExpiredSessionRedirect() {
   localStorage.removeItem("admin_token");
   localStorage.removeItem("admin_refresh_token");
-  localStorage.removeItem("whatsapp_token");
   if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
     window.location.href = "/login";
   }
@@ -79,9 +78,6 @@ export async function refreshAuthTokenSilently(): Promise<string | null> {
           localStorage.setItem("admin_token", data.access_token);
           if (data.refresh_token) {
             localStorage.setItem("admin_refresh_token", data.refresh_token);
-          }
-          if (data.whatsapp_token) {
-            localStorage.setItem("whatsapp_token", data.whatsapp_token);
           }
           console.log("[SILENT-REAUTH] ✅ Token renovado com sucesso por baixo dos panos!");
           window.dispatchEvent(new CustomEvent("token_refreshed", { detail: { token: data.access_token } }));

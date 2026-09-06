@@ -1,69 +1,54 @@
 """
-Documentação do módulo whatsapp.py.
+WhatsApp API Endpoints — Dominus Controlador de Negócio
 
-O que faz: Implementa a lógica estrutural e funcional para o endpoint de API para whatsapp.
-Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para whatsapp funcionem corretamente e mantenham a integridade dos dados da aplicação.
+Princípios:
+1. Autentica usuários finais através de Bearer JWT do Dominus.
+2. Resolve o tenant (`tenant_id`) a partir do usuário autenticado.
+3. Aplica permissões internas e valida ownership estrito (`user.tenant_id == whatsapp_account.tenant_id`).
+   Nenhum fallback: admin, default, null.
+4. Toda a comunicação com a Whats API é delegada ao WhatsAppClient interno.
+5. O browser nunca conhece credenciais M2M ou o endereço interno da Whats API.
 """
-from fastapi.concurrency import run_in_threadpool
+import logging
+from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException, status, Body, Query, Request
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
-import httpx
-from typing import Optional, Dict, Any
-from jose import jwt, JWTError
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.auth import get_current_user, check_crm_permission
+from app.core.auth import get_current_user, check_crm_permission, decode_access_token
 from app.models.user import User
 from app.models.whatsapp_account import WhatsappAccount
-import logging
-from app.core.http_client import get_async_client
+from app.services.whatsapp_client import whatsapp_client
+from app.services.identity_client import identity_client
+from app.services.whatsapp_service import resolve_owned_whatsapp_session, get_tenant_id_for_user
 
-logger = logging.getLogger("whatsapp")
+logger = logging.getLogger("whatsapp_endpoints")
 router = APIRouter()
 
-async def get_user_m2m_headers(email: str, db: Session, scope: str = "whatsapp:sessions:read") -> Dict[str, str]:
-    """
-    Função/Método get_user_m2m_headers.
 
-    O que faz: Recuperação de dados cadastrados para get_user_m2m_headers recebendo os parâmetros (email, db, scope) no contexto de o endpoint de API para whatsapp.
-    Impacto na regra de negócio: Assegura que o fluxo da operação get_user_m2m_headers seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-    """
-    user = await run_in_threadpool(lambda: db.query(User).filter(User.email == email).first())
+# =============================================================================
+# Shims de compatibilidade (para código legado ou testes unitários)
+# =============================================================================
+
+async def get_user_m2m_headers(email: str, db: Session, scope: str = "whatsapp:sessions:read") -> Dict[str, str]:
+    """Obtém cabeçalhos M2M delegando para o IdentityClient."""
+    user = db.query(User).filter(User.email == email).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuário não encontrado."
-        )
-    from app.services.whatsapp_service import get_oauth_token, get_tenant_id_for_user
-    try:
-        tenant_id = await get_tenant_id_for_user(user, db)
-        token = await get_oauth_token(user, db, scope=scope)
-        headers = {
-            "x-session-token": token,
-            "x-tenant-id": tenant_id,
-            "Authorization": f"Bearer {token}"
-        }
-        if getattr(settings, "WHATSAPP_MASTER_SECRET", None):
-            headers["X-Master-API-Key"] = settings.WHATSAPP_MASTER_SECRET
-        return headers
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_412_PRECONDITION_FAILED,
-            detail=f"WhatsApp não vinculado. {str(e)}"
-        )
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    tenant_id = await get_tenant_id_for_user(user, db)
+    token = await identity_client.get_token(tenant_id=tenant_id, scope=scope, aud="whatsapp-api")
+    return {
+        "Authorization": f"Bearer {token}"
+    }
+
 
 async def get_user_token(email: str, db: Session, scope: str = "whatsapp:sessions:read") -> str:
-    """
-    Função/Método get_user_token.
-
-    O que faz: Recuperação de dados cadastrados para get_user_token recebendo os parâmetros (email, db, scope) no contexto de o endpoint de API para whatsapp.
-    Impacto na regra de negócio: Assegura que o fluxo da operação get_user_token seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-    """
+    """Obtém token M2M para o usuário."""
     headers = await get_user_m2m_headers(email, db, scope=scope)
-    return headers.get("x-session-token", "")
+    return headers.get("Authorization", "").replace("Bearer ", "")
+
 
 async def make_whatsapp_api_request(
     method: str,
@@ -72,326 +57,35 @@ async def make_whatsapp_api_request(
     json_data: Optional[Dict[str, Any]] = None,
     timeout: float = 15.0
 ) -> Any:
-    """
-    Função/Método make_whatsapp_api_request.
-
-    O que faz: Processa make_whatsapp_api_request recebendo os parâmetros (method, path, headers, json_data, timeout) no contexto de o endpoint de API para whatsapp.
-    Impacto na regra de negócio: Assegura que o fluxo da operação make_whatsapp_api_request seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-    """
-    clean_path = path if path.startswith("/") else f"/{path}"
-    base_url = settings.WHATSAPP_API_URL.rstrip("/")
-    if base_url.startswith("http://") and ":3000" in base_url:
-        base_url = base_url.replace("http://", "https://", 1)
-    
-    import urllib.parse, socket, asyncio
-    parsed = urllib.parse.urlparse(base_url)
-    is_resolvable = False
-    if parsed.hostname:
-        try:
-            await asyncio.get_running_loop().getaddrinfo(parsed.hostname, None)
-            is_resolvable = True
-        except Exception:
-            is_resolvable = False
-
-    if not is_resolvable:
-        logger.error(f"[make_whatsapp_api_request] Não foi possível resolver o hostname '{parsed.hostname}'.")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Não foi possível resolver o endereço da API de WhatsApp."
-        )
-
-    url = f"{base_url}{clean_path}"
-
-    req_headers = dict(headers) if headers else {}
-    tenant_id = req_headers.get("x-tenant-id")
+    tenant_id = (headers or {}).get("x-tenant-id") or ""
     if not tenant_id:
-        logger.error("[make_whatsapp_api_request] Chamada à Whats API sem x-tenant-id explícito. Operação fail-closed.")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acesso negado: x-tenant-id obrigatório para chamadas à Whats API."
-        )
+        auth_hdr = (headers or {}).get("Authorization", "")
+        if auth_hdr.startswith("Bearer "):
+            t = auth_hdr[7:].strip()
+            from app.core.auth import decode_access_token
+            p = decode_access_token(t)
+            if p and p.get("tenant_id"):
+                tenant_id = p["tenant_id"]
+    if "messages" in path or "send" in path:
+        scope = "whatsapp:messages:send"
+    elif method.upper() in ("POST", "PUT", "DELETE"):
+        scope = "whatsapp:sessions:write"
+    else:
+        scope = "whatsapp:sessions:read"
 
-    if "x-session-token" in req_headers:
-        token = req_headers["x-session-token"]
-        if "Authorization" not in req_headers and token:
-            req_headers["Authorization"] = f"Bearer {token}"
-    if "Authorization" not in req_headers or not req_headers.get("Authorization"):
-        try:
-            from app.services.identity_service import get_m2m_jwt
-            if "messages" in clean_path or "send" in clean_path:
-                scope = "whatsapp:messages:send"
-            elif method.upper() in ("POST", "PUT", "DELETE", "PATCH"):
-                scope = "whatsapp:sessions:write"
-            else:
-                scope = "whatsapp:sessions:read"
-            token = await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
-            if token:
-                req_headers["x-session-token"] = token
-                req_headers["Authorization"] = f"Bearer {token}"
-                req_headers["x-tenant-id"] = tenant_id
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.warning(f"[make_whatsapp_api_request] Não foi possível obter JWT M2M do Identity Provider: {e}")
-
-    # Always include the Master API Key if configured (read from settings, never hardcoded)
-    if "X-Master-API-Key" not in req_headers:
-        master_secret = getattr(settings, "WHATSAPP_MASTER_SECRET", None)
-        if master_secret and master_secret != "default_master_secret":
-            req_headers["X-Master-API-Key"] = master_secret
-
-    MAX_RETRIES = 3
-    RETRY_DELAY = 1.0
-
-    async with get_async_client(timeout=timeout, service_name="whatsapp") as client:
-        last_exception = None
-        response = None
-        for attempt in range(MAX_RETRIES):
-            try:
-                response = await client.request(
-                    method,
-                    url,
-                    headers=req_headers,
-                    json=json_data
-                )
-                if response.status_code not in (502, 503, 504, 408):
-                    break
-                else:
-                    logger.warning(f"WhatsApp API returned {response.status_code}. Retrying {attempt+1}/{MAX_RETRIES}...")
-                    import asyncio
-                    await asyncio.sleep(RETRY_DELAY * (2 ** attempt))
-            except Exception as e:
-                last_exception = e
-                logger.warning(f"WhatsApp API request failed: {e}. Retrying {attempt+1}/{MAX_RETRIES}...")
-                import asyncio
-                await asyncio.sleep(RETRY_DELAY * (2 ** attempt))
-        
-        if response is None:
-            logger.error(f"[FLOW-STEP 6] ERROR: WhatsApp API request failed ({last_exception})")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Falha de comunicação com WhatsApp API após retentativas: {str(last_exception)}"
-            )
-
-        if response.status_code >= 400:
-            logger.error(f"[FLOW-STEP 6] WhatsApp API returned error {response.status_code}: {response.text}")
-            try:
-                error_data = response.json()
-            except Exception:
-                error_data = {"detail": response.text}
-            raise HTTPException(
-                status_code=response.status_code,
-                detail=error_data.get("detail", error_data.get("message", "WhatsApp API error"))
-            )
-
-        content_type = response.headers.get("content-type", "")
-        if "application/json" in content_type:
-            return response.json()
-        elif "image/" in content_type or "audio/" in content_type or "video/" in content_type or "application/pdf" in content_type or "application/octet-stream" in content_type:
-            return {
-                "_is_binary": True,
-                "content": response.content,
-                "content_type": content_type
-            }
-        else:
-            try:
-                return response.json()
-            except Exception:
-                return response.text
-
-from fastapi.responses import RedirectResponse, Response, StreamingResponse
-
-@router.get("/sessions/{session_id}/avatar")
-async def get_session_avatar(
-    request: Request,
-    session_id: str,
-    jid: str,
-    token: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
-    """
-    Proxy de imagem de perfil de contato/grupo via HTTPS/TLS.
-    Evita erros de NS_BINDING_ABORTED e SSL em requisições cross-origin do navegador.
-    Aceita Authorization: Bearer ou parâmetro de consulta 'token'.
-    """
-    auth_header = request.headers.get("Authorization", "")
-    effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
-    if not effective_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token de autenticação inválido ou ausente."
-        )
-
-    try:
-        from app.core.auth import decode_access_token
-        payload = decode_access_token(effective_token) or jwt.decode(effective_token, settings.SECRET_KEY, algorithms=["HS256"])
-        sub = payload.get("sub") if payload else None
-        if not sub:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token de autenticação inválido ou ausente."
-            )
-        sub_str = str(sub)
-        if sub_str.isdigit():
-            user = db.query(User).filter((User.email == sub_str) | (User.id == int(sub_str))).first()
-        else:
-            user = db.query(User).filter(User.email == sub_str).first()
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Usuário não encontrado."
-            )
-        from app.services.whatsapp_service import resolve_owned_whatsapp_session
-        resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
-        user_headers = await get_user_m2m_headers(user.email, db)
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token de autenticação inválido ou ausente."
-        )
-
-    try:
-        clean_path = f"/api/sessions/{resolved_session}/avatar?jid={jid}&json=true"
-        res = await make_whatsapp_api_request(
-            "GET",
-            clean_path,
-            headers=user_headers
-        )
-        if isinstance(res, dict):
-            if res.get("_is_binary") and res.get("content"):
-                return Response(
-                    content=res["content"],
-                    media_type=res.get("content_type") or "image/jpeg",
-                    headers={
-                        "Access-Control-Allow-Origin": "*",
-                        "Cache-Control": "public, max-age=86400"
-                    }
-                )
-            url_target = res.get("url") or res.get("avatar_url") or res.get("profile_pic_url") or res.get("profile_url") or res.get("avatar")
-            if url_target and str(url_target).startswith("http"):
-                return RedirectResponse(
-                    url_target,
-                    status_code=302,
-                    headers={
-                        "Access-Control-Allow-Origin": "*",
-                        "Cache-Control": "public, max-age=86400"
-                    }
-                )
-    except Exception as e:
-        pass
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar não encontrado.")
-
-@router.get("/sessions/{session_id}/media")
-async def get_session_media(
-    request: Request,
-    session_id: str,
-    token: Optional[str] = Query(None),
-    messageId: Optional[str] = None,
-    message_id: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    """
-    Proxy de mídia (imagens, áudios, vídeos e documentos) da WhatsApp API via HTTPS/TLS.
-    Retorna o streaming de binário com o Content-Type correto usando StreamingResponse.
-    Aceita Authorization: Bearer ou parâmetro de consulta 'token'.
-    """
-    auth_header = request.headers.get("Authorization", "")
-    effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
-    if not effective_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token de autenticação inválido ou ausente."
-        )
-
-    try:
-        from app.core.auth import decode_access_token
-        payload = decode_access_token(effective_token) or jwt.decode(effective_token, settings.SECRET_KEY, algorithms=["HS256"])
-        sub = payload.get("sub") if payload else None
-        if not sub:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token de autenticação inválido ou ausente."
-            )
-        sub_str = str(sub)
-        if sub_str.isdigit():
-            user = db.query(User).filter((User.email == sub_str) | (User.id == int(sub_str))).first()
-        else:
-            user = db.query(User).filter(User.email == sub_str).first()
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Usuário não encontrado."
-            )
-        from app.services.whatsapp_service import resolve_owned_whatsapp_session
-        resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
-        user_headers = await get_user_m2m_headers(user.email, db)
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token de autenticação inválido ou ausente."
-        )
-
-    target_msg_id = messageId or message_id
-    if not target_msg_id:
-        raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
-
-    base_url = settings.WHATSAPP_API_URL.rstrip("/")
-    if base_url.startswith("http://") and ":3000" in base_url:
-        base_url = base_url.replace("http://", "https://", 1)
-
-    clean_path = f"/api/sessions/{resolved_session}/media?messageId={target_msg_id}"
-    url = f"{base_url}{clean_path}"
-
-    req_headers = dict(user_headers) if user_headers else {}
-    if "x-session-token" in req_headers:
-        token_val = req_headers["x-session-token"]
-        if "Authorization" not in req_headers and token_val:
-            req_headers["Authorization"] = f"Bearer {token_val}"
-
-    if "X-Master-API-Key" not in req_headers:
-        master_secret = getattr(settings, "WHATSAPP_MASTER_SECRET", None)
-        if master_secret and master_secret != "default_master_secret":
-            req_headers["X-Master-API-Key"] = master_secret
-
-    client = httpx.AsyncClient(timeout=60.0)
-    try:
-        req = client.build_request("GET", url, headers=req_headers)
-        response = await client.send(req, stream=True)
-    except Exception as e:
-        await client.aclose()
-        logger.error(f"[WA-MEDIA] Erro ao buscar mídia proxy para session={session_id}, msg={target_msg_id}: {e}")
-        raise HTTPException(status_code=502, detail="Falha ao conectar à API de WhatsApp.")
-
-    if response.status_code >= 400:
-        await response.aclose()
-        await client.aclose()
-        raise HTTPException(
-            status_code=response.status_code,
-            detail="Mídia não encontrada ou indisponível."
-        )
-
-    content_type = response.headers.get("content-type", "application/octet-stream")
-
-    async def media_stream():
-        try:
-            async for chunk in response.aiter_bytes():
-                yield chunk
-        finally:
-            await response.aclose()
-            await client.aclose()
-
-    return StreamingResponse(
-        content=media_stream(),
-        media_type=content_type,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "public, max-age=86400"
-        }
+    return await whatsapp_client._execute_request(
+        method=method,
+        path=path,
+        tenant_id=tenant_id,
+        scope=scope,
+        json_data=json_data,
+        timeout=timeout
     )
+
+
+# =============================================================================
+# Rotas Oficiais Dominus
+# =============================================================================
 
 @router.get("/sessions")
 async def list_sessions(
@@ -399,52 +93,70 @@ async def list_sessions(
     current_user: str = Depends(get_current_user)
 ):
     """
-    List all sessions (WhatsApp and Instagram) belonging to the authenticated user.
-    Auto-syncs positive tenant ownership for returned sessions so subsequent
-    lookups, connections and deletions work seamlessly without fail-closed 404s.
+    Lista sessões autorizadas do tenant.
+    Sincroniza contas retornadas na tabela local whatsapp_accounts.
+    Elimina qualquer sessão residual 'default'.
     """
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
 
-    from app.services.whatsapp_service import get_tenant_id_for_user
     tenant_id = await get_tenant_id_for_user(user, db)
+    sessions_data = await whatsapp_client.list_sessions(tenant_id=tenant_id)
 
-    headers = await get_user_m2m_headers(current_user, db)
-    sessions_data = await make_whatsapp_api_request(
-        "GET",
-        "/api/sessions",
-        headers=headers
-    )
+    filtered_items = []
+    return_data = sessions_data
+
+    if isinstance(sessions_data, list):
+        filtered_items = [
+            s for s in sessions_data
+            if isinstance(s, dict)
+            and str(s.get("id") or s.get("sessionId") or "").strip().lower() != "default"
+            and str(s.get("name") or "").strip().lower() != "default"
+        ]
+        return_data = filtered_items
+    elif isinstance(sessions_data, dict):
+        raw_list = sessions_data.get("sessions") or []
+        filtered_items = [
+            s for s in raw_list
+            if isinstance(s, dict)
+            and str(s.get("id") or s.get("sessionId") or "").strip().lower() != "default"
+            and str(s.get("name") or "").strip().lower() != "default"
+        ]
+        return_data = dict(sessions_data)
+        return_data["sessions"] = filtered_items
 
     try:
-        session_items = []
-        if isinstance(sessions_data, list):
-            session_items = sessions_data
-        elif isinstance(sessions_data, dict):
-            session_items = sessions_data.get("sessions") or []
+        # Remove contas legadas 'default' no banco local
+        db.query(WhatsappAccount).filter(
+            WhatsappAccount.tenant_id == tenant_id,
+            WhatsappAccount.session_id.ilike("default")
+        ).delete(synchronize_session=False)
 
-        for item in session_items:
+        for item in filtered_items:
             if not isinstance(item, dict):
                 continue
             candidates = set()
+            display_name = item.get("name")
             for key in ("id", "sessionId", "name"):
                 val = item.get(key)
                 if val and isinstance(val, str) and val.strip():
                     cleaned = val.strip()
-                    candidates.add(cleaned)
-                    candidates.add(cleaned.replace(" ", "-"))
-                    candidates.add(cleaned.replace("-", " "))
+                    if cleaned.lower() != "default":
+                        candidates.add(cleaned)
+                        candidates.add(cleaned.replace(" ", "-"))
+                        candidates.add(cleaned.replace("-", " "))
 
             for cand in candidates:
                 existing = db.query(WhatsappAccount).filter(
-                    WhatsappAccount.idpw == cand
+                    WhatsappAccount.session_id == cand
                 ).first()
                 if not existing:
                     new_acc = WhatsappAccount(
                         user_id=user.id,
                         tenant_id=tenant_id,
-                        idpw=cand
+                        session_id=cand,
+                        display_name=display_name
                     )
                     db.add(new_acc)
         db.commit()
@@ -452,7 +164,8 @@ async def list_sessions(
         logger.warning(f"[WA-SYNC] Falha ao sincronizar sessões com o banco local: {e}")
         db.rollback()
 
-    return sessions_data
+    return return_data
+
 
 @router.post("/sessions")
 async def create_session(
@@ -461,7 +174,7 @@ async def create_session(
     current_user: str = Depends(check_crm_permission)
 ):
     """
-    Create a new WhatsApp session and persist positive tenant ownership.
+    Cria uma nova sessão WhatsApp e vincula ownership positivo com o tenant.
     """
     name = payload.get("name")
     if not name or not str(name).strip():
@@ -470,21 +183,22 @@ async def create_session(
             detail="O nome da sessão é obrigatório."
         )
     name = str(name).strip()
+    if name.lower() == "default":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="O nome 'default' é reservado e não pode ser utilizado como sessão."
+        )
 
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
 
-    from app.services.whatsapp_service import get_tenant_id_for_user
     tenant_id = await get_tenant_id_for_user(user, db)
 
-    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
-    res = await make_whatsapp_api_request(
-        "POST",
-        "/api/sessions",
-        headers=headers,
-        json_data={"name": name, "authToken": headers.get("x-session-token")},
-        timeout=15.0
+    # Cria sessão via WhatsAppClient (scope: whatsapp:sessions:create)
+    res = await whatsapp_client.create_session(
+        tenant_id=tenant_id,
+        session_data={"name": name}
     )
 
     candidates = {
@@ -497,33 +211,37 @@ async def create_session(
             val = res.get(key)
             if val and isinstance(val, str) and val.strip():
                 c = val.strip()
-                candidates.add(c)
-                candidates.add(c.replace(" ", "-"))
-                candidates.add(c.replace("-", " "))
+                if c.lower() != "default":
+                    candidates.add(c)
+                    candidates.add(c.replace(" ", "-"))
+                    candidates.add(c.replace("-", " "))
         sess_obj = res.get("session")
         if isinstance(sess_obj, dict):
             for key in ("id", "sessionId", "name"):
                 val = sess_obj.get(key)
                 if val and isinstance(val, str) and val.strip():
                     c = val.strip()
-                    candidates.add(c)
-                    candidates.add(c.replace(" ", "-"))
-                    candidates.add(c.replace("-", " "))
+                    if c.lower() != "default":
+                        candidates.add(c)
+                        candidates.add(c.replace(" ", "-"))
+                        candidates.add(c.replace("-", " "))
 
     for cand in candidates:
         existing_acc = db.query(WhatsappAccount).filter(
-            WhatsappAccount.idpw == cand
+            WhatsappAccount.session_id == cand
         ).first()
         if not existing_acc:
             new_acc = WhatsappAccount(
                 user_id=user.id,
                 tenant_id=tenant_id,
-                idpw=cand
+                session_id=cand,
+                display_name=name
             )
             db.add(new_acc)
     db.commit()
 
     return res
+
 
 @router.get("/sessions/{session_id}")
 async def get_session_status(
@@ -532,19 +250,18 @@ async def get_session_status(
     current_user: str = Depends(get_current_user)
 ):
     """
-    Get the details and status of a WhatsApp session with positive ownership verification.
+    Obtém status da sessão com validação estrita de ownership.
     """
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+
     resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
-    headers = await get_user_m2m_headers(current_user, db)
-    return await make_whatsapp_api_request(
-        "GET",
-        f"/api/sessions/{resolved_session}",
-        headers=headers
+    return await whatsapp_client.get_session_status(
+        tenant_id=user.tenant_id,
+        session_id=resolved_session
     )
+
 
 @router.post("/sessions/{session_id}/connect")
 async def connect_session(
@@ -553,20 +270,18 @@ async def connect_session(
     current_user: str = Depends(check_crm_permission)
 ):
     """
-    Request connection (pairing QR Code) for a WhatsApp session with positive ownership verification.
+    Solicita conexão (QR code) com validação estrita de ownership.
     """
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+
     resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
-    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
-    return await make_whatsapp_api_request(
-        "POST",
-        f"/api/sessions/{resolved_session}/connect",
-        headers=headers,
-        timeout=20.0
+    return await whatsapp_client.connect_session(
+        tenant_id=user.tenant_id,
+        session_id=resolved_session
     )
+
 
 @router.post("/sessions/{session_id}/disconnect")
 async def disconnect_session(
@@ -575,20 +290,18 @@ async def disconnect_session(
     current_user: str = Depends(check_crm_permission)
 ):
     """
-    Disconnect a WhatsApp session with positive ownership verification.
+    Desconecta sessão com validação estrita de ownership.
     """
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+
     resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
-    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
-    return await make_whatsapp_api_request(
-        "POST",
-        f"/api/sessions/{resolved_session}/disconnect",
-        headers=headers,
-        timeout=15.0
+    return await whatsapp_client.disconnect_session(
+        tenant_id=user.tenant_id,
+        session_id=resolved_session
     )
+
 
 @router.delete("/sessions/{session_id}")
 async def delete_session(
@@ -597,18 +310,27 @@ async def delete_session(
     current_user: str = Depends(check_crm_permission)
 ):
     """
-    Delete a WhatsApp session with positive ownership verification and local cleanup.
-    Operates idempotently if the session is already removed upstream.
+    Exclui uma sessão WhatsApp com validação estrita de ownership e limpeza no banco local.
     """
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    from app.services.whatsapp_service import resolve_owned_whatsapp_session, get_tenant_id_for_user
-    tenant_id = await get_tenant_id_for_user(user, db)
-    resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
-    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
 
     clean_target = (session_id or "").strip()
+    if clean_target.lower() == "default":
+        # Limpeza limpa e idempotente de registros residuais 'default'
+        db.query(WhatsappAccount).filter(
+            WhatsappAccount.tenant_id == user.tenant_id,
+            WhatsappAccount.session_id.ilike("default")
+        ).delete(synchronize_session=False)
+        if user.preferred_session_id and user.preferred_session_id.lower() == "default":
+            user.preferred_session_id = None
+            db.add(user)
+        db.commit()
+        return {"success": True, "message": "Conexão default removida com sucesso."}
+
+    resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
+
     variants = {
         clean_target,
         clean_target.replace("-", " "),
@@ -620,22 +342,20 @@ async def delete_session(
 
     res = None
     try:
-        res = await make_whatsapp_api_request(
-            "DELETE",
-            f"/api/sessions/{resolved_session}",
-            headers=headers,
-            timeout=15.0
+        res = await whatsapp_client.delete_session(
+            tenant_id=user.tenant_id,
+            session_id=resolved_session
         )
     except HTTPException as he:
         if he.status_code == 404:
-            logger.info(f"[WA-DELETE] Sessão '{resolved_session}' já não existia na Whats API (404). Procedendo com limpeza local.")
+            logger.info(f"[WA-DELETE] Sessão '{resolved_session}' já não existia na Whats API (404).")
             res = {"success": True, "message": "Sessão removida do servidor."}
         else:
             raise he
 
     db.query(WhatsappAccount).filter(
-        WhatsappAccount.tenant_id == tenant_id,
-        WhatsappAccount.idpw.in_(variants)
+        WhatsappAccount.tenant_id == user.tenant_id,
+        WhatsappAccount.session_id.in_(variants)
     ).delete(synchronize_session=False)
 
     if user.preferred_session_id in variants:
@@ -645,6 +365,7 @@ async def delete_session(
     db.commit()
     return res or {"success": True, "message": "Sessão removida com sucesso."}
 
+
 @router.get("/sessions/{session_id}/settings")
 async def get_session_settings(
     session_id: str,
@@ -652,19 +373,18 @@ async def get_session_settings(
     current_user: str = Depends(get_current_user)
 ):
     """
-    Get the webhook and other settings of a WhatsApp session with positive ownership verification.
+    Consulta configurações da sessão com validação de ownership.
     """
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+
     resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
-    headers = await get_user_m2m_headers(current_user, db)
-    return await make_whatsapp_api_request(
-        "GET",
-        f"/api/sessions/{resolved_session}/settings",
-        headers=headers
+    return await whatsapp_client.get_session_settings(
+        tenant_id=user.tenant_id,
+        session_id=resolved_session
     )
+
 
 @router.put("/sessions/{session_id}/settings")
 async def update_session_settings(
@@ -674,20 +394,19 @@ async def update_session_settings(
     current_user: str = Depends(check_crm_permission)
 ):
     """
-    Update the webhook and other settings of a WhatsApp session with positive ownership verification.
+    Atualiza configurações da sessão com validação de ownership.
     """
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+
     resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
-    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
-    return await make_whatsapp_api_request(
-        "PUT",
-        f"/api/sessions/{resolved_session}/settings",
-        headers=headers,
-        json_data=payload
+    return await whatsapp_client.update_session_settings(
+        tenant_id=user.tenant_id,
+        session_id=resolved_session,
+        settings_data=payload
     )
+
 
 @router.post("/sessions/{session_id}/messages/send")
 async def send_session_message(
@@ -697,12 +416,12 @@ async def send_session_message(
     current_user: str = Depends(check_crm_permission)
 ):
     """
-    Send a WhatsApp message directly through a specific session with positive ownership verification.
+    Envia mensagem direta WhatsApp através de uma sessão com validação de ownership.
     """
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+
     resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
 
     phone = payload.get("phone") or payload.get("number") or payload.get("jid")
@@ -714,19 +433,16 @@ async def send_session_message(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="O campo 'phone', 'number' ou 'jid' é obrigatório."
         )
-        
+
     if not message and not media:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="É obrigatório enviar 'message' ou 'media'."
         )
 
-    # Extrai só os digitos, mas preserva se o JID já vier no formato correto
     cleaned_phone = "".join(filter(str.isdigit, str(phone)))
     final_jid = phone if "@" in str(phone) else f"{cleaned_phone}@s.whatsapp.net"
-    
-    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:messages:send")
-    
+
     json_data = {
         "phone": cleaned_phone,
         "number": cleaned_phone,
@@ -734,28 +450,154 @@ async def send_session_message(
         "text": message,
         "jid": final_jid
     }
-    
     if media:
         json_data["media"] = media
 
-    return await make_whatsapp_api_request(
-        "POST",
-        f"/api/sessions/{resolved_session}/messages/send",
-        headers=headers,
-        json_data=json_data,
-        timeout=30.0 # Timeout aumentado por causa do envio de mídia
+    return await whatsapp_client.send_message(
+        tenant_id=user.tenant_id,
+        session_id=resolved_session,
+        message_data=json_data
     )
 
-# Instagram Proxy Routes
+
+@router.get("/sessions/{session_id}/avatar")
+async def get_session_avatar(
+    request: Request,
+    session_id: str,
+    jid: str,
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Proxy de imagem de perfil autenticado pelo Dominus via WhatsAppClient.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
+    if not effective_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de autenticação inválido ou ausente."
+        )
+
+    payload = decode_access_token(effective_token)
+    sub = payload.get("sub") if payload else None
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido.")
+
+    sub_str = str(sub)
+    if sub_str.isdigit():
+        user = db.query(User).filter((User.email == sub_str) | (User.id == int(sub_str))).first()
+    else:
+        user = db.query(User).filter(User.email == sub_str).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado.")
+
+    resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
+
+    try:
+        res = await whatsapp_client.get_session_avatar(
+            tenant_id=user.tenant_id,
+            session_id=resolved_session,
+            jid=jid
+        )
+        if isinstance(res, dict):
+            if res.get("_is_binary") and res.get("content"):
+                return Response(
+                    content=res["content"],
+                    media_type=res.get("content_type") or "image/jpeg",
+                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}
+                )
+            url_target = res.get("url") or res.get("avatar_url") or res.get("profile_pic_url") or res.get("profile_url") or res.get("avatar")
+            if url_target and str(url_target).startswith("http"):
+                return RedirectResponse(
+                    url_target,
+                    status_code=302,
+                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}
+                )
+    except Exception as e:
+        logger.warning(f"[WA-AVATAR] Erro ao buscar avatar para jid={jid}: {e}")
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar não encontrado.")
+
+
+@router.get("/sessions/{session_id}/media")
+async def get_session_media(
+    request: Request,
+    session_id: str,
+    token: Optional[str] = Query(None),
+    messageId: Optional[str] = None,
+    message_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Proxy de mídia (áudio, imagem, vídeo) autenticado pelo Dominus via WhatsAppClient.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
+    if not effective_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de autenticação inválido ou ausente."
+        )
+
+    payload = decode_access_token(effective_token)
+    sub = payload.get("sub") if payload else None
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido.")
+
+    sub_str = str(sub)
+    if sub_str.isdigit():
+        user = db.query(User).filter((User.email == sub_str) | (User.id == int(sub_str))).first()
+    else:
+        user = db.query(User).filter(User.email == sub_str).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado.")
+
+    resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
+    target_msg_id = messageId or message_id
+    if not target_msg_id:
+        raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
+
+    response = await whatsapp_client.get_session_media(
+        tenant_id=user.tenant_id,
+        session_id=resolved_session,
+        message_id=target_msg_id
+    )
+
+    content_type = response.headers.get("content-type", "application/octet-stream")
+
+    async def media_stream():
+        try:
+            async for chunk in response.aiter_bytes():
+                yield chunk
+        finally:
+            await response.aclose()
+
+    return StreamingResponse(
+        content=media_stream(),
+        media_type=content_type,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=86400"
+        }
+    )
+
+
+# =============================================================================
+# Instagram Proxy
+# =============================================================================
+
 @router.post("/instagram/login")
 async def login_instagram_proxy(
     payload: Dict[str, Any] = Body(...),
     db: Session = Depends(get_db),
     current_user: str = Depends(check_crm_permission)
 ):
-    """
-    Log in to an Instagram account.
-    """
+    """Autentica conta Instagram."""
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+
     username = payload.get("username")
     password = payload.get("password")
     if not username or not password:
@@ -763,15 +605,13 @@ async def login_instagram_proxy(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Usuário e senha do Instagram são obrigatórios."
         )
-        
-    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
-    return await make_whatsapp_api_request(
-        "POST",
-        "/api/instagram/login",
-        headers=headers,
-        json_data={"username": username, "password": password, "authToken": headers.get("x-session-token")},
-        timeout=30.0
+
+    tenant_id = await get_tenant_id_for_user(user, db)
+    return await whatsapp_client.instagram_login(
+        tenant_id=tenant_id,
+        login_data={"username": username, "password": password}
     )
+
 
 @router.post("/instagram/sessions/{username}/logout")
 async def logout_instagram_proxy(
@@ -779,16 +619,10 @@ async def logout_instagram_proxy(
     db: Session = Depends(get_db),
     current_user: str = Depends(check_crm_permission)
 ):
-    """
-    Log out of an Instagram account.
-    """
-    headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
-    return await make_whatsapp_api_request(
-        "POST",
-        f"/api/instagram/sessions/{username}/logout",
-        headers=headers,
-        timeout=15.0
-    )
+    """Encerra sessão Instagram."""
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
 
-
-
+    tenant_id = await get_tenant_id_for_user(user, db)
+    return await whatsapp_client.instagram_logout(tenant_id=tenant_id, username=username)

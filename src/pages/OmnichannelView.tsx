@@ -214,7 +214,7 @@ function getAvatarSrc(url?: string, session_id?: string, jid?: string, allowProx
   // Never construct dynamic proxy for sidebar items without a real image URL,
   // preventing 50 simultaneous slow proxy requests that exhaust the backend.
   if (allowProxy) {
-    let targetSession = session_id || 'default';
+    let targetSession = session_id || '';
     let targetJid = jid || '';
 
     if (url && typeof url === 'string') {
@@ -226,13 +226,13 @@ function getAvatarSrc(url?: string, session_id?: string, jid?: string, allowProx
           const qSession = parsed.searchParams.get('session') || parsed.searchParams.get('session_id');
           const qJid = parsed.searchParams.get('jid');
           
-          if (qSession) targetSession = qSession;
+          if (qSession && qSession.toLowerCase() !== 'default') targetSession = qSession;
           if (qJid) targetJid = qJid;
         } catch (e) {}
       }
     }
 
-    if (targetJid) {
+    if (targetJid && targetSession && targetSession.toLowerCase() !== 'default') {
       const token = getAuthToken();
       const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
       return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(targetSession)}/avatar?jid=${encodeURIComponent(targetJid)}${tokenParam}`;
@@ -240,6 +240,7 @@ function getAvatarSrc(url?: string, session_id?: string, jid?: string, allowProx
   }
 
   return null;
+
 }
 
 function formatTimestamp(isoString?: string): string {
@@ -292,7 +293,8 @@ function getSenderColor(name: string): string {
 
 function getMediaUrl(msg: any, defaultSessionId?: string): string | null {
   if (!msg) return null;
-  const sessId = msg.session_id || defaultSessionId || 'default';
+  const sessId = msg.session_id || defaultSessionId || '';
+  if (!sessId || sessId.toLowerCase() === 'default') return null;
   const msgId = msg.message_id || msg.id;
   const rawUrl = msg.media_url || msg.image_url || msg.url || msg.file_url;
 
@@ -704,17 +706,18 @@ export default function OmnichannelView() {
 
   useEffect(() => {
     if (selectedChat) {
-      if (selectedChat.session_id && selectedChat.session_id !== 'default') {
+      if (selectedChat.session_id && selectedChat.session_id.toLowerCase() !== 'default') {
         setActiveSendSession(selectedChat.session_id);
       } else if (availableSessions.length > 0) {
         // Find a WORKING session, or fallback to the first available
         const workingSession = availableSessions.find(s => s.status === 'WORKING') || availableSessions[0];
-        setActiveSendSession(workingSession.id || 'default');
+        setActiveSendSession(workingSession.id || '');
       } else {
-        setActiveSendSession('default');
+        setActiveSendSession('');
       }
     }
   }, [selectedChat, availableSessions]);
+
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -892,7 +895,15 @@ export default function OmnichannelView() {
       try {
         const base64Data = await blobToBase64(audioBlob);
 
-        const targetSession = activeSendSession || selectedChat.session_id || 'default';
+        const targetSession = (activeSendSession && activeSendSession !== 'default') 
+          || (selectedChat.session_id && selectedChat.session_id !== 'default' ? selectedChat.session_id : '')
+          || (availableSessions.find(s => s.status === 'WORKING') || availableSessions[0])?.id || '';
+        if (!targetSession) {
+          toast.error("Nenhuma sessão WhatsApp ativa disponível.");
+          setUploadingMedia(false);
+          return;
+        }
+
         await sendOmnichannelMedia({
           contact_jid: selectedChat.contact_jid,
           session_id: targetSession,
@@ -917,7 +928,7 @@ export default function OmnichannelView() {
         }
         setChatMessages(msgsList);
       } catch (err: any) {
-        toast.error(err instanceof Error ? err.message : 'Falha ao enviar mensagem de voz.');
+        toast.error(err.message || 'Falha ao enviar áudio gravado.');
       } finally {
         setUploadingMedia(false);
         setIsRecording(false);
@@ -984,10 +995,18 @@ export default function OmnichannelView() {
     try {
       const base64Data = await blobToBase64(file);
 
-      const targetSession = activeSendSession || selectedChat.session_id || 'default';
+      const targetSession = (activeSendSession && activeSendSession !== 'default') 
+        || (selectedChat.session_id && selectedChat.session_id !== 'default' ? selectedChat.session_id : '')
+        || (availableSessions.find(s => s.status === 'WORKING') || availableSessions[0])?.id || '';
+      if (!targetSession) {
+        toast.error("Nenhuma sessão WhatsApp ativa disponível.");
+        setUploadingMedia(false);
+        return;
+      }
       await sendOmnichannelMedia({
         contact_jid: selectedChat.contact_jid,
         session_id: targetSession,
+
         text: messageInput.trim() || undefined,
         media: {
           kind: selectedMediaType,
@@ -1602,7 +1621,14 @@ function playOutgoingSound() {
     setMessageInput('');
     setSending(true);
 
-    const targetSession = activeSendSession || selectedChat.session_id || 'default';
+    const targetSession = (activeSendSession && activeSendSession !== 'default') 
+      || (selectedChat.session_id && selectedChat.session_id !== 'default' ? selectedChat.session_id : '')
+      || (availableSessions.find(s => s.status === 'WORKING') || availableSessions[0])?.id || '';
+    if (!targetSession) {
+      toast.error("Nenhuma sessão WhatsApp ativa configurada para envio.");
+      setSending(false);
+      return;
+    }
 
     const tempMessage = {
       message_id: `temp_${Date.now()}`,
@@ -2057,8 +2083,7 @@ function playOutgoingSound() {
                           contact_jid: contact.contact_jid,
                           push_name: displayName,
                           display_phone: contact.display_phone,
-                          profile_pic_url: contact.profile_pic_url,
-                          session_id: 'default',
+                          session_id: (activeSendSession && activeSendSession !== 'default') || (availableSessions.find(s => s.status === 'WORKING') || availableSessions[0])?.id || '',
                           unread_count: 0,
                           last_message_preview: 'Iniciar conversa...',
                           last_message_timestamp: new Date().toISOString()

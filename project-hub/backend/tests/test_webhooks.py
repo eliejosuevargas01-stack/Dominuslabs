@@ -67,12 +67,8 @@ def test_deploy_webhook(mocker):
 
 def test_outbound_whatsapp_send_accepts_master_api_key_without_bearer_token(mocker, client):
     mocker.patch.object(settings, "WHATSAPP_MASTER_SECRET", "test-master-key")
-    mocker.patch(
-        "app.services.identity_service.get_m2m_jwt",
-        return_value="internal-token",
-    )
     mock_request = mocker.patch(
-        "app.api.endpoints.whatsapp.make_whatsapp_api_request",
+        "app.services.whatsapp_client.whatsapp_client.send_message",
         return_value={"status": "success"},
     )
 
@@ -84,7 +80,8 @@ def test_outbound_whatsapp_send_accepts_master_api_key_without_bearer_token(mock
 
     assert response.status_code == 200
     assert response.json() == {"status": "success"}
-    assert mock_request.call_args.kwargs["headers"]["X-Master-API-Key"] == "test-master-key"
+    mock_request.assert_called_once()
+
 
 
 def test_outbound_whatsapp_send_rejects_master_key_in_body(mocker, client):

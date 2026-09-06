@@ -1,9 +1,11 @@
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
+from fastapi import HTTPException
 from app.core.config import settings
 from app.core.auth import create_access_token
 from app.models.whatsapp_account import WhatsappAccount
+from app.models.user import User
 
 @pytest.fixture
 def auth_headers(db):
@@ -33,7 +35,7 @@ def test_whatsapp_account(db):
 
     existing = db.query(WhatsappAccount).filter(WhatsappAccount.user_id == user.id).first()
     if existing:
-        existing.idpw = "123"
+        existing.session_id = "123"
         existing.tenant_id = user.tenant_id
         db.commit()
         db.refresh(existing)
@@ -42,28 +44,26 @@ def test_whatsapp_account(db):
     account = WhatsappAccount(
         user_id=user.id,
         tenant_id=user.tenant_id,
-        idpw="123"
+        session_id="123"
     )
     db.add(account)
     db.commit()
     db.refresh(account)
     return account
 
-@patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
-@patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
-def test_list_sessions(mock_get_headers, mock_api_request, client: TestClient, auth_headers: dict, test_whatsapp_account):
-    mock_get_headers.return_value = {"Authorization": "Bearer token"}
-    mock_api_request.return_value = []
+
+@patch("app.services.whatsapp_client.whatsapp_client.list_sessions", new_callable=AsyncMock)
+def test_list_sessions(mock_list, client: TestClient, auth_headers: dict, test_whatsapp_account):
+    mock_list.return_value = []
 
     response = client.get(f"{settings.API_V1_STR}/whatsapp/sessions", headers=auth_headers)
     assert response.status_code == 200
     assert response.json() == []
 
-@patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
-@patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
-def test_create_session(mock_get_headers, mock_api_request, client: TestClient, auth_headers: dict, test_whatsapp_account):
-    mock_get_headers.return_value = {"Authorization": "Bearer token"}
-    mock_api_request.return_value = {"id": "123", "status": "CREATED"}
+
+@patch("app.services.whatsapp_client.whatsapp_client.create_session", new_callable=AsyncMock)
+def test_create_session(mock_create, client: TestClient, auth_headers: dict, test_whatsapp_account):
+    mock_create.return_value = {"id": "123", "status": "CREATED"}
 
     payload = {"name": "test_session", "isDefault": True}
     response = client.post(f"{settings.API_V1_STR}/whatsapp/sessions", json=payload, headers=auth_headers)
@@ -71,26 +71,24 @@ def test_create_session(mock_get_headers, mock_api_request, client: TestClient, 
     assert response.status_code == 200
     assert "status" in response.json()
 
-@patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
-@patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
-def test_connect_session(mock_get_headers, mock_api_request, client: TestClient, auth_headers: dict, test_whatsapp_account):
-    mock_get_headers.return_value = {"Authorization": "Bearer token"}
-    mock_api_request.return_value = {"status": "CONNECTING"}
+
+@patch("app.services.whatsapp_client.whatsapp_client.connect_session", new_callable=AsyncMock)
+def test_connect_session(mock_connect, client: TestClient, auth_headers: dict, test_whatsapp_account):
+    mock_connect.return_value = {"status": "CONNECTING"}
 
     response = client.post(f"{settings.API_V1_STR}/whatsapp/sessions/123/connect", headers=auth_headers)
     assert response.status_code == 200
 
-@patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
-@patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
-def test_disconnect_session(mock_get_headers, mock_api_request, client: TestClient, auth_headers: dict, test_whatsapp_account):
-    mock_get_headers.return_value = {"Authorization": "Bearer token"}
-    mock_api_request.return_value = {"status": "DISCONNECTED"}
+
+@patch("app.services.whatsapp_client.whatsapp_client.disconnect_session", new_callable=AsyncMock)
+def test_disconnect_session(mock_disconnect, client: TestClient, auth_headers: dict, test_whatsapp_account):
+    mock_disconnect.return_value = {"status": "DISCONNECTED"}
 
     response = client.post(f"{settings.API_V1_STR}/whatsapp/sessions/123/disconnect", headers=auth_headers)
     assert response.status_code == 200
 
+
 def test_legacy_credentials_endpoint_eliminated_returns_404(client: TestClient, auth_headers: dict):
-    # P0: Completely eliminate legacy client_id/client_secret endpoints
     response_get = client.get(f"{settings.API_V1_STR}/whatsapp/credentials", headers=auth_headers)
     assert response_get.status_code == 404
 
@@ -98,13 +96,13 @@ def test_legacy_credentials_endpoint_eliminated_returns_404(client: TestClient, 
     response_put = client.put(f"{settings.API_V1_STR}/whatsapp/credentials", json=payload, headers=auth_headers)
     assert response_put.status_code == 404
 
+
 def test_legacy_provision_endpoint_eliminated_returns_404(client: TestClient, auth_headers: dict):
-    # P0: Legacy provisioning endpoint is permanently removed
     response = client.post(f"{settings.API_V1_STR}/whatsapp/provision", headers=auth_headers)
     assert response.status_code == 404
 
+
 def test_unknown_session_rejected_with_404_across_routes(client: TestClient, auth_headers: dict, test_whatsapp_account):
-    # Non-existent session must return 404 without calling upstream WhatsApp API
     res_status = client.get(f"{settings.API_V1_STR}/whatsapp/sessions/unknown-sess-999", headers=auth_headers)
     assert res_status.status_code == 404
 
@@ -125,11 +123,9 @@ def test_unknown_session_rejected_with_404_across_routes(client: TestClient, aut
     assert res_msg.status_code == 404
 
 
-@patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
-@patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
-def test_send_message(mock_get_headers, mock_api_request, client: TestClient, auth_headers: dict, test_whatsapp_account):
-    mock_get_headers.return_value = {"Authorization": "Bearer token"}
-    mock_api_request.return_value = {"id": "msg_123", "status": "SENT"}
+@patch("app.services.whatsapp_client.whatsapp_client.send_message", new_callable=AsyncMock)
+def test_send_message(mock_send, client: TestClient, auth_headers: dict, test_whatsapp_account):
+    mock_send.return_value = {"id": "msg_123", "status": "SENT"}
 
     payload = {"phone": "5511999999999", "message": "Hello", "type": "text"}
     response = client.post(f"{settings.API_V1_STR}/whatsapp/sessions/123/messages/send", json=payload, headers=auth_headers)
@@ -142,21 +138,19 @@ def test_ram_proxy_no_creds(client: TestClient, auth_headers: dict):
     response = client.post(f"{settings.API_V1_STR}/whatsapp/instagram/login", json=payload, headers=auth_headers)
     assert response.status_code == 400
 
-@patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
-@patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
-def test_ram_proxy_success(mock_get_headers, mock_api_request, client: TestClient, auth_headers: dict):
-    mock_get_headers.return_value = {"Authorization": "Bearer token", "x-session-token": "123"}
-    mock_api_request.return_value = {"status": "ok"}
+
+@patch("app.services.whatsapp_client.whatsapp_client.instagram_login", new_callable=AsyncMock)
+def test_ram_proxy_success(mock_login, client: TestClient, auth_headers: dict):
+    mock_login.return_value = {"status": "ok"}
 
     payload = {"username": "user", "password": "password"}
     response = client.post(f"{settings.API_V1_STR}/whatsapp/instagram/login", json=payload, headers=auth_headers)
     assert response.status_code == 200
 
-@patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
-@patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
-def test_logout_instagram_proxy(mock_get_headers, mock_api_request, client: TestClient, auth_headers: dict):
-    mock_get_headers.return_value = {"Authorization": "Bearer token"}
-    mock_api_request.return_value = {"status": "ok"}
+
+@patch("app.services.whatsapp_client.whatsapp_client.instagram_logout", new_callable=AsyncMock)
+def test_logout_instagram_proxy(mock_logout, client: TestClient, auth_headers: dict):
+    mock_logout.return_value = {"status": "ok"}
 
     response = client.post(f"{settings.API_V1_STR}/whatsapp/instagram/sessions/test_user/logout", headers=auth_headers)
     assert response.status_code == 200
@@ -164,7 +158,6 @@ def test_logout_instagram_proxy(mock_get_headers, mock_api_request, client: Test
 
 def test_resolve_owned_whatsapp_session_blocks_cross_tenant_before_api(db):
     from app.services.whatsapp_service import resolve_owned_whatsapp_session
-    from app.models.user import User
 
     user_a = User(
         email="operator_a@tenant-a.com",
@@ -186,6 +179,20 @@ def test_resolve_owned_whatsapp_session_blocks_cross_tenant_before_api(db):
     db.add(user_b)
     db.commit()
 
+    acc_a = WhatsappAccount(
+        user_id=user_a.id,
+        tenant_id="tenant_a",
+        session_id="session-a"
+    )
+    acc_b = WhatsappAccount(
+        user_id=user_b.id,
+        tenant_id="tenant_b",
+        session_id="session-b"
+    )
+    db.add(acc_a)
+    db.add(acc_b)
+    db.commit()
+
     # User B trying to access User A's session -> raises 403 Forbidden
     with pytest.raises(Exception) as exc_info:
         resolve_owned_whatsapp_session(user_b, "session-a", db)
@@ -198,9 +205,6 @@ def test_resolve_owned_whatsapp_session_blocks_cross_tenant_before_api(db):
 
 
 def test_avatar_and_media_proxy_cross_tenant_rejection_before_api_call(db, client):
-    from app.models.user import User
-    from app.core.auth import create_access_token
-
     user_a = User(
         email="owner@tenant-a.com",
         hashed_password="pw",
@@ -221,10 +225,18 @@ def test_avatar_and_media_proxy_cross_tenant_rejection_before_api_call(db, clien
     db.add(user_b)
     db.commit()
 
+    acc_a = WhatsappAccount(
+        user_id=user_a.id,
+        tenant_id="tenant_a",
+        session_id="session-a"
+    )
+    db.add(acc_a)
+    db.commit()
+
     token_b = create_access_token({"sub": user_b.email, "tenant_id": user_b.tenant_id, "role": user_b.role})
     headers_b = {"Authorization": f"Bearer {token_b}"}
 
-    with patch("app.api.endpoints.whatsapp.make_whatsapp_api_request") as mock_api:
+    with patch("app.services.whatsapp_client.whatsapp_client.get_session_avatar", new_callable=AsyncMock) as mock_api:
         # Endpoint in whatsapp router: /api/v1/whatsapp/sessions/{session_id}/avatar
         res = client.get(
             f"{settings.API_V1_STR}/whatsapp/sessions/session-a/avatar?jid=contact@s.whatsapp.net",
@@ -246,63 +258,60 @@ def test_avatar_and_media_proxy_cross_tenant_rejection_before_api_call(db, clien
 
 def test_make_whatsapp_api_request_fails_closed_when_tenant_id_missing():
     import asyncio
-    from app.api.endpoints.whatsapp import make_whatsapp_api_request
+    from app.services.whatsapp_client import whatsapp_client
 
-    # Calling without x-tenant-id must fail closed with 403
+    # Calling without tenant_id must fail closed with 403
     with pytest.raises(Exception) as exc_info:
-        asyncio.run(make_whatsapp_api_request("GET", "/test", headers={"Authorization": "Bearer fake"}))
+        asyncio.run(whatsapp_client._execute_request(
+            method="GET",
+            path="/test",
+            tenant_id="",
+            scope="whatsapp:sessions:read"
+        ))
     assert exc_info.value.status_code == 403
-    assert "x-tenant-id" in exc_info.value.detail
+    assert "tenant_id" in exc_info.value.detail
 
 
-@patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
-@patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
-def test_delete_session_success_cleans_local_account(mock_get_headers, mock_api_request, client: TestClient, auth_headers: dict, test_whatsapp_account, db):
-    mock_get_headers.return_value = {"Authorization": "Bearer token"}
-    mock_api_request.return_value = {"success": True, "message": "Deleted"}
+@patch("app.services.whatsapp_client.whatsapp_client.delete_session", new_callable=AsyncMock)
+def test_delete_session_success_cleans_local_account(mock_del, client: TestClient, auth_headers: dict, test_whatsapp_account, db):
+    mock_del.return_value = {"success": True, "message": "Deleted"}
 
     response = client.delete(f"{settings.API_V1_STR}/whatsapp/sessions/123", headers=auth_headers)
     assert response.status_code == 200
 
-    acc = db.query(WhatsappAccount).filter(WhatsappAccount.idpw == "123").first()
+    acc = db.query(WhatsappAccount).filter(WhatsappAccount.session_id == "123").first()
     assert acc is None
 
 
-@patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
-@patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
-def test_delete_session_idempotent_when_upstream_returns_404(mock_get_headers, mock_api_request, client: TestClient, auth_headers: dict, test_whatsapp_account, db):
-    from fastapi import HTTPException
-    mock_get_headers.return_value = {"Authorization": "Bearer token"}
-    mock_api_request.side_effect = HTTPException(status_code=404, detail="Session not found on server")
+@patch("app.services.whatsapp_client.whatsapp_client.delete_session", new_callable=AsyncMock)
+def test_delete_session_idempotent_when_upstream_returns_404(mock_del, client: TestClient, auth_headers: dict, test_whatsapp_account, db):
+    mock_del.side_effect = HTTPException(status_code=404, detail="Session not found on server")
 
     response = client.delete(f"{settings.API_V1_STR}/whatsapp/sessions/123", headers=auth_headers)
     assert response.status_code == 200
     assert response.json().get("success") is True
 
-    acc = db.query(WhatsappAccount).filter(WhatsappAccount.idpw == "123").first()
+    acc = db.query(WhatsappAccount).filter(WhatsappAccount.session_id == "123").first()
     assert acc is None
 
 
-@patch("app.api.endpoints.whatsapp.make_whatsapp_api_request")
-@patch("app.api.endpoints.whatsapp.get_user_m2m_headers")
-def test_list_sessions_auto_syncs_to_local_db(mock_get_headers, mock_api_request, client: TestClient, auth_headers: dict, db):
-    mock_get_headers.return_value = {"Authorization": "Bearer token"}
-    mock_api_request.return_value = [
+@patch("app.services.whatsapp_client.whatsapp_client.list_sessions", new_callable=AsyncMock)
+def test_list_sessions_auto_syncs_to_local_db(mock_list, client: TestClient, auth_headers: dict, db):
+    mock_list.return_value = [
         {"id": "3643-principal", "name": "3643 principal", "status": "CONNECTED"}
     ]
 
     response = client.get(f"{settings.API_V1_STR}/whatsapp/sessions", headers=auth_headers)
     assert response.status_code == 200
 
-    acc_slug = db.query(WhatsappAccount).filter(WhatsappAccount.idpw == "3643-principal").first()
-    acc_name = db.query(WhatsappAccount).filter(WhatsappAccount.idpw == "3643 principal").first()
+    acc_slug = db.query(WhatsappAccount).filter(WhatsappAccount.session_id == "3643-principal").first()
+    acc_name = db.query(WhatsappAccount).filter(WhatsappAccount.session_id == "3643 principal").first()
     assert acc_slug is not None
     assert acc_name is not None
 
 
 def test_resolve_owned_whatsapp_session_matches_slug_and_name_variants(db):
     from app.services.whatsapp_service import resolve_owned_whatsapp_session
-    from app.models.user import User
 
     user = User(
         email="test_variants@tenant.com",
@@ -316,7 +325,7 @@ def test_resolve_owned_whatsapp_session_matches_slug_and_name_variants(db):
     acc = WhatsappAccount(
         user_id=user.id,
         tenant_id=user.tenant_id,
-        idpw="3643 principal"
+        session_id="3643 principal"
     )
     db.add(acc)
     db.commit()
@@ -326,4 +335,3 @@ def test_resolve_owned_whatsapp_session_matches_slug_and_name_variants(db):
 
     resolved_space = resolve_owned_whatsapp_session(user, "3643 principal", db)
     assert resolved_space in ("3643 principal", "3643-principal")
-
