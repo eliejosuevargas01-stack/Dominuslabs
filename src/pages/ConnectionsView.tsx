@@ -105,9 +105,15 @@ export default function ConnectionsView() {
       setError(null);
       const data = await fetchWhatsappSessions();
       const list = data?.sessions || (Array.isArray(data) ? data : []);
-      setSessions(list);
+      // Filter out internal placeholder 'default' session
+      const filtered = list.filter((s: any) => {
+        const id = String(s?.id || s?.sessionId || '').trim().toLowerCase();
+        const name = String(s?.name || '').trim().toLowerCase();
+        return id !== 'default' && name !== 'default';
+      });
+      setSessions(filtered);
     } catch (err: any) {
-      console.error(err); toast.error("Ocorreu um erro na operacao.");
+      console.error('Erro ao carregar conexões:', err);
       setError('Erro ao carregar conexões.');
     } finally {
       setLoading(false);
