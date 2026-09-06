@@ -35,6 +35,9 @@ def resolve_owned_whatsapp_session(user: User, session_id: Optional[str], db: Se
     Não permite bypass global de admin em rotas tenant-scoped.
     """
     user_tenant = user.tenant_id
+    if not user_tenant and (user.role == "admin" or user.email == settings.ADMIN_USERNAME):
+        user_tenant = settings.ADMIN_TENANT_ID
+
     if not user_tenant:
         logger.warning(f"[WA-OWNERSHIP] Usuário id={user.id} sem tenant_id ao tentar acessar sessão '{session_id}'")
         raise HTTPException(
@@ -42,43 +45,57 @@ def resolve_owned_whatsapp_session(user: User, session_id: Optional[str], db: Se
             detail="Acesso negado: usuário não possui tenant_id configurado."
         )
 
-    target_session = session_id or user.preferred_session_id
-    if not target_session or target_session == "default":
+    target_session = (session_id or user.preferred_session_id or "").strip()
+    if not target_session or target_session.lower() == "default":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Nenhuma sessão WhatsApp foi selecionada/configurada."
         )
 
+    # Variantes normalizadas (hífen, espaço, lowercase) para cobrir discrepancies entre slug da Whats API e nome informado
+    clean_target = target_session
+    variants = {
+        clean_target,
+        clean_target.replace("-", " "),
+        clean_target.replace(" ", "-"),
+        clean_target.lower(),
+        clean_target.lower().replace("-", " "),
+        clean_target.lower().replace(" ", "-")
+    }
+
     # 1. Prova positiva via WhatsappAccount vinculado ao banco
-    account = db.query(WhatsappAccount).filter(
-        WhatsappAccount.idpw == target_session
-    ).first()
-    if account:
-        if account.tenant_id != user_tenant:
-            logger.warning(
-                f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Conta '{target_session}' pertence ao tenant '{account.tenant_id}', "
-                f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Acesso negado: a sessão informada pertence a outro tenant."
-            )
-        return target_session
+    accounts = db.query(WhatsappAccount).filter(
+        WhatsappAccount.idpw.in_(variants)
+    ).all()
+    if accounts:
+        for account in accounts:
+            if account.tenant_id != user_tenant:
+                logger.warning(
+                    f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Conta '{account.idpw}' pertence ao tenant '{account.tenant_id}', "
+                    f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Acesso negado: a sessão informada pertence a outro tenant."
+                )
+        matching = next((a.idpw for a in accounts if a.tenant_id == user_tenant and a.idpw == target_session), None)
+        return matching or accounts[0].idpw
 
     # 2. Prova positiva via preferência de usuário do mesmo tenant
-    session_user = db.query(User).filter(
-        User.preferred_session_id == target_session
-    ).first()
-    if session_user:
-        if session_user.tenant_id != user_tenant:
-            logger.warning(
-                f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Sessão '{target_session}' pertence ao tenant '{session_user.tenant_id}', "
-                f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Acesso negado: a sessão informada pertence a outro tenant."
-            )
+    session_users = db.query(User).filter(
+        User.preferred_session_id.in_(variants)
+    ).all()
+    if session_users:
+        for session_user in session_users:
+            if session_user.tenant_id != user_tenant:
+                logger.warning(
+                    f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Sessão '{session_user.preferred_session_id}' pertence ao tenant '{session_user.tenant_id}', "
+                    f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Acesso negado: a sessão informada pertence a outro tenant."
+                )
         return target_session
 
     # 3. Nenhuma prova de vínculo positivo encontrada no tenant -> Rejeitar como desconhecida (fail-closed)
