@@ -57,6 +57,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
 
       {/* Persistent Sidebar */}
       <aside
+        aria-label="Main Navigation"
         className={`fixed lg:sticky top-0 left-0 h-screen z-40 bg-white border-r border-zinc-200 flex flex-col justify-between transition-all duration-300 lg:transform-none overflow-x-hidden ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         } ${isCollapsed ? 'w-64 lg:w-20' : 'w-64 lg:w-64'}`}
@@ -91,6 +92,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
                   to={item.path}
                   onClick={() => setIsOpen(false)}
                   title={item.name}
+                  aria-current={active ? "page" : undefined}
                   className={`flex items-center rounded-lg transition-all duration-200 group px-3 py-2.5 gap-3 ${
                     isCollapsed
                       ? 'lg:justify-center lg:w-10 lg:h-10 lg:p-0 lg:gap-0 lg:mx-auto'

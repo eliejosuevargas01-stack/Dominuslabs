@@ -1,0 +1,3 @@
+## 2024-09-06 - A11y improvements to Login and Sidebar
+**Learning:** React form error messages that appear conditionally aren't automatically announced by screen readers. Wrapping them in a persistent `div` with `aria-live="polite" aria-atomic="true"` ensures the screen reader registers the region and announces when the inner text changes. Also, manually setting `aria-invalid` on inputs and linking to the error message via `aria-describedby` provides critical context for keyboard and screen reader users when a submission fails.
+**Action:** When creating or modifying forms with dynamic validation, always use persistent `aria-live` wrappers for error components and link inputs to their specific error messages using `aria-invalid` and `aria-describedby`.
