@@ -6,29 +6,41 @@
  */
 
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
-import AdminDashboard from './pages/AdminDashboard';
-import AdminProjectView from './pages/AdminProjectView';
-import PublicProjectView from './pages/PublicProjectView';
-import Login from './pages/Login';
-import OrderManagerView from './pages/OrderManagerView';
-
-import Showcase from './pages/Showcase';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import Sidebar from './components/Sidebar';
-import CrmView from './pages/CrmView';
-import LeadDetailView from './pages/LeadDetailView';
-import ConnectionsView from './pages/ConnectionsView';
-import OmnichannelView from './pages/OmnichannelView';
-import CompanySettingsView from './pages/CompanySettingsView';
-import DashboardOperationalView from './pages/DashboardOperationalView';
-import AiIntelligenceView from './pages/AiIntelligenceView';
-import AutomationsView from './pages/AutomationsView';
-import CampaignsWizardView from './pages/CampaignsWizardView';
 import GlobalOrderNotification from './components/GlobalOrderNotification';
 import { LogOut } from 'lucide-react';
 import { Toaster } from 'sonner';
 import './App.css';
 import './index.css';
+
+// Lazy loaded page components for optimal performance and code splitting
+const Login = lazy(() => import('./pages/Login'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const AdminProjectView = lazy(() => import('./pages/AdminProjectView'));
+const PublicProjectView = lazy(() => import('./pages/PublicProjectView'));
+const OrderManagerView = lazy(() => import('./pages/OrderManagerView'));
+const Showcase = lazy(() => import('./pages/Showcase'));
+const CrmView = lazy(() => import('./pages/CrmView'));
+const LeadDetailView = lazy(() => import('./pages/LeadDetailView'));
+const ConnectionsView = lazy(() => import('./pages/ConnectionsView'));
+const OmnichannelView = lazy(() => import('./pages/OmnichannelView'));
+const CompanySettingsView = lazy(() => import('./pages/CompanySettingsView'));
+const DashboardOperationalView = lazy(() => import('./pages/DashboardOperationalView'));
+const AiIntelligenceView = lazy(() => import('./pages/AiIntelligenceView'));
+const AutomationsView = lazy(() => import('./pages/AutomationsView'));
+const CampaignsWizardView = lazy(() => import('./pages/CampaignsWizardView'));
+
+function PageLoader() {
+  return (
+    <div className="flex-1 flex items-center justify-center min-h-[300px] w-full p-8">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+        <span className="text-xs font-medium text-zinc-400">Carregando módulo...</span>
+      </div>
+    </div>
+  );
+}
 
 // Protected Route Wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -139,7 +151,8 @@ function App() {
         <Toaster position="top-right" richColors closeButton />
         <GlobalOrderNotification />
 
-        <Routes>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
           {/* Public Access Routes (no sidebar layout) */}
           <Route path="/login" element={<Login />} />
           <Route path="/project/:public_token" element={<PublicProjectView />} />
@@ -282,6 +295,7 @@ function App() {
           <Route path="/" element={<Navigate to="/dashboard-operacional" replace />} />
           <Route path="*" element={<Navigate to="/dashboard-operacional" replace />} />
         </Routes>
+      </Suspense>
       </div>
     </Router>
   );

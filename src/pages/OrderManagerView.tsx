@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { ShoppingBag, Check, MapPin, DollarSign, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -173,34 +173,31 @@ export default function OrderManagerView() {
   const { orders, setOrders, announcedOrderIds, connectionStatus } = useOrdersWebSocket();
   const activeAlarms = useRef<Record<string, ActiveAlarm>>({});
 
-  const announceAudioFallback = (order: Order) => {
+  const announceAudioFallback = useCallback((order: Order) => {
     const message = `Novo pedido pendente ${order.id}. Ative o som desta tela.`;
     toast.error(message);
     if ('speechSynthesis' in window && 'SpeechSynthesisUtterance' in window) {
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(new SpeechSynthesisUtterance(message));
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    // Check for new pending orders and start alarm
-    orders.forEach(order => {
-      if (order.status === 'pending' && announcedOrderIds.has(order.id) && !activeAlarms.current[order.id]) {
-        playAlarm(order);
-      }
-    });
+  const stopAlarm = useCallback((orderId: string) => {
+    const alarm = activeAlarms.current[orderId];
+    if (!alarm) return;
 
-    // Cleanup alarms for non-pending orders (just in case)
-    Object.keys(activeAlarms.current).forEach(orderId => {
-      const order = orders.find(o => o.id === orderId);
-      if (!order || order.status !== 'pending') {
-        stopAlarm(orderId);
-      }
-    });
+    // Remove primeiro para que uma requisição TTS que termine em paralelo não
+    // consiga iniciar um alarme depois de o pedido já ter sido aceito.
+    delete activeAlarms.current[orderId];
+    alarm.abortController.abort();
+    if (alarm.interval) clearTimeout(alarm.interval);
+    alarm.audio.onended = null;
+    alarm.audio.pause();
+    alarm.audio.currentTime = 0;
+    if (alarm.blobUrl) URL.revokeObjectURL(alarm.blobUrl);
+  }, []);
 
-  }, [orders, announcedOrderIds]);
-
-  const playAlarm = (order: Order) => {
+  const playAlarm = useCallback((order: Order) => {
     const audio = new Audio();
     const abortController = new AbortController();
     activeAlarms.current[order.id] = { audio, abortController };
@@ -254,27 +251,42 @@ export default function OrderManagerView() {
         }
       }
     })();
-  };
+  }, [announceAudioFallback]);
 
-  const stopAlarm = (orderId: string) => {
-    const alarm = activeAlarms.current[orderId];
-    if (!alarm) return;
+  useEffect(() => {
+    // Check for new pending orders and start alarm
+    orders.forEach(order => {
+      if (order.status === 'pending' && announcedOrderIds.has(order.id) && !activeAlarms.current[order.id]) {
+        playAlarm(order);
+      }
+    });
 
-    // Remove primeiro para que uma requisição TTS que termine em paralelo não
-    // consiga iniciar um alarme depois de o pedido já ter sido aceito.
-    delete activeAlarms.current[orderId];
-    alarm.abortController.abort();
-    if (alarm.interval) clearTimeout(alarm.interval);
-    alarm.audio.onended = null;
-    alarm.audio.pause();
-    alarm.audio.currentTime = 0;
-    if (alarm.blobUrl) URL.revokeObjectURL(alarm.blobUrl);
-  };
+    // Cleanup alarms for non-pending orders (just in case)
+    Object.keys(activeAlarms.current).forEach(orderId => {
+      const order = orders.find(o => o.id === orderId);
+      if (!order || order.status !== 'pending') {
+        stopAlarm(orderId);
+      }
+    });
+
+  }, [orders, announcedOrderIds, playAlarm, stopAlarm]);
 
   // Cleanup all on unmount
   useEffect(() => {
+    const alarms = activeAlarms.current;
     return () => {
-      Object.keys(activeAlarms.current).forEach(stopAlarm);
+      Object.keys(alarms).forEach(orderId => {
+        const alarm = alarms[orderId];
+        if (alarm) {
+          delete alarms[orderId];
+          alarm.abortController.abort();
+          if (alarm.interval) clearTimeout(alarm.interval);
+          alarm.audio.onended = null;
+          alarm.audio.pause();
+          alarm.audio.currentTime = 0;
+          if (alarm.blobUrl) URL.revokeObjectURL(alarm.blobUrl);
+        }
+      });
     };
   }, []);
 
