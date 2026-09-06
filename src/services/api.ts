@@ -528,7 +528,8 @@ export async function createWhatsappSession(name: string) {
 }
 
 export async function connectWhatsappSession(sessionId: string) {
-  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}/connect`, {
+  const safeSessionId = encodeURIComponent(sessionId.trim());
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${safeSessionId}/connect`, {
     method: "POST",
   });
   if (!res.ok) {
@@ -539,7 +540,8 @@ export async function connectWhatsappSession(sessionId: string) {
 }
 
 export async function getWhatsappSessionStatus(sessionId: string) {
-  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}`);
+  const safeSessionId = encodeURIComponent(sessionId.trim());
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${safeSessionId}`);
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
     throw new Error(errData.detail || "Falha ao consultar status da sessão.");
@@ -548,7 +550,8 @@ export async function getWhatsappSessionStatus(sessionId: string) {
 }
 
 export async function getWhatsappSessionSettings(sessionId: string) {
-  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}/settings`);
+  const safeSessionId = encodeURIComponent(sessionId.trim());
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${safeSessionId}/settings`);
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
     throw new Error(errData.detail || "Falha ao buscar configurações da sessão.");
@@ -557,7 +560,8 @@ export async function getWhatsappSessionSettings(sessionId: string) {
 }
 
 export async function updateWhatsappSessionSettings(sessionId: string, settingsData: any) {
-  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}/settings`, {
+  const safeSessionId = encodeURIComponent(sessionId.trim());
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${safeSessionId}/settings`, {
     method: "PUT",
     body: JSON.stringify(settingsData),
   });
@@ -569,7 +573,8 @@ export async function updateWhatsappSessionSettings(sessionId: string, settingsD
 }
 
 export async function disconnectWhatsappSession(sessionId: string) {
-  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}/disconnect`, {
+  const safeSessionId = encodeURIComponent(sessionId.trim());
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${safeSessionId}/disconnect`, {
     method: "POST",
   });
   if (!res.ok) {
@@ -580,7 +585,8 @@ export async function disconnectWhatsappSession(sessionId: string) {
 }
 
 export async function deleteWhatsappSession(sessionId: string) {
-  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${sessionId}`, {
+  const safeSessionId = encodeURIComponent(sessionId.trim());
+  const res = await fetchWithAuth(`${API_BASE}/whatsapp/sessions/${safeSessionId}`, {
     method: "DELETE",
   });
   if (!res.ok) {

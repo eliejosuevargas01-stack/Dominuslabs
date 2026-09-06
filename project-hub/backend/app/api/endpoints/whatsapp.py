@@ -400,13 +400,59 @@ async def list_sessions(
 ):
     """
     List all sessions (WhatsApp and Instagram) belonging to the authenticated user.
+    Auto-syncs positive tenant ownership for returned sessions so subsequent
+    lookups, connections and deletions work seamlessly without fail-closed 404s.
     """
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+
+    from app.services.whatsapp_service import get_tenant_id_for_user
+    tenant_id = await get_tenant_id_for_user(user, db)
+
     headers = await get_user_m2m_headers(current_user, db)
-    return await make_whatsapp_api_request(
+    sessions_data = await make_whatsapp_api_request(
         "GET",
         "/api/sessions",
         headers=headers
     )
+
+    try:
+        session_items = []
+        if isinstance(sessions_data, list):
+            session_items = sessions_data
+        elif isinstance(sessions_data, dict):
+            session_items = sessions_data.get("sessions") or []
+
+        for item in session_items:
+            if not isinstance(item, dict):
+                continue
+            candidates = set()
+            for key in ("id", "sessionId", "name"):
+                val = item.get(key)
+                if val and isinstance(val, str) and val.strip():
+                    cleaned = val.strip()
+                    candidates.add(cleaned)
+                    candidates.add(cleaned.replace(" ", "-"))
+                    candidates.add(cleaned.replace("-", " "))
+
+            for cand in candidates:
+                existing = db.query(WhatsappAccount).filter(
+                    WhatsappAccount.idpw == cand
+                ).first()
+                if not existing:
+                    new_acc = WhatsappAccount(
+                        user_id=user.id,
+                        tenant_id=tenant_id,
+                        idpw=cand
+                    )
+                    db.add(new_acc)
+        db.commit()
+    except Exception as e:
+        logger.warning(f"[WA-SYNC] Falha ao sincronizar sessões com o banco local: {e}")
+        db.rollback()
+
+    return sessions_data
 
 @router.post("/sessions")
 async def create_session(
@@ -418,17 +464,19 @@ async def create_session(
     Create a new WhatsApp session and persist positive tenant ownership.
     """
     name = payload.get("name")
-    if not name:
+    if not name or not str(name).strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="O nome da sessão é obrigatório."
         )
+    name = str(name).strip()
 
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    if not user.tenant_id:
-        raise HTTPException(status_code=403, detail="Acesso negado: usuário não possui tenant_id configurado.")
+
+    from app.services.whatsapp_service import get_tenant_id_for_user
+    tenant_id = await get_tenant_id_for_user(user, db)
 
     headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
     res = await make_whatsapp_api_request(
@@ -439,18 +487,41 @@ async def create_session(
         timeout=15.0
     )
 
-    existing_acc = db.query(WhatsappAccount).filter(
-        WhatsappAccount.idpw == name,
-        WhatsappAccount.tenant_id == user.tenant_id
-    ).first()
-    if not existing_acc:
-        new_acc = WhatsappAccount(
-            user_id=user.id,
-            tenant_id=user.tenant_id,
-            idpw=name
-        )
-        db.add(new_acc)
-        db.commit()
+    candidates = {
+        name,
+        name.replace(" ", "-"),
+        name.replace("-", " ")
+    }
+    if isinstance(res, dict):
+        for key in ("id", "sessionId", "name"):
+            val = res.get(key)
+            if val and isinstance(val, str) and val.strip():
+                c = val.strip()
+                candidates.add(c)
+                candidates.add(c.replace(" ", "-"))
+                candidates.add(c.replace("-", " "))
+        sess_obj = res.get("session")
+        if isinstance(sess_obj, dict):
+            for key in ("id", "sessionId", "name"):
+                val = sess_obj.get(key)
+                if val and isinstance(val, str) and val.strip():
+                    c = val.strip()
+                    candidates.add(c)
+                    candidates.add(c.replace(" ", "-"))
+                    candidates.add(c.replace("-", " "))
+
+    for cand in candidates:
+        existing_acc = db.query(WhatsappAccount).filter(
+            WhatsappAccount.idpw == cand
+        ).first()
+        if not existing_acc:
+            new_acc = WhatsappAccount(
+                user_id=user.id,
+                tenant_id=tenant_id,
+                idpw=cand
+            )
+            db.add(new_acc)
+    db.commit()
 
     return res
 
@@ -527,25 +598,52 @@ async def delete_session(
 ):
     """
     Delete a WhatsApp session with positive ownership verification and local cleanup.
+    Operates idempotently if the session is already removed upstream.
     """
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session, get_tenant_id_for_user
+    tenant_id = await get_tenant_id_for_user(user, db)
     resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
     headers = await get_user_m2m_headers(current_user, db, scope="whatsapp:sessions:write")
-    res = await make_whatsapp_api_request(
-        "DELETE",
-        f"/api/sessions/{resolved_session}",
-        headers=headers,
-        timeout=15.0
-    )
+
+    clean_target = (session_id or "").strip()
+    variants = {
+        clean_target,
+        clean_target.replace("-", " "),
+        clean_target.replace(" ", "-"),
+        resolved_session,
+        resolved_session.replace("-", " "),
+        resolved_session.replace(" ", "-")
+    }
+
+    res = None
+    try:
+        res = await make_whatsapp_api_request(
+            "DELETE",
+            f"/api/sessions/{resolved_session}",
+            headers=headers,
+            timeout=15.0
+        )
+    except HTTPException as he:
+        if he.status_code == 404:
+            logger.info(f"[WA-DELETE] Sessão '{resolved_session}' já não existia na Whats API (404). Procedendo com limpeza local.")
+            res = {"success": True, "message": "Sessão removida do servidor."}
+        else:
+            raise he
+
     db.query(WhatsappAccount).filter(
-        WhatsappAccount.idpw == resolved_session,
-        WhatsappAccount.tenant_id == user.tenant_id
-    ).delete()
+        WhatsappAccount.tenant_id == tenant_id,
+        WhatsappAccount.idpw.in_(variants)
+    ).delete(synchronize_session=False)
+
+    if user.preferred_session_id in variants:
+        user.preferred_session_id = None
+        db.add(user)
+
     db.commit()
-    return res
+    return res or {"success": True, "message": "Sessão removida com sucesso."}
 
 @router.get("/sessions/{session_id}/settings")
 async def get_session_settings(
