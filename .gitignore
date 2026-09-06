@@ -24,6 +24,7 @@ coverage/
 # Environment variables, certificates and secrets
 .env
 .env.*
+!.env.example
 *.env
 certs/
 *.crt
