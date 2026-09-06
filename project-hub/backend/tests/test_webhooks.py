@@ -65,27 +65,118 @@ def test_deploy_webhook(mocker):
     app.dependency_overrides.clear()
 
 
-def test_outbound_whatsapp_send_accepts_master_api_key_without_bearer_token(mocker, client):
-    mocker.patch.object(settings, "WHATSAPP_MASTER_SECRET", "test-master-key")
-    mock_request = mocker.patch(
-        "app.services.whatsapp_client.whatsapp_client.send_message",
-        return_value={"status": "success"},
-    )
+def make_canonical_hmac(body: bytes, timestamp: str, event_id: str, secret: str = None) -> str:
+    import hmac, hashlib
+    sec = secret or settings.N8N_WEBHOOK_SECRET
+    return hmac.new(sec.encode(), f"{timestamp}.{event_id}.".encode() + body, hashlib.sha256).hexdigest()
 
+
+def test_outbound_whatsapp_send_rejects_master_api_key(client):
     response = client.post(
         "/api/v1/webhooks/outbound/whatsapp/send",
         headers={"X-Master-Api-Key": "test-master-key"},
         json={"phone": "5511999999999", "message": "Ola"},
     )
-
-    assert response.status_code == 200
-    assert response.json() == {"status": "success"}
-    mock_request.assert_called_once()
+    assert response.status_code == 401
+    assert "X-Master-API-Key não é permitida" in response.json()["detail"]
 
 
+def test_outbound_whatsapp_send_with_hmac_and_owned_session(mocker, client, db):
+    from app.models.user import User
+    from app.models.whatsapp_account import WhatsappAccount
+    import json, time
 
-def test_outbound_whatsapp_send_rejects_master_key_in_body(mocker, client):
-    mocker.patch.object(settings, "WHATSAPP_MASTER_SECRET", "test-master-key")
+    user = User(
+        email="test_outbound@tenant.com",
+        hashed_password="pw",
+        tenant_id="tenant-outbound",
+        role="custom"
+    )
+    db.add(user)
+    db.commit()
+
+    wa_acc = WhatsappAccount(
+        user_id=user.id,
+        tenant_id="tenant-outbound",
+        session_id="sess-outbound"
+    )
+    db.add(wa_acc)
+    db.commit()
+
+    mock_send = mocker.patch(
+        "app.services.whatsapp_client.whatsapp_client.send_message",
+        return_value={"status": "success", "message_id": "msg-123"},
+    )
+
+    payload = {
+        "tenant_id": "tenant-outbound",
+        "session_id": "sess-outbound",
+        "phone": "5511999999999",
+        "message": "Ola"
+    }
+    raw_body = json.dumps(payload).encode()
+    ts = str(int(time.time()))
+    eid = "evt-outbound-1"
+    sig = make_canonical_hmac(raw_body, ts, eid)
+    headers = {
+        "Content-Type": "application/json",
+        "X-N8N-Signature": sig,
+        "X-N8N-Timestamp": ts,
+        "X-N8N-Event-Id": eid,
+    }
+    res = client.post("/api/v1/webhooks/outbound/whatsapp/send", content=raw_body, headers=headers)
+    assert res.status_code == 200
+    assert res.json() == {"status": "success", "message_id": "msg-123"}
+    mock_send.assert_called_once()
+
+
+def test_outbound_whatsapp_send_rejects_unowned_session(client, db):
+    import json, time
+    payload = {
+        "tenant_id": "tenant-unowned",
+        "session_id": "sess-unknown",
+        "phone": "5511999999999",
+        "message": "Ola"
+    }
+    raw_body = json.dumps(payload).encode()
+    ts = str(int(time.time()))
+    eid = "evt-outbound-unowned"
+    sig = make_canonical_hmac(raw_body, ts, eid)
+    headers = {
+        "Content-Type": "application/json",
+        "X-N8N-Signature": sig,
+        "X-N8N-Timestamp": ts,
+        "X-N8N-Event-Id": eid,
+    }
+    res = client.post("/api/v1/webhooks/outbound/whatsapp/send", content=raw_body, headers=headers)
+    assert res.status_code == 404
+    assert "não encontrada" in res.json()["detail"]
+
+
+def test_outbound_whatsapp_send_rejects_missing_tenant_or_session(client):
+    import json, time
+    # Missing session_id
+    payload = {
+        "tenant_id": "tenant-test",
+        "phone": "5511999999999",
+        "message": "Ola"
+    }
+    raw_body = json.dumps(payload).encode()
+    ts = str(int(time.time()))
+    eid = "evt-outbound-missing"
+    sig = make_canonical_hmac(raw_body, ts, eid)
+    headers = {
+        "Content-Type": "application/json",
+        "X-N8N-Signature": sig,
+        "X-N8N-Timestamp": ts,
+        "X-N8N-Event-Id": eid,
+    }
+    res = client.post("/api/v1/webhooks/outbound/whatsapp/send", content=raw_body, headers=headers)
+    assert res.status_code == 400
+    assert "é obrigatório" in res.json()["detail"]
+
+
+def test_outbound_whatsapp_send_rejects_master_key_in_body(client):
     response = client.post(
         "/api/v1/webhooks/outbound/whatsapp/send",
         json={
@@ -94,7 +185,6 @@ def test_outbound_whatsapp_send_rejects_master_key_in_body(mocker, client):
             "message": "Ola",
         },
     )
-
     assert response.status_code == 401
 
 
@@ -119,7 +209,7 @@ def test_n8n_webhook_rejects_human_jwt_with_403(client, db):
 
 
 def test_n8n_webhook_valid_hmac_accepted(client):
-    import hmac, hashlib, json, time
+    import json, time
 
     payload = [{
         "message_id": "m1-valid",
@@ -130,12 +220,14 @@ def test_n8n_webhook_valid_hmac_accepted(client):
         "fromMe": False
     }]
     raw_body = json.dumps(payload).encode()
-    sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
+    ts = str(int(time.time()))
+    eid = "event-unique-123"
+    sig = make_canonical_hmac(raw_body, ts, eid)
     headers = {
         "Content-Type": "application/json",
         "X-Signature": sig,
-        "X-Timestamp": str(int(time.time())),
-        "X-Event-Id": "event-unique-123"
+        "X-Timestamp": ts,
+        "X-Event-Id": eid
     }
     res = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=headers)
     assert res.status_code == 200
@@ -158,16 +250,18 @@ def test_n8n_webhook_raw_secret_rejected_with_401(client):
 
 
 def test_n8n_webhook_expired_timestamp_rejected_with_401(client):
-    import hmac, hashlib, json, time
+    import json, time
 
     payload = [{"message_id": "m1", "contact_jid": "c1", "session_id": "s1", "tenant_id": "t1", "text": "hi"}]
     raw_body = json.dumps(payload).encode()
     old_ts = str(int(time.time()) - 400)
-    sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
+    eid = "event-expired"
+    sig = make_canonical_hmac(raw_body, old_ts, eid)
     headers = {
         "Content-Type": "application/json",
         "X-Signature": sig,
         "X-Timestamp": old_ts,
+        "X-Event-Id": eid,
     }
     res = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=headers)
     assert res.status_code == 401
@@ -175,7 +269,7 @@ def test_n8n_webhook_expired_timestamp_rejected_with_401(client):
 
 
 def test_n8n_webhook_replayed_event_id_rejected_with_409(client):
-    import hmac, hashlib, json, time
+    import json, time
 
     payload = [{
         "message_id": "m-replay-1",
@@ -186,12 +280,14 @@ def test_n8n_webhook_replayed_event_id_rejected_with_409(client):
         "fromMe": False
     }]
     raw_body = json.dumps(payload).encode()
-    sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
+    ts = str(int(time.time()))
+    eid = "evt-replay-test-unique"
+    sig = make_canonical_hmac(raw_body, ts, eid)
     headers = {
         "Content-Type": "application/json",
         "X-Signature": sig,
-        "X-Timestamp": str(int(time.time())),
-        "X-Event-Id": "evt-replay-test-unique"
+        "X-Timestamp": ts,
+        "X-Event-Id": eid
     }
     # 1st request succeeds
     res1 = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=headers)
@@ -204,21 +300,17 @@ def test_n8n_webhook_replayed_event_id_rejected_with_409(client):
 
 
 def test_n8n_webhook_rejects_whatsapp_master_secret_with_401(client):
-    import json
-
     payload = [{"message_id": "m1", "contact_jid": "c1", "session_id": "s1", "tenant_id": "t1", "text": "hi"}]
     headers = {
         "Content-Type": "application/json",
-        "X-Master-API-Key": settings.WHATSAPP_MASTER_SECRET,
+        "X-Master-API-Key": "some-master-key",
     }
     res = client.post("/api/v1/webhooks/crm/update-chat", json=payload, headers=headers)
     assert res.status_code == 401
-    assert "WHATSAPP_MASTER_SECRET não é permitido" in res.json()["detail"]
+    assert "X-Master-API-Key não é permitida" in res.json()["detail"]
 
 
 def test_n8n_webhook_rejects_query_param_credentials_with_401(client):
-    import json
-
     payload = [{"message_id": "m1", "contact_jid": "c1", "session_id": "s1", "tenant_id": "t1", "text": "hi"}]
     res = client.post("/api/v1/webhooks/crm/update-chat?token=secret-token", json=payload)
     assert res.status_code == 401
@@ -226,7 +318,7 @@ def test_n8n_webhook_rejects_query_param_credentials_with_401(client):
 
 
 def test_n8n_webhook_sanitizes_missing_field_errors(client):
-    import hmac, hashlib, json, time
+    import json, time
 
     # Missing session_id
     payload = [{
@@ -237,12 +329,14 @@ def test_n8n_webhook_sanitizes_missing_field_errors(client):
         "fromMe": False
     }]
     raw_body = json.dumps(payload).encode()
-    sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
+    ts = str(int(time.time()))
+    eid = "event-missing-field"
+    sig = make_canonical_hmac(raw_body, ts, eid)
     headers = {
         "Content-Type": "application/json",
         "X-Signature": sig,
-        "X-Timestamp": str(int(time.time())),
-        "X-Event-Id": "event-missing-field"
+        "X-Timestamp": ts,
+        "X-Event-Id": eid
     }
     res = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=headers)
     assert res.status_code == 400
@@ -254,7 +348,7 @@ def test_replay_cache_antipoisoning_with_invalid_signature(client):
     P0/Section 25: Um request com HMAC inválido NUNCA deve poluir _n8n_seen_events.
     Um request posterior legítimo com o mesmo event_id deve ser aceito normalmente.
     """
-    import hmac, hashlib, json, time
+    import json, time
 
     payload = [{
         "message_id": "m-antipoison-1",
@@ -265,11 +359,10 @@ def test_replay_cache_antipoisoning_with_invalid_signature(client):
         "fromMe": False
     }]
     raw_body = json.dumps(payload).encode()
-    valid_sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
-    invalid_sig = "bad0000000000000000000000000000000000000000000000000000000000000"
-
     event_id = "evt-poison-attempt-999"
     current_ts = str(int(time.time()))
+    valid_sig = make_canonical_hmac(raw_body, current_ts, event_id)
+    invalid_sig = "bad0000000000000000000000000000000000000000000000000000000000000"
 
     # 1. Requisição atacante com HMAC inválido -> deve retornar 401
     bad_headers = {
@@ -303,17 +396,19 @@ def test_n8n_webhook_mandatory_headers_rejection(client):
     """
     P0/Section 26, 27: Testa que a ausência de Timestamp ou Event-Id retorna 401.
     """
-    import hmac, hashlib, json, time
+    import json, time
 
     payload = [{"message_id": "m1", "contact_jid": "c1", "session_id": "s1", "tenant_id": "t1", "text": "hi"}]
     raw_body = json.dumps(payload).encode()
-    sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
+    ts = str(int(time.time()))
+    eid = "evt-123"
+    sig = make_canonical_hmac(raw_body, ts, eid)
 
     # Missing timestamp
     headers_no_ts = {
         "Content-Type": "application/json",
         "X-N8N-Signature": sig,
-        "X-N8N-Event-Id": "evt-123"
+        "X-N8N-Event-Id": eid
     }
     res_no_ts = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=headers_no_ts)
     assert res_no_ts.status_code == 401
@@ -323,8 +418,46 @@ def test_n8n_webhook_mandatory_headers_rejection(client):
     headers_no_eid = {
         "Content-Type": "application/json",
         "X-N8N-Signature": sig,
-        "X-N8N-Timestamp": str(int(time.time()))
+        "X-N8N-Timestamp": ts
     }
     res_no_eid = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=headers_no_eid)
     assert res_no_eid.status_code == 401
     assert "Event-ID ausente" in res_no_eid.json()["detail"]
+
+
+def test_n8n_webhook_tampered_event_id_rejected(client):
+    """Garante que alterar o Event-ID invalida a assinatura HMAC (replay protection binding)."""
+    import json, time
+
+    payload = [{"message_id": "m-tamper", "contact_jid": "c1", "session_id": "s1", "tenant_id": "t1", "text": "hi"}]
+    raw_body = json.dumps(payload).encode()
+    ts = str(int(time.time()))
+    sig = make_canonical_hmac(raw_body, ts, "evt-original")
+    headers = {
+        "Content-Type": "application/json",
+        "X-N8N-Signature": sig,
+        "X-N8N-Timestamp": ts,
+        "X-N8N-Event-Id": "evt-tampered"
+    }
+    res = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=headers)
+    assert res.status_code == 401
+    assert "Assinatura HMAC inválida" in res.json()["detail"]
+
+
+def test_n8n_webhook_raw_body_only_hmac_rejected(client):
+    """Garante que HMAC calculado apenas sobre o body sem timestamp.event_id é rejeitado."""
+    import hmac, hashlib, json, time
+
+    payload = [{"message_id": "m-raw", "contact_jid": "c1", "session_id": "s1", "tenant_id": "t1", "text": "hi"}]
+    raw_body = json.dumps(payload).encode()
+    raw_sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
+    headers = {
+        "Content-Type": "application/json",
+        "X-N8N-Signature": raw_sig,
+        "X-N8N-Timestamp": str(int(time.time())),
+        "X-N8N-Event-Id": "evt-raw-only"
+    }
+    res = client.post("/api/v1/webhooks/crm/update-chat", content=raw_body, headers=headers)
+    assert res.status_code == 401
+    assert "Assinatura HMAC inválida" in res.json()["detail"]
+

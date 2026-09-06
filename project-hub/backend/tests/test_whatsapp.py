@@ -256,7 +256,7 @@ def test_avatar_and_media_proxy_cross_tenant_rejection_before_api_call(db, clien
         mock_api.assert_not_called()
 
 
-def test_make_whatsapp_api_request_fails_closed_when_tenant_id_missing():
+def test_whatsapp_client_fails_closed_when_tenant_id_missing():
     import asyncio
     from app.services.whatsapp_client import whatsapp_client
 
@@ -335,3 +335,63 @@ def test_resolve_owned_whatsapp_session_matches_slug_and_name_variants(db):
 
     resolved_space = resolve_owned_whatsapp_session(user, "3643 principal", db)
     assert resolved_space in ("3643 principal", "3643-principal")
+
+
+def test_resolve_owned_whatsapp_session_rejects_session_only_in_preferred_session_id(db):
+    """Garante que ter preferred_session_id sem WhatsappAccount no banco não confere ownership (sem fallback)."""
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+
+    user = User(
+        email="unregistered_pref@tenant.com",
+        hashed_password="pw",
+        tenant_id="tenant_pref_only",
+        preferred_session_id="ghost_session_123",
+        role="custom"
+    )
+    db.add(user)
+    db.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        resolve_owned_whatsapp_session(user, "ghost_session_123", db)
+    assert exc_info.value.status_code == 404
+    assert "não encontrada" in exc_info.value.detail
+
+
+def test_crm_avatar_and_media_proxy_reject_anonymous(client):
+    """Garante que endpoints proxy de avatar e mídia exigem autenticação do Dominus e rejeitam anônimos com 401."""
+    res_avatar = client.get("/api/crm/avatar?session_id=sess1&jid=contact@s.whatsapp.net")
+    assert res_avatar.status_code == 401
+
+    res_media = client.get("/api/crm/media?session_id=sess1&url=https://example.com/audio.mp3")
+    assert res_media.status_code == 401
+
+
+def test_crm_set_session_preference_rejects_unowned_session(client, db):
+    """Garante que definir preferred_session_id falha com 404 se a sessão não existir na WhatsappAccount do tenant."""
+    user = User(
+        email="pref_tester@tenant.com",
+        hashed_password="pw",
+        tenant_id="tenant_pref_test",
+        role="custom",
+        can_manage_crm=True
+    )
+    db.add(user)
+    db.commit()
+
+    token = create_access_token({
+        "sub": user.email,
+        "user_id": str(user.id),
+        "role": user.role,
+        "permissions": "read,write",
+        "tenant_id": user.tenant_id
+    })
+    headers = {"Authorization": f"Bearer {token}"}
+
+    res = client.put(
+        f"{settings.API_V1_STR}/crm/session-preference",
+        json={"session_id": "unregistered_session_xyz"},
+        headers=headers
+    )
+    assert res.status_code == 404
+    assert "não encontrada" in res.json()["detail"]
+

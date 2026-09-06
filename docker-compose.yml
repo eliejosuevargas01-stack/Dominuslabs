@@ -1,0 +1,45 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: dominus_backend
+    restart: unless-stopped
+    ports:
+      - "${PORT_BACKEND:-8000}:8000"
+    environment:
+      - PORT=8000
+      - UPLOAD_DIR=/app/uploads
+      - SECRET_KEY=${SECRET_KEY:-dominuslabs-super-secret-key-production-32-chars-min}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - ADMIN_TENANT_ID=${ADMIN_TENANT_ID:-admin}
+      - N8N_WEBHOOK_SECRET=${N8N_WEBHOOK_SECRET:-n8n-webhook-secret-production-32-chars}
+      - ENCRYPTION_MASTER_KEY=${ENCRYPTION_MASTER_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      - DATABASE_URL=${DATABASE_URL:-}
+    volumes:
+      - backend_uploads:/app/uploads
+    networks:
+      - dominus_net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        - VITE_API_URL=${VITE_API_URL:-}
+    container_name: dominus_frontend
+    restart: unless-stopped
+    ports:
+      - "${PORT_FRONTEND:-80}:80"
+    depends_on:
+      - backend
+    networks:
+      - dominus_net
+
+volumes:
+  backend_uploads:
+
+networks:
+  dominus_net:
+    driver: bridge

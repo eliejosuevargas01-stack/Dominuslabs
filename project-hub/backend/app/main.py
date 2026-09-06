@@ -188,6 +188,8 @@ from fastapi.responses import RedirectResponse, Response
 from typing import Optional
 
 @app.get("/api/sessions/{session_id}/avatar")
+@app.get("/api/crm/avatar")
+@app.get("/api/v1/crm/avatar")
 @app.get("/avatar")
 async def root_avatar_proxy(
     request: Request,

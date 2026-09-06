@@ -28,60 +28,6 @@ logger = logging.getLogger("whatsapp_endpoints")
 router = APIRouter()
 
 
-# =============================================================================
-# Shims de compatibilidade (para código legado ou testes unitários)
-# =============================================================================
-
-async def get_user_m2m_headers(email: str, db: Session, scope: str = "whatsapp:sessions:read") -> Dict[str, str]:
-    """Obtém cabeçalhos M2M delegando para o IdentityClient."""
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    tenant_id = await get_tenant_id_for_user(user, db)
-    token = await identity_client.get_token(tenant_id=tenant_id, scope=scope, aud="whatsapp-api")
-    return {
-        "Authorization": f"Bearer {token}"
-    }
-
-
-async def get_user_token(email: str, db: Session, scope: str = "whatsapp:sessions:read") -> str:
-    """Obtém token M2M para o usuário."""
-    headers = await get_user_m2m_headers(email, db, scope=scope)
-    return headers.get("Authorization", "").replace("Bearer ", "")
-
-
-async def make_whatsapp_api_request(
-    method: str,
-    path: str,
-    headers: Optional[Dict[str, str]] = None,
-    json_data: Optional[Dict[str, Any]] = None,
-    timeout: float = 15.0
-) -> Any:
-    tenant_id = (headers or {}).get("x-tenant-id") or ""
-    if not tenant_id:
-        auth_hdr = (headers or {}).get("Authorization", "")
-        if auth_hdr.startswith("Bearer "):
-            t = auth_hdr[7:].strip()
-            from app.core.auth import decode_access_token
-            p = decode_access_token(t)
-            if p and p.get("tenant_id"):
-                tenant_id = p["tenant_id"]
-    if "messages" in path or "send" in path:
-        scope = "whatsapp:messages:send"
-    elif method.upper() in ("POST", "PUT", "DELETE"):
-        scope = "whatsapp:sessions:write"
-    else:
-        scope = "whatsapp:sessions:read"
-
-    return await whatsapp_client._execute_request(
-        method=method,
-        path=path,
-        tenant_id=tenant_id,
-        scope=scope,
-        json_data=json_data,
-        timeout=timeout
-    )
-
 
 # =============================================================================
 # Rotas Oficiais Dominus

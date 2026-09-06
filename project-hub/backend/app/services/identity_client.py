@@ -88,6 +88,19 @@ class IdentityClient:
                 logger.info(f"[IDENTITY-CLIENT] Token expirando (<30s). Renovando para tenant_id={tenant_id}, scope={scope}...")
                 self._cache.pop(cache_key, None)
 
+        if not settings.DOMINUS_PRIVATE_KEY:
+            logger.error("[IDENTITY-CLIENT] DOMINUS_PRIVATE_KEY não configurada no servidor (fail-closed).")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Configuração de segurança incompleta: DOMINUS_PRIVATE_KEY ausente."
+            )
+        if not settings.IDPW_PUBLIC_KEY:
+            logger.error("[IDENTITY-CLIENT] IDPW_PUBLIC_KEY não configurada no servidor (fail-closed).")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Configuração de segurança incompleta: IDPW_PUBLIC_KEY ausente."
+            )
+
         base_url = settings.IDENTITY_WORKER_URL.rstrip("/")
         url = f"{base_url}/v1/tokens"
 
@@ -150,16 +163,22 @@ class IdentityClient:
 
                 if resp.status_code == 200:
                     data = resp.json()
-                    if isinstance(data, dict) and data.get("_encrypted") is True:
-                        try:
-                            data = decrypt_payload(data)
-                            logger.info("[IDENTITY-CLIENT] Resposta do IDPW decriptada com sucesso.")
-                        except Exception as dec_err:
-                            logger.error(f"[IDENTITY-CLIENT] Falha ao decriptar resposta do IDPW: {dec_err}")
-                            raise HTTPException(
-                                status_code=status.HTTP_502_BAD_GATEWAY,
-                                detail="Falha ao decriptografar credencial emitida pelo Identity Worker."
-                            )
+                    # Resposta DEVE ser criptografada (fail-closed, rejeita plaintext)
+                    if not isinstance(data, dict) or data.get("_encrypted") is not True:
+                        logger.error("[IDENTITY-CLIENT] Resposta do IDPW em plaintext rejeitada (fail-closed). Criptografia obrigatória.")
+                        raise HTTPException(
+                            status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail="Resposta do Identity Worker em plaintext rejeitada: criptografia obrigatória (fail-closed)."
+                        )
+                    try:
+                        data = decrypt_payload(data)
+                        logger.info("[IDENTITY-CLIENT] Resposta do IDPW decriptada com sucesso.")
+                    except Exception as dec_err:
+                        logger.error(f"[IDENTITY-CLIENT] Falha ao decriptar resposta do IDPW: {dec_err}")
+                        raise HTTPException(
+                            status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail="Falha ao decriptografar credencial emitida pelo Identity Worker."
+                        )
 
                     token = data.get("access_token")
                     expires_in = data.get("expires_in", 300)

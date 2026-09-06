@@ -151,12 +151,18 @@ def test_webhook_cross_tenant_rejection(client, db):
         }
     ]
     raw_inconsistent = json.dumps(inconsistent_batch).encode()
-    sig_inconsistent = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), raw_inconsistent, hashlib.sha256).hexdigest()
+    ts_inconsistent = str(int(time.time()))
+    eid_inconsistent = "evt-inconsistent-1"
+    sig_inconsistent = hmac.new(
+        settings.N8N_WEBHOOK_SECRET.encode(),
+        f"{ts_inconsistent}.{eid_inconsistent}.".encode() + raw_inconsistent,
+        hashlib.sha256
+    ).hexdigest()
     h_inconsistent = {
         "Content-Type": "application/json",
         "X-Signature": sig_inconsistent,
-        "X-Timestamp": str(int(time.time())),
-        "X-Event-Id": "evt-inconsistent-1",
+        "X-Timestamp": ts_inconsistent,
+        "X-Event-Id": eid_inconsistent,
     }
     res = client.post("/api/v1/webhooks/crm/update-chat", content=raw_inconsistent, headers=h_inconsistent)
     assert res.status_code == 400
@@ -172,12 +178,18 @@ def test_webhook_cross_tenant_rejection(client, db):
         "text": "Legitimate tenant message"
     }]
     raw_own = json.dumps(own_tenant_msg).encode()
-    sig_own = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), raw_own, hashlib.sha256).hexdigest()
+    ts_own = str(int(time.time()))
+    eid_own = "evt-own-1"
+    sig_own = hmac.new(
+        settings.N8N_WEBHOOK_SECRET.encode(),
+        f"{ts_own}.{eid_own}.".encode() + raw_own,
+        hashlib.sha256
+    ).hexdigest()
     h_own = {
         "Content-Type": "application/json",
         "X-Signature": sig_own,
-        "X-Timestamp": str(int(time.time())),
-        "X-Event-Id": "evt-own-1",
+        "X-Timestamp": ts_own,
+        "X-Event-Id": eid_own,
     }
     res = client.post("/api/v1/webhooks/crm/update-chat", content=raw_own, headers=h_own)
     assert res.status_code == 200
