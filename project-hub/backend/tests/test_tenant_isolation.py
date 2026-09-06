@@ -205,3 +205,93 @@ def test_unauthenticated_request_never_impersonates_admin(client):
     # Invalid token
     res = client.get("/api/v1/company-settings/", headers={"Authorization": "Bearer invalid_token_xyz"})
     assert res.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_crm_leads_cache_multi_tenant_isolation():
+    """Valida que o cache de leads do n8n_service isola estritamente os tenants."""
+    from unittest.mock import patch, AsyncMock
+    import httpx
+    from app.services.n8n_service import N8NService
+    from app.core.crypto import encrypt_payload
+
+    N8NService._leads_cache.clear()
+
+    async def fake_post(url, **kwargs):
+        # Descriptografa body para descobrir o tenant_id da requisição
+        body = kwargs.get("json", {})
+        from app.core.crypto import decrypt_payload
+        dec = decrypt_payload(body) if isinstance(body, dict) and body.get("_encrypted") else body
+        t_id = dec.get("tenant_id") if isinstance(dec, dict) else None
+
+        if t_id == "tenant_alpha":
+            raw = [{"id": "lead_alpha_1", "empresa_nome": "Alpha Corp", "status": "Prospectado"}]
+        else:
+            raw = [{"id": "lead_beta_1", "empresa_nome": "Beta Corp", "status": "Qualificado"}]
+
+        enc_resp = encrypt_payload(raw, target="dominus")
+        return httpx.Response(200, json=enc_resp, request=httpx.Request("POST", url))
+
+    mock_client = AsyncMock()
+    mock_client.post = fake_post
+
+    with patch("httpx.AsyncClient") as mock_async_client_cls:
+        mock_async_client_cls.return_value.__aenter__.return_value = mock_client
+
+        # 1. Tenant Alpha busca leads
+        leads_alpha = await N8NService.get_leads(user_id="user_a", tenant_id="tenant_alpha")
+        assert len(leads_alpha) > 0
+        assert leads_alpha[0]["id"] == "lead_alpha_1"
+
+        # 2. Tenant Beta busca leads
+        leads_beta = await N8NService.get_leads(user_id="user_b", tenant_id="tenant_beta")
+        assert len(leads_beta) > 0
+        assert leads_beta[0]["id"] == "lead_beta_1"
+
+        # 3. Verifica que os caches em memória estão particionados por tenant
+        assert "tenant_alpha" in N8NService._leads_cache
+        assert "tenant_beta" in N8NService._leads_cache
+        assert N8NService._leads_cache["tenant_alpha"]["data"][0]["id"] == "lead_alpha_1"
+        assert N8NService._leads_cache["tenant_beta"]["data"][0]["id"] == "lead_beta_1"
+
+        # 4. Invalidação direcionada ao tenant_alpha NÃO afeta tenant_beta
+        N8NService.invalidate_leads_cache(tenant_id="tenant_alpha")
+        assert "tenant_alpha" not in N8NService._leads_cache
+        assert "tenant_beta" in N8NService._leads_cache
+
+        # 5. Tentativa de buscar leads sem tenant_id deve falhar fail-closed com ValueError
+        with pytest.raises(ValueError) as exc_val:
+            await N8NService.get_leads(user_id="user_anonymous", tenant_id=None)
+        assert "tenant_id é obrigatório" in str(exc_val.value)
+
+
+@pytest.mark.anyio
+async def test_sse_lead_events_multi_tenant_isolation():
+    """Valida que SSE lead_listeners não vazam eventos cross-tenant."""
+    import asyncio
+    from app.api.endpoints.webhooks import lead_listeners, notify_lead_listeners
+
+    lead_listeners.clear()
+
+    q_alpha = asyncio.Queue()
+    q_beta = asyncio.Queue()
+
+    # Registra listeners para o mesmo lead_id mas em tenants distintos
+    lead_listeners[("tenant_alpha", "lead_same_id")] = [("user_alpha@test.com", q_alpha)]
+    lead_listeners[("tenant_beta", "lead_same_id")] = [("user_beta@test.com", q_beta)]
+
+    # Dispara reload para tenant_alpha
+    await notify_lead_listeners("lead_same_id", tenant_id="tenant_alpha", event="reload")
+
+    # Tenant Alpha deve receber o evento
+    assert not q_alpha.empty()
+    assert await q_alpha.get() == "reload"
+
+    # Tenant Beta NUNCA deve receber o evento
+    assert q_beta.empty()
+
+    # Disparo sem tenant_id é descartado sumariamente (fail-closed)
+    await notify_lead_listeners("lead_same_id", tenant_id=None, event="reload")
+    assert q_alpha.empty()
+    assert q_beta.empty()
+

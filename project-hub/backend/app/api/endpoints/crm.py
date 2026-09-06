@@ -20,6 +20,18 @@ from app.services.whatsapp_service import send_whatsapp_message, get_oauth_token
 
 router = APIRouter()
 
+def resolve_current_user_tenant(db: Session, current_user: str) -> tuple[User, str]:
+    """
+    Resolve o usuário autenticado e seu tenant_id em modo estritamente fail-closed.
+    """
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuário não encontrado.")
+    tenant_id = user.tenant_id
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado: usuário não possui tenant_id configurado.")
+    return user, tenant_id
+
 @router.get("/leads", response_model=List[Lead])
 async def read_leads(
     db: Session = Depends(get_db),
@@ -28,8 +40,9 @@ async def read_leads(
     """
     Fetch all leads from the n8n CRM webhook or fallback to direct WhatsApp API.
     """
+    user, tenant_id = resolve_current_user_tenant(db, current_user)
     try:
-        leads = await n8n_service.get_leads(user_id=current_user)
+        leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
         if leads and len(leads) > 0:
             return leads
     except Exception as e:
@@ -40,30 +53,46 @@ async def read_leads(
     return [map_n8n_lead(c) for c in raw_contacts if isinstance(c, dict)]
 
 @router.get("/leads/{lead_id}", response_model=Lead)
-async def read_lead(lead_id: str, current_user: str = Depends(get_current_user)):
+async def read_lead(
+    lead_id: str,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
     """
     Fetch a single lead by its ID.
     """
-    leads = await n8n_service.get_leads(user_id=current_user)
+    user, tenant_id = resolve_current_user_tenant(db, current_user)
+    leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
     lead = next((l for l in leads if str(l.get("id")) == str(lead_id)), None)
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     return lead
 
 @router.put("/leads/{lead_id}", response_model=Lead)
-async def update_lead(lead_id: str, lead_in: LeadUpdate, current_user: str = Depends(check_crm_permission)):
+async def update_lead(
+    lead_id: str,
+    lead_in: LeadUpdate,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(check_crm_permission)
+):
     """
     Update a lead's profile details.
     """
-    result = await n8n_service.update_lead(lead_id, lead_in.model_dump(), current_user=current_user)
+    user, tenant_id = resolve_current_user_tenant(db, current_user)
+    result = await n8n_service.update_lead(lead_id, lead_in.model_dump(), current_user=current_user, tenant_id=tenant_id)
     return result
 
 @router.delete("/leads/{lead_id}")
-async def delete_lead(lead_id: str, current_user: str = Depends(check_crm_permission)):
+async def delete_lead(
+    lead_id: str,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(check_crm_permission)
+):
     """
     Delete a lead.
     """
-    result = await n8n_service.delete_lead(lead_id, user_id=current_user)
+    user, tenant_id = resolve_current_user_tenant(db, current_user)
+    result = await n8n_service.delete_lead(lead_id, user_id=current_user, tenant_id=tenant_id)
     return result
 
 # ---------------------------------------------------------------------------
@@ -79,8 +108,9 @@ async def get_contacts_action(
     Action 1: get_contacts
     Retorna a lista completa de contatos cadastrados.
     """
+    user, tenant_id = resolve_current_user_tenant(db, current_user)
     try:
-        leads = await n8n_service.get_leads(user_id=current_user)
+        leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
         contacts = []
         for l in leads:
             contacts.append({
@@ -90,7 +120,7 @@ async def get_contacts_action(
                 "profile_pic_url": l.get("profile_pic_url") or "",
                 "created_at": l.get("created_at") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
                 "updated_at": l.get("updated_at") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
-                "tenant_id": l.get("tenant_id") or "admin"
+                "tenant_id": tenant_id
             })
         return contacts
     except Exception as e:
@@ -106,15 +136,16 @@ async def get_conversations_action(
     Action 2: get_conversations
     Retorna a prévia de todas as conversas agrupadas ou separadas por sessão.
     """
+    user, tenant_id = resolve_current_user_tenant(db, current_user)
     try:
-        convs = await n8n_service.get_conversations(user_id=current_user)
+        convs = await n8n_service.get_conversations(user_id=current_user, tenant_id=tenant_id)
         if convs and len(convs) > 0:
             return convs
     except Exception as e:
         print(f"[CRM] n8n get_conversations error: {e}", flush=True)
 
     # Fallback return standard leads format mapped to conversations preview
-    leads = await n8n_service.get_leads(user_id=current_user)
+    leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
     result = []
     for l in leads:
         result.append({
@@ -141,8 +172,9 @@ async def get_chat_history_action(
     Action 3: get_chat_history
     Busca o histórico de mensagens de uma conversa com n8n ou Whats API.
     """
+    user, tenant_id = resolve_current_user_tenant(db, current_user)
     lookup_id = f"{contact_jid}___{session_id}" if session_id and session_id != "default" else contact_jid
-    return await n8n_service.get_messages(lookup_id, user_id=current_user)
+    return await n8n_service.get_messages(lookup_id, user_id=current_user, tenant_id=tenant_id)
 
 from fastapi.responses import RedirectResponse, Response
 
@@ -277,12 +309,17 @@ async def proxy_crm_media(
 
 
 @router.get("/progressive/{contact_jid}")
-def get_progressive_assembled_profile(contact_jid: str, current_user: str = Depends(get_current_user)):
+def get_progressive_assembled_profile(
+    contact_jid: str,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
     """
-    Retorna o perfil completo montado progressivamente no cache pelo contact_jid.
+    Retorna o perfil completo montado progressivamente no cache pelo contact_jid isolado por tenant_id.
     """
     from app.services.n8n_service import ProgressiveContactCache
-    profile = ProgressiveContactCache.get_assembled_payload(contact_jid)
+    user, tenant_id = resolve_current_user_tenant(db, current_user)
+    profile = ProgressiveContactCache.get_assembled_payload(contact_jid, tenant_id=tenant_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Perfil não encontrado no cache")
     return profile
@@ -435,9 +472,7 @@ async def send_crm_whatsapp_media(
     Recebe payload de mídia com Base64 (data:mime;base64,...) e transmite para a WhatsApp API
     no formato padronizado POST /api/sessions/{sessionId}/messages/send com objeto 'media'.
     """
-    user = db.query(User).filter(User.email == current_user).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Usuário não encontrado.")
+    user, tenant_id = resolve_current_user_tenant(db, current_user)
 
     active_session = payload.session_id or user.preferred_session_id
     if not active_session:
@@ -463,19 +498,23 @@ async def send_crm_whatsapp_media(
         }
     }
 
-    res = None
     try:
         res = await whatsapp_client.send_message(
-            tenant_id=user.tenant_id,
+            tenant_id=tenant_id,
             session_id=resolved_session,
             message_data=wa_payload
         )
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        print(f"[SEND-MEDIA-BASE64] Transmissão para Whats API falhou: {e}", flush=True)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Falha de comunicação com WhatsApp API ao enviar mídia: {str(e)}"
+        )
 
     from app.api.endpoints.webhooks import notify_lead_listeners, notify_crm_chat_listeners
-    await notify_lead_listeners(target_jid, "reload")
-    await notify_crm_chat_listeners(target_jid, is_from_me=True, sender="user")
+    await notify_lead_listeners(target_jid, tenant_id=tenant_id, event="reload")
+    await notify_crm_chat_listeners(target_jid, is_from_me=True, sender="user", tenant_id=tenant_id)
 
     return {
         "status": "success",
@@ -485,11 +524,15 @@ async def send_crm_whatsapp_media(
 
 
 @router.get("/dashboard", response_model=CrmDashboardMetrics)
-async def get_dashboard_metrics(current_user: str = Depends(get_current_user)):
+async def get_dashboard_metrics(
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
     """
-    Dynamically calculate CRM dashboard KPIs based on the leads list and messages.
+    Dynamically calculate CRM dashboard KPIs based on the leads list and messages for the user's tenant.
     """
-    leads = await n8n_service.get_leads()
+    user, tenant_id = resolve_current_user_tenant(db, current_user)
+    leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
     total_leads = len(leads)
     
     leads_novos = sum(1 for l in leads if l.get("status") == "Prospectado")
@@ -498,18 +541,24 @@ async def get_dashboard_metrics(current_user: str = Depends(get_current_user)):
     negociacoes = sum(1 for l in leads if l.get("status") == "Negociando/Objeção")
     clientes_fechados = sum(1 for l in leads if l.get("status") == "Fechado (Win)")
     
-    # Calculate sent/received from our conversations
-    mensagens_enviadas = sum(sum(1 for m in msgs if m.get("sender") == "user") for msgs in MOCK_CONVERSATIONS.values())
-    mensagens_recebidas = sum(sum(1 for m in msgs if m.get("sender") == "lead") for msgs in MOCK_CONVERSATIONS.values())
+    # Calculate sent/received from our conversations scoped by tenant
+    tenant_msgs_list = [
+        msgs for k, msgs in MOCK_CONVERSATIONS.items()
+        if k.startswith(f"{tenant_id}:") or (":" not in k and tenant_id == "admin")
+    ]
+    mensagens_enviadas = sum(sum(1 for m in msgs if m.get("sender") == "user") for msgs in tenant_msgs_list)
+    mensagens_recebidas = sum(sum(1 for m in msgs if m.get("sender") == "lead") for msgs in tenant_msgs_list)
     
     # Count pending responses
     respostas_pendentes = 0
     for lead in leads:
         l_id = lead.get("id")
+        cache_k = f"{tenant_id}:{l_id}"
+        conv = MOCK_CONVERSATIONS.get(cache_k) or MOCK_CONVERSATIONS.get(l_id)
         if lead.get("status") == "RESPONDED":
             respostas_pendentes += 1
-        elif l_id in MOCK_CONVERSATIONS and MOCK_CONVERSATIONS[l_id]:
-            if MOCK_CONVERSATIONS[l_id][-1].get("sender") == "lead":
+        elif conv:
+            if conv[-1].get("sender") == "lead":
                 respostas_pendentes += 1
                 
     taxa_conversao = round((clientes_fechados / total_leads * 100), 1) if total_leads > 0 else 0.0
@@ -533,23 +582,31 @@ from typing import Dict, Any, Optional
 class ActivityCreatePayload(BaseModel):
     """
     Classe ActivityCreatePayload.
-
-    O que faz: Representa a estrutura de dados e operações para a entidade ActivityCreatePayload em o endpoint de API para crm.
-    Impacto na regra de negócio: Centraliza o comportamento da entidade ActivityCreatePayload, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
     """
     event_type: str
     metadata: Optional[Dict[str, Any]] = None
 
 @router.get("/leads/{lead_id}/activities")
-async def get_lead_activities(lead_id: str, current_user: str = Depends(get_current_user)):
+async def get_lead_activities(
+    lead_id: str,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
     """
     Get the timeline history of activities/events for a lead.
     """
-    return await n8n_service.get_activities(lead_id)
+    user, tenant_id = resolve_current_user_tenant(db, current_user)
+    return await n8n_service.get_activities(lead_id, tenant_id=tenant_id)
 
 @router.post("/leads/{lead_id}/activities")
-async def log_lead_activity(lead_id: str, payload: ActivityCreatePayload, current_user: str = Depends(check_crm_permission)):
+async def log_lead_activity(
+    lead_id: str,
+    payload: ActivityCreatePayload,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(check_crm_permission)
+):
     """
     Create a new activity log entry for a lead (e.g. proposal_opened).
     """
-    return await n8n_service.create_activity(lead_id, payload.event_type, payload.metadata or {})
+    user, tenant_id = resolve_current_user_tenant(db, current_user)
+    return await n8n_service.create_activity(lead_id, payload.event_type, payload.metadata or {}, tenant_id=tenant_id)

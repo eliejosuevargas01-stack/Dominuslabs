@@ -17,6 +17,13 @@ services:
       - N8N_WEBHOOK_SECRET=${N8N_WEBHOOK_SECRET:-n8n-webhook-secret-production-32-chars}
       - ENCRYPTION_MASTER_KEY=${ENCRYPTION_MASTER_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
       - DATABASE_URL=${DATABASE_URL:-}
+      - IDENTITY_WORKER_URL=${IDENTITY_WORKER_URL:-https://identity.dominus.online}
+      - WHATSAPP_API_URL=${WHATSAPP_API_URL:-http://localhost:3000}
+      - DOMINUS_PRIVATE_KEY=${DOMINUS_PRIVATE_KEY:-}
+      - DOMINUS_PUBLIC_KEY=${DOMINUS_PUBLIC_KEY:-}
+      - IDPW_PUBLIC_KEY=${IDPW_PUBLIC_KEY:-}
+      - WHATS_API_PUBLIC_KEY=${WHATS_API_PUBLIC_KEY:-}
+      - N8N_PUBLIC_KEY=${N8N_PUBLIC_KEY:-}
     volumes:
       - backend_uploads:/app/uploads
     networks:

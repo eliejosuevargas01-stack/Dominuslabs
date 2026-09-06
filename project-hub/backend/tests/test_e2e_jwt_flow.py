@@ -183,6 +183,127 @@ async def test_crypto_and_identity_client_fail_closed_when_keys_missing(monkeypa
     assert "DOMINUS_PRIVATE_KEY ausente" in exc_client.value.detail
 
 
+@pytest.mark.anyio
+async def test_identity_client_sends_single_encrypted_payload():
+    """Valida que o IdentityClient envia payload com criptografia única (não duplamente criptografado)."""
+    from app.services.identity_client import identity_client
+    from app.core.crypto import decrypt_payload, encrypt_payload
+
+    identity_client._cache.clear()
+
+    captured_requests = []
+
+    async def mock_post(url, **kwargs):
+        captured_requests.append(kwargs)
+        fake_jwt = jwt.encode(
+            {"iss": "https://identity.dominus.online", "tenant_id": "tenant_single_enc", "exp": 1900000000},
+            "secret_key_long_enough_for_sha256_32bytes",
+            algorithm="HS256"
+        )
+        encrypted_resp = encrypt_payload(
+            {"access_token": fake_jwt, "expires_in": 300},
+            target="dominus"
+        )
+        return httpx.Response(200, json=encrypted_resp)
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.post = mock_post
+
+    with patch("app.services.identity_client.get_async_client") as mock_async_client:
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+
+        token = await identity_client.get_token(tenant_id="tenant_single_enc", scope="whatsapp:messages:send")
+        assert token is not None
+
+        assert len(captured_requests) == 1
+        req_json = captured_requests[0].get("json")
+        assert req_json is not None
+        assert req_json.get("_encrypted") is True
+        assert "encryptedKey" in req_json
+        assert "iv" in req_json
+        assert "payload" in req_json
+
+        # Decifrando o payload UMA vez deve recuperar os dados em claro (prova de criptografia única, sem dupla camada)
+        decrypted = decrypt_payload(req_json)
+        assert isinstance(decrypted, dict)
+        assert decrypted.get("tenant_id") == "tenant_single_enc"
+        assert decrypted.get("scope") == "whatsapp:messages:send"
+        assert "timestamp" in decrypted
+
+
+@pytest.mark.anyio
+async def test_whatsapp_client_payload_encryption_and_decryption(monkeypatch):
+    """Valida que o WhatsAppClient criptografa payloads enviados e decriptografa respostas criptografadas."""
+    from app.services.whatsapp_client import whatsapp_client
+    from app.core.crypto import decrypt_payload, encrypt_payload
+    from app.core.config import settings
+
+    captured_wa_requests = []
+
+    async def mock_request(method, url, **kwargs):
+        captured_wa_requests.append(kwargs)
+        # Retorna resposta criptografada
+        encrypted_resp = encrypt_payload({"status": "success", "message_id": "wa_msg_123"}, target="dominus")
+        return httpx.Response(200, json=encrypted_resp, headers={"content-type": "application/json"})
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.request = mock_request
+
+    with patch("app.services.whatsapp_client.identity_client.get_token", new_callable=AsyncMock) as mock_get_token, \
+         patch("app.services.whatsapp_client.get_async_client") as mock_async_client:
+
+        mock_get_token.return_value = "fake_m2m_jwt_for_wa"
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+
+        result = await whatsapp_client.send_message(
+            tenant_id="tenant_wa_test",
+            session_id="session_wa_test",
+            message_data={
+                "chatId": "5511999998888@c.us",
+                "text": "Mensagem segura para WhatsApp",
+                "session": "session_wa_test"
+            }
+        )
+
+        assert result == {"status": "success", "message_id": "wa_msg_123"}
+        assert len(captured_wa_requests) == 1
+        sent_json = captured_wa_requests[0].get("json")
+        assert sent_json is not None
+        assert sent_json.get("_encrypted") is True
+
+        # Decriptografia do payload enviado comprova que foi cifrado para whats-api e contém dados corretos
+        decrypted_sent = decrypt_payload(sent_json)
+        assert decrypted_sent["chatId"] == "5511999998888@c.us"
+        assert decrypted_sent["text"] == "Mensagem segura para WhatsApp"
+        assert decrypted_sent["session"] == "session_wa_test"
+
+
+@pytest.mark.anyio
+async def test_whatsapp_client_fail_closed_when_key_missing(monkeypatch):
+    """Valida fail-closed imediato com HTTP 500 se WHATS_API_PUBLIC_KEY estiver ausente."""
+    from app.services.whatsapp_client import whatsapp_client
+    from app.core.config import settings
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(settings, "WHATS_API_PUBLIC_KEY", "")
+
+    with patch("app.services.whatsapp_client.identity_client.get_token", new_callable=AsyncMock) as mock_get_token:
+        mock_get_token.return_value = "fake_token"
+
+        with pytest.raises(HTTPException) as exc_info:
+            await whatsapp_client.send_message(
+                tenant_id="tenant_wa_test",
+                session_id="session_wa_test",
+                message_data={
+                    "chatId": "5511999998888@c.us",
+                    "text": "Tentativa sem chave pública"
+                }
+            )
+        assert exc_info.value.status_code == 500
+        assert "Falha de criptografia obrigatória para Whats API" in exc_info.value.detail
+
+
 if __name__ == "__main__":
     asyncio.run(test_full_m2m_flow())
+
 

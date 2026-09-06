@@ -25,6 +25,7 @@ def mock_db():
     user_mock = User(
         id=1,
         email="test@dominuslabs.online",
+        tenant_id="tenant_crm_test",
         role="admin",
         preferred_session_id="session1"
     )

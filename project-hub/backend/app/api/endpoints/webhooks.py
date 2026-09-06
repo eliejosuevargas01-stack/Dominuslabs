@@ -36,18 +36,18 @@ class LeadChatUpdateRequest(BaseModel):
 # In-memory queues for Server-Sent Events (SSE)
 project_listeners = {}  # {public_token: [asyncio.Queue]}
 global_listeners = []   # [asyncio.Queue]
-lead_listeners = {}     # {lead_id: [(user_email, queue)]}
+lead_listeners = {}     # {(tenant_id, lead_id): [(user_email, queue)]}
 crm_chat_listeners: List[tuple] = [] # [(user_email, tenant_id, queue)]
 
-async def notify_lead_listeners(lead_id: str, event: str = "reload"):
+async def notify_lead_listeners(lead_id: str, tenant_id: Optional[str] = None, event: str = "reload"):
     """
-    Função/Método notify_lead_listeners.
-
-    O que faz: Processa notify_lead_listeners recebendo os parâmetros (lead_id, event) no contexto de o endpoint de API para webhooks.
-    Impacto na regra de negócio: Assegura que o fluxo da operação notify_lead_listeners seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    Notifica listeners de eventos de lead em SSE, estritamente filtrado por tenant_id.
     """
-    if lead_id in lead_listeners:
-        for user_email, queue in list(lead_listeners[lead_id]):
+    if not tenant_id:
+        return
+    key = (tenant_id, lead_id)
+    if key in lead_listeners:
+        for user_email, queue in list(lead_listeners[key]):
             await queue.put(event)
 
 async def notify_crm_chat_listeners(
@@ -149,20 +149,18 @@ async def lead_events(
         except Exception:
             pass
 
-    if lead_tenant_id and user_tenant_id != "admin" and lead_tenant_id != user_tenant_id:
+    if lead_tenant_id and lead_tenant_id != user_tenant_id:
         raise HTTPException(status_code=403, detail="Acesso negado: o tenant do lead não coincide com o do usuário")
 
+    listener_key = (user_tenant_id, lead_id)
     queue = asyncio.Queue()
-    if lead_id not in lead_listeners:
-        lead_listeners[lead_id] = []
-    lead_listeners[lead_id].append((user_email, queue))
+    if listener_key not in lead_listeners:
+        lead_listeners[listener_key] = []
+    lead_listeners[listener_key].append((user_email, queue))
     
     async def event_generator():
         """
-        Função/Método event_generator.
-
-        O que faz: Processa event_generator sem parâmetros específicos no contexto de o endpoint de API para webhooks.
-        Impacto na regra de negócio: Assegura que o fluxo da operação event_generator seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        Gera eventos SSE de lead filtrados exclusivamente para o tenant do usuário.
         """
         try:
             while True:
@@ -176,10 +174,10 @@ async def lead_events(
         except asyncio.CancelledError:
             pass
         finally:
-            if lead_id in lead_listeners:
-                lead_listeners[lead_id] = [item for item in lead_listeners[lead_id] if item[1] != queue]
-                if not lead_listeners[lead_id]:
-                    del lead_listeners[lead_id]
+            if listener_key in lead_listeners:
+                lead_listeners[listener_key] = [item for item in lead_listeners[listener_key] if item[1] != queue]
+                if not lead_listeners[listener_key]:
+                    del lead_listeners[listener_key]
                     
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -301,16 +299,16 @@ async def _process_update_chat(
     explicit_sender = messages_list[0].get("participant_pushname", "lead") if messages_list else (sender or "lead")
 
     from app.services.n8n_service import n8n_service
-    n8n_service.invalidate_leads_cache()
+    n8n_service.invalidate_leads_cache(tenant_id=resolved_tenant_id)
 
     final_is_from_me = explicit_from_me if explicit_from_me is not None else False
     final_sender = explicit_sender or ("user" if final_is_from_me else "lead")
 
-    await notify_lead_listeners(resolved_contact_id, "reload")
+    await notify_lead_listeners(resolved_contact_id, tenant_id=resolved_tenant_id, event="reload")
     await notify_crm_chat_listeners(resolved_contact_id, is_from_me=final_is_from_me, sender=final_sender, messages=messages_list, tenant_id=resolved_tenant_id)
 
     tenant_chat_listeners = [l for l in crm_chat_listeners if l[1] == resolved_tenant_id]
-    notified_count = len(lead_listeners.get(resolved_contact_id, [])) + len(tenant_chat_listeners)
+    notified_count = len(lead_listeners.get((resolved_tenant_id, resolved_contact_id), [])) + len(tenant_chat_listeners)
     return {
         "status": "success",
         "contact_id": resolved_contact_id,
@@ -745,7 +743,7 @@ async def whatsapp_inbound_webhook(request: Request):
         raise HTTPException(status_code=400, detail="lead_id e message são obrigatórios.")
 
     from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS, n8n_service
-    n8n_service.invalidate_leads_cache()
+    n8n_service.invalidate_leads_cache(tenant_id=tenant_id)
 
     new_msg = {
         "id": f"msg_in_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}",
@@ -767,7 +765,7 @@ async def whatsapp_inbound_webhook(request: Request):
             break
 
     # Notify listeners in real time
-    await notify_lead_listeners(lead_id, "reload")
+    await notify_lead_listeners(lead_id, tenant_id=tenant_id, event="reload")
     await notify_crm_chat_listeners(lead_id, tenant_id=tenant_id)
 
     return {"status": "success", "message": new_msg}
@@ -797,7 +795,7 @@ async def instagram_inbound_webhook(request: Request):
         raise HTTPException(status_code=400, detail="lead_id e message são obrigatórios.")
 
     from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS, n8n_service
-    n8n_service.invalidate_leads_cache()
+    n8n_service.invalidate_leads_cache(tenant_id=tenant_id)
 
     new_msg = {
         "id": f"msg_in_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}",
@@ -819,7 +817,7 @@ async def instagram_inbound_webhook(request: Request):
             break
 
     # Notify listeners in real time
-    await notify_lead_listeners(lead_id, "reload")
+    await notify_lead_listeners(lead_id, tenant_id=tenant_id, event="reload")
     await notify_crm_chat_listeners(lead_id, tenant_id=tenant_id)
 
     return {"status": "success", "message": new_msg}

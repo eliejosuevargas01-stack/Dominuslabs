@@ -1,64 +1,30 @@
 """
 Documentação do módulo http_client.py.
 
-O que faz: Implementa a lógica estrutural e funcional para o módulo core/base http_client.
-Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o módulo core/base http_client funcionem corretamente e mantenham a integridade dos dados da aplicação.
+O que faz: Implementa o transporte HTTP transparente e assíncrono para os serviços internos.
+Impacto na regra de negócio: A camada de transporte HTTP é estritamente de transporte (sem mutação
+ou re-encriptação de dados). A responsabilidade por assinatura e encriptação Zero-Trust (híbrida
+AES-256-GCM + RSA-OAEP) pertence aos clientes de serviço dedicados (IdentityClient, WhatsAppClient, N8NService),
+garantindo eliminação total de dupla encriptação e vazamento de payloads.
 """
 import logging
 import httpx
-from app.core.crypto import encrypt_payload
 
 logger = logging.getLogger("http_client")
 
+
 class EncryptedAsyncClient(httpx.AsyncClient):
     """
-    Um httpx.AsyncClient customizado que intercepta as requisições e criptografa o payload
-    automaticamente usando Hybrid Encryption (Zero-Trust) baseado no 'service_name'.
+    Subclasse de httpx.AsyncClient mantida para compatibilidade de tipos e rastreabilidade.
+    A camada de transporte não realiza mutação automática no corpo das requisições.
     """
-    def __init__(self, service_name: str, *args, **kwargs):
-        """
-        Função/Método __init__.
-
-        O que faz: Processa __init__ recebendo os parâmetros (service_name) no contexto de o módulo core/base http_client.
-        Impacto na regra de negócio: Assegura que o fluxo da operação __init__ seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-        """
+    def __init__(self, service_name: str = "default", *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.service_name = service_name
-        # Mapeamento do service_name interno para a chave do app.core.crypto
-        self.target_map = {
-            "whatsapp": "whats-api",
-            "identity": "idpw",
-            "n8n": "n8n"
-        }
 
-    async def request(self, method: str, url: str, **kwargs):
-        """
-        Função/Método request.
-
-        O que faz: Processa request recebendo os parâmetros (method, url) no contexto de o módulo core/base http_client.
-        Impacto na regra de negócio: Assegura que o fluxo da operação request seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-        """
-        # Intercepta POST, PUT, PATCH se houver JSON no kwargs
-        if method.upper() in ["POST", "PUT", "PATCH"]:
-            if "json" in kwargs and kwargs["json"] is not None:
-                if self.service_name == "whatsapp":
-                    logger.debug(f"[Zero-Trust] Bypass de criptografia para {self.service_name} (chaves RSA não configuradas no destino)")
-                else:
-                    target_key = self.target_map.get(self.service_name, "n8n")
-                    try:
-                        # Tenta criptografar
-                        encrypted_json = encrypt_payload(kwargs["json"], target_key)
-                        kwargs["json"] = encrypted_json
-                        logger.debug(f"[Zero-Trust] Payload criptografado para o serviço {self.service_name}")
-                    except Exception as e:
-                        logger.error(f"[Zero-Trust] Erro fatal ao criptografar payload para {self.service_name}: {e}")
-                        raise RuntimeError(f"[Zero-Trust] Failed to encrypt payload for {self.service_name}: {e}") from e
-
-        return await super().request(method, url, **kwargs)
 
 def get_async_client(timeout: float = 15.0, service_name: str = "default") -> httpx.AsyncClient:
     """
-    Retorna uma instância de EncryptedAsyncClient para o serviço alvo,
-    com criptografia híbrida automática de payload (Zero-Trust).
+    Retorna uma instância assíncrona de httpx.AsyncClient para o serviço alvo.
     """
     return EncryptedAsyncClient(service_name=service_name, timeout=timeout)

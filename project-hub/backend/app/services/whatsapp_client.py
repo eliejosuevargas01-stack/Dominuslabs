@@ -28,7 +28,7 @@ from fastapi import HTTPException, status
 
 from app.core.config import settings
 from app.core.http_client import get_async_client
-from app.core.crypto import encrypt_payload
+from app.core.crypto import encrypt_payload, decrypt_payload
 from app.services.identity_client import identity_client
 
 logger = logging.getLogger("whatsapp_client")
@@ -58,12 +58,12 @@ class WhatsAppClient:
         json_data: Optional[Dict[str, Any]] = None,
         query_params: Optional[Dict[str, str]] = None,
         idempotency_key: Optional[str] = None,
-        timeout: float = 15.0,
-        encrypt_body: bool = False
+        timeout: float = 15.0
     ) -> Any:
         """
         Executa requisição HTTP à Whats API com headers estritos e M2M JWT do IDPW.
         Headers: ONLY Authorization, X-Request-ID, Idempotency-Key.
+        Payload: Hybrid Encryption obrigatória (AES-256-GCM + RSA-OAEP) para operações com body.
         """
         if not tenant_id:
             raise HTTPException(
@@ -99,10 +99,17 @@ class WhatsAppClient:
         elif method.upper() in ("POST", "PUT", "DELETE", "PATCH"):
             req_headers["Idempotency-Key"] = str(uuid.uuid4())
 
-        # Payload com criptografia opcional para whats-api se configurada
-        payload_to_send = json_data
-        if json_data and encrypt_body:
-            payload_to_send = encrypt_payload(json_data, target="whats-api")
+        # Payload com criptografia obrigatória (Zero-Trust fail-closed) para whats-api se houver json_data
+        payload_to_send = None
+        if json_data is not None:
+            try:
+                payload_to_send = encrypt_payload(json_data, target="whats-api")
+            except Exception as enc_err:
+                logger.error(f"[WA-CLIENT] Falha ao criptografar payload para Whats API (fail-closed): {enc_err}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Falha de criptografia obrigatória para Whats API: {enc_err}"
+                ) from enc_err
 
         max_retries = 3
         retry_delay = 1.0
@@ -174,7 +181,10 @@ class WhatsAppClient:
 
         content_type = response.headers.get("content-type", "")
         if "application/json" in content_type:
-            return response.json()
+            data = response.json()
+            if isinstance(data, dict) and data.get("_encrypted") is True:
+                data = decrypt_payload(data)
+            return data
         elif any(t in content_type for t in ("image/", "audio/", "video/", "application/pdf", "application/octet-stream")):
             return {
                 "_is_binary": True,
@@ -183,7 +193,10 @@ class WhatsAppClient:
             }
         else:
             try:
-                return response.json()
+                data = response.json()
+                if isinstance(data, dict) and data.get("_encrypted") is True:
+                    data = decrypt_payload(data)
+                return data
             except Exception:
                 return response.text
 
