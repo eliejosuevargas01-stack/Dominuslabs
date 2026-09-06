@@ -4,9 +4,11 @@ Documentação do módulo crm.py.
 O que faz: Implementa a lógica estrutural e funcional para o endpoint de API para crm.
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para crm funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from typing import List, Optional
 from pydantic import BaseModel
+
 from app.schemas.crm import Lead, LeadUpdate, Message, MessageSendPayload, CrmDashboardMetrics
 from app.services.n8n_service import n8n_service, MOCK_CONVERSATIONS
 from app.core.auth import get_current_user, check_crm_permission
@@ -146,41 +148,65 @@ from fastapi.responses import RedirectResponse, Response
 
 @router.get("/avatar")
 async def proxy_crm_avatar(
+    request: Request,
     jid: str,
     session: Optional[str] = None,
     session_id: Optional[str] = None,
+    token: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
-    Proxy de avatar público para ser consumido por tags <img> no Dominus CRM.
-    Recebe session/session_id e jid, consulta a Whats API via HTTPS/TLS e devolve
-    o redirecionamento para a CDN oficial do Meta (pps.whatsapp.net) ou a imagem.
+    Proxy de avatar público/autenticado consumido pelo Dominus CRM via WhatsAppClient.
     """
-    target_session = session or session_id or "default"
+    target_session = (session or session_id or "").strip()
     if not jid:
         raise HTTPException(status_code=400, detail="Parâmetro 'jid' é obrigatório.")
-    try:
-        from app.api.endpoints.whatsapp import make_whatsapp_api_request
-        clean_path = f"/api/sessions/{target_session}/avatar?jid={jid}&json=true"
-        res = None
-        try:
-            res = await make_whatsapp_api_request("GET", clean_path)
-        except Exception:
-            fallback_path = f"/avatar?session={target_session}&jid={jid}&json=true"
-            res = await make_whatsapp_api_request("GET", fallback_path)
 
-        url_target = None
+    from app.services.whatsapp_client import whatsapp_client
+    from app.models.whatsapp_account import WhatsappAccount
+    from app.models.user import User
+
+    # Tenta identificar o tenant autenticado ou vinculado à sessão
+    auth_header = request.headers.get("Authorization", "")
+    effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
+    tenant_id = None
+
+    if effective_token:
+        from app.core.auth import decode_access_token
+        payload = decode_access_token(effective_token)
+        if payload and payload.get("sub"):
+            user = db.query(User).filter(User.email == payload["sub"]).first()
+            if user:
+                tenant_id = user.tenant_id
+
+    if not tenant_id and target_session and target_session.lower() != "default":
+        account = db.query(WhatsappAccount).filter(WhatsappAccount.session_id == target_session).first()
+        if account:
+            tenant_id = account.tenant_id
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado: tenant_id não identificado para a sessão.")
+
+    try:
+        res = await whatsapp_client.get_session_avatar(
+            tenant_id=tenant_id,
+            session_id=target_session,
+            jid=jid
+        )
         if isinstance(res, dict):
+            if res.get("_is_binary") and res.get("content"):
+                return Response(
+                    content=res["content"],
+                    media_type=res.get("content_type") or "image/jpeg",
+                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}
+                )
             url_target = res.get("url") or res.get("avatar_url") or res.get("profile_pic_url") or res.get("profile_url") or res.get("avatar")
-        if url_target:
-            return RedirectResponse(
-                url_target,
-                status_code=302,
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Cache-Control": "public, max-age=86400"
-                }
-            )
+            if url_target and str(url_target).startswith("http"):
+                return RedirectResponse(
+                    url_target,
+                    status_code=302,
+                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}
+                )
     except Exception as e:
         print(f"[CRM-AVATAR] Aviso ao buscar avatar proxy para jid={jid}: {e}", flush=True)
 
@@ -189,63 +215,70 @@ async def proxy_crm_avatar(
 @router.get("/media")
 @router.get("/sessions/{session_id}/media")
 async def proxy_crm_media(
+    request: Request,
     messageId: Optional[str] = None,
     message_id: Optional[str] = None,
     session: Optional[str] = None,
     session_id: Optional[str] = None,
+    token: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
-    Proxy de mídia (imagens, áudios, vídeos e documentos) da WhatsApp API via HTTPS/TLS para tags <img>, <video>, <audio> e <a>.
+    Proxy de mídia autenticado pelo Dominus via WhatsAppClient.
     """
-    target_session = session or session_id or "default"
+    target_session = (session or session_id or "").strip()
     target_msg_id = messageId or message_id
     if not target_msg_id:
         raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
-    try:
-        from app.api.endpoints.whatsapp import make_whatsapp_api_request
-        clean_path = f"/api/sessions/{target_session}/media?messageId={target_msg_id}"
-        res = await make_whatsapp_api_request("GET", clean_path, timeout=30.0)
-        if isinstance(res, dict):
-            if res.get("_is_binary"):
-                return Response(
-                    content=res["content"],
-                    media_type=res.get("content_type") or "application/octet-stream",
-                    headers={
-                        "Access-Control-Allow-Origin": "*",
-                        "Cache-Control": "public, max-age=86400"
-                    }
-                )
-            if res.get("url"):
-                return RedirectResponse(
-                    res["url"],
-                    headers={
-                        "Access-Control-Allow-Origin": "*",
-                        "Cache-Control": "public, max-age=86400"
-                    }
-                )
-            if res.get("data") and isinstance(res["data"], str):
-                base64_str = res["data"]
-                import base64
-                if "," in base64_str:
-                    header, base64_str = base64_str.split(",", 1)
-                    mime_type = header.split(";")[0].replace("data:", "") if "data:" in header else "application/octet-stream"
-                else:
-                    mime_type = res.get("mimeType") or res.get("mimetype") or "application/octet-stream"
-                
-                binary_data = base64.b64decode(base64_str)
-                return Response(
-                    content=binary_data,
-                    media_type=mime_type,
-                    headers={
-                        "Access-Control-Allow-Origin": "*",
-                        "Cache-Control": "public, max-age=86400"
-                    }
-                )
-    except Exception as e:
-        print(f"[CRM-MEDIA] Erro ao buscar mídia proxy para session={target_session}, msg={target_msg_id}: {e}", flush=True)
 
-    raise HTTPException(status_code=404, detail="Mídia não encontrada ou indisponível.")
+    from app.services.whatsapp_client import whatsapp_client
+    from app.models.whatsapp_account import WhatsappAccount
+    from app.models.user import User
+
+    auth_header = request.headers.get("Authorization", "")
+    effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
+    tenant_id = None
+
+    if effective_token:
+        from app.core.auth import decode_access_token
+        payload = decode_access_token(effective_token)
+        if payload and payload.get("sub"):
+            user = db.query(User).filter(User.email == payload["sub"]).first()
+            if user:
+                tenant_id = user.tenant_id
+
+    if not tenant_id and target_session and target_session.lower() != "default":
+        account = db.query(WhatsappAccount).filter(WhatsappAccount.session_id == target_session).first()
+        if account:
+            tenant_id = account.tenant_id
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Acesso negado: tenant_id não identificado para a sessão.")
+
+    response = await whatsapp_client.get_session_media(
+        tenant_id=tenant_id,
+        session_id=target_session,
+        message_id=target_msg_id
+    )
+
+    content_type = response.headers.get("content-type", "application/octet-stream")
+
+    async def media_stream():
+        try:
+            async for chunk in response.aiter_bytes():
+                yield chunk
+        finally:
+            await response.aclose()
+
+    return StreamingResponse(
+        content=media_stream(),
+        media_type=content_type,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=86400"
+        }
+    )
+
 
 
 
@@ -392,16 +425,13 @@ async def send_crm_whatsapp_media(
     if not active_session:
         raise HTTPException(status_code=400, detail="Nenhuma sessão WhatsApp selecionada.")
 
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    from app.services.whatsapp_client import whatsapp_client
+
+    resolved_session = resolve_owned_whatsapp_session(user, active_session, db)
+
     target_jid = payload.contact_jid
     media_text = payload.text or payload.caption or ""
-
-    from app.services.whatsapp_service import get_tenant_id_for_user
-    tenant_id = await get_tenant_id_for_user(user, db)
-    from app.services.identity_service import get_m2m_jwt
-    jwt_token = await get_m2m_jwt(tenant_id=tenant_id, scope="whatsapp:messages:send")
-
-    from app.api.endpoints.whatsapp import make_whatsapp_api_request
-    clean_path = f"/api/sessions/{active_session}/messages/send"
 
     wa_payload = {
         "jid": target_jid,
@@ -415,15 +445,13 @@ async def send_crm_whatsapp_media(
         }
     }
 
-    headers = {
-        "x-session-token": jwt_token,
-        "x-tenant-id": tenant_id,
-        "Authorization": f"Bearer {jwt_token}"
-    }
-
     res = None
     try:
-        res = await make_whatsapp_api_request("POST", clean_path, headers=headers, json_data=wa_payload)
+        res = await whatsapp_client.send_message(
+            tenant_id=user.tenant_id,
+            session_id=resolved_session,
+            message_data=wa_payload
+        )
     except Exception as e:
         print(f"[SEND-MEDIA-BASE64] Transmissão para Whats API falhou: {e}", flush=True)
 
@@ -433,9 +461,10 @@ async def send_crm_whatsapp_media(
 
     return {
         "status": "success",
-        "session_id": active_session,
+        "session_id": resolved_session,
         "whatsapp_response": res
     }
+
 
 @router.get("/dashboard", response_model=CrmDashboardMetrics)
 async def get_dashboard_metrics(current_user: str = Depends(get_current_user)):

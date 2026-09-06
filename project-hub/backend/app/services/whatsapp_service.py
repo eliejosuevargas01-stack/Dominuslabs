@@ -1,43 +1,33 @@
 """
-WhatsApp Service — Arquitetura M2M (IDPW + Whats API)
+WhatsApp Service — Arquitetura M2M (IDPW + WhatsAppClient)
 
-Comunicação HTTPS/TLS através da infraestrutura configurada.
-A segurança de transporte TLS é responsabilidade do proxy/gateway.
-
-Fluxo de envio:
-1. Dominus identifica o usuário (`user_id`) e o tenant dele (`tenant_id`).
-2. Verifica permissão interna no Dominus (`can_manage_crm` / `messages.send`).
-3. Requisita ao Identity Provider (IDPW) um JWT com `tenant_id` e escopo `whatsapp:messages:send`.
-4. Transmite a requisição para a Whats API com o cabeçalho `Authorization: Bearer <JWT>`.
-5. A Whats API valida JWT + Tenant Lock + executa a ação.
+Responsabilidade:
+1. Autentica usuários e resolve tenant (`tenant_id`).
+2. Valida ownership estrito da sessão WhatsApp (`user.tenant_id == whatsapp_account.tenant_id`).
+   Nenhum fallback: admin, default, null.
+3. Delega todo o envio e comunicação para o WhatsAppClient interno.
 """
 import logging
 from typing import Optional
-import httpx
-from cachetools import TTLCache
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
-from app.core.config import settings
 from app.models.user import User
 from app.models.whatsapp_account import WhatsappAccount
-from app.services.identity_service import get_m2m_jwt, invalidate_m2m_token
+from app.services.identity_client import identity_client
+from app.services.whatsapp_client import whatsapp_client
 
-logger = logging.getLogger("whatsapp")
-
-_legacy_token_cache: TTLCache = TTLCache(maxsize=256, ttl=600)
+logger = logging.getLogger("whatsapp_service")
 
 
 def resolve_owned_whatsapp_session(user: User, session_id: Optional[str], db: Session) -> str:
     """
     Valida positivamente se a sessão WhatsApp pertence ao tenant do usuário autenticado.
+    user.tenant_id == whatsapp_account.tenant_id
     Rejeita com 403 se pertencer a outro tenant e com 404 se a sessão for desconhecida.
-    Não permite bypass global de admin em rotas tenant-scoped.
+    Nenhum fallback para admin, default ou null.
     """
     user_tenant = user.tenant_id
-    if not user_tenant and (user.role == "admin" or user.email == settings.ADMIN_USERNAME):
-        user_tenant = settings.ADMIN_TENANT_ID
-
     if not user_tenant:
         logger.warning(f"[WA-OWNERSHIP] Usuário id={user.id} sem tenant_id ao tentar acessar sessão '{session_id}'")
         raise HTTPException(
@@ -49,10 +39,10 @@ def resolve_owned_whatsapp_session(user: User, session_id: Optional[str], db: Se
     if not target_session or target_session.lower() == "default":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nenhuma sessão WhatsApp foi selecionada/configurada."
+            detail="Nenhuma sessão WhatsApp válida selecionada."
         )
 
-    # Variantes normalizadas (hífen, espaço, lowercase) para cobrir discrepancies entre slug da Whats API e nome informado
+    # Variantes normalizadas (hífen, espaço, lowercase) para cobrir discrepâncias de digitação/slug
     clean_target = target_session
     variants = {
         clean_target,
@@ -65,21 +55,21 @@ def resolve_owned_whatsapp_session(user: User, session_id: Optional[str], db: Se
 
     # 1. Prova positiva via WhatsappAccount vinculado ao banco
     accounts = db.query(WhatsappAccount).filter(
-        WhatsappAccount.idpw.in_(variants)
+        WhatsappAccount.session_id.in_(variants)
     ).all()
     if accounts:
         for account in accounts:
             if account.tenant_id != user_tenant:
                 logger.warning(
-                    f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Conta '{account.idpw}' pertence ao tenant '{account.tenant_id}', "
+                    f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Conta '{account.session_id}' pertence ao tenant '{account.tenant_id}', "
                     f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Acesso negado: a sessão informada pertence a outro tenant."
                 )
-        matching = next((a.idpw for a in accounts if a.tenant_id == user_tenant and a.idpw == target_session), None)
-        return matching or accounts[0].idpw
+        matching = next((a.session_id for a in accounts if a.tenant_id == user_tenant and a.session_id == target_session), None)
+        return matching or accounts[0].session_id
 
     # 2. Prova positiva via preferência de usuário do mesmo tenant
     session_users = db.query(User).filter(
@@ -111,11 +101,8 @@ def resolve_owned_whatsapp_session(user: User, session_id: Optional[str], db: Se
 async def get_tenant_id_for_user(user: User, db: Session) -> str:
     """
     Retorna o tenant_id associado ao usuário.
-    Se o usuário for admin, retorna ADMIN_TENANT_ID se configurado.
-    Usuário comum sem tenant falha fechado (403). Nunca provisiona em runtime.
+    Usuário sem tenant falha fechado (403). Sem bypass global.
     """
-    if (user.role == "admin" or user.email == settings.ADMIN_USERNAME) and settings.ADMIN_TENANT_ID:
-        return settings.ADMIN_TENANT_ID
     if user.tenant_id:
         return user.tenant_id
 
@@ -125,45 +112,25 @@ async def get_tenant_id_for_user(user: User, db: Session) -> str:
     )
 
 
-async def check_token_validity(token: str) -> bool:
-    """
-    Verifica se o token M2M/JWT é válido sem depender de bibliotecas externas (PyJWT).
-    """
-    if not token or "." not in token:
-        return False
-    try:
-        import base64
-        import json
-        import time
-
-        parts = token.split(".")
-        if len(parts) != 3:
-            return False
-
-        payload_b64 = parts[1]
-        payload_b64 += "=" * (-len(payload_b64) % 4)
-        payload_bytes = base64.urlsafe_b64decode(payload_b64)
-        payload = json.loads(payload_bytes.decode("utf-8"))
-
-        exp = payload.get("exp", 0)
-        return exp > time.time()
-    except Exception as e:
-        logger.warning(f"[WA-M2M] Token M2M/JWT inválido ou expirado: {e}")
-        return False
-
-
 async def get_oauth_token(user: User, db: Session, scope: str = "whatsapp:sessions:read") -> str:
     """
-    Obtém o JWT M2M do Identity Provider (IDPW) para o tenant do usuário.
+    Obtém o JWT M2M do Identity Provider (IDPW) para o tenant do usuário via IdentityClient.
     """
     tenant_id = await get_tenant_id_for_user(user, db)
-    return await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
+    return await identity_client.get_token(tenant_id=tenant_id, scope=scope, aud="whatsapp-api")
+
+
+async def check_token_validity(token: str) -> bool:
+    """
+    Verifica se o token M2M/JWT é válido.
+    """
+    return identity_client.is_token_still_valid(token)
 
 
 def invalidate_token(user_id: int) -> None:
-    """Remove o token do cache."""
-    _legacy_token_cache.pop(user_id, None)
-    logger.info(f"[WA-M2M] Cache invalidado para user_id={user_id}")
+    """Função legada para compatibilidade de chamadas."""
+    logger.info(f"[WA-SERVICE] invalidate_token chamado para user_id={user_id}")
+
 
 
 async def send_whatsapp_message(
@@ -171,40 +138,33 @@ async def send_whatsapp_message(
     db: Session,
     to_phone: str,
     message_text: str,
-    session_id: str | None = None
+    session_id: Optional[str] = None
 ) -> dict:
     """
-    Executa o envio DIRETO de mensagem WhatsApp via Whats API utilizando IDPW + JWT.
-    Comunicação HTTPS/TLS através da infraestrutura configurada.
+    Executa o envio de mensagem WhatsApp via WhatsAppClient interno.
+    Escopo estrito: whatsapp:messages:send
     """
     tenant_id = await get_tenant_id_for_user(user, db)
-    scope = "whatsapp:messages:send"
-    jwt_token = await get_m2m_jwt(tenant_id=tenant_id, scope=scope)
-
     target_session = resolve_owned_whatsapp_session(user, session_id, db)
 
-    from app.api.endpoints.whatsapp import make_whatsapp_api_request
-    clean_path = f"/api/sessions/{target_session}/messages/send"
+    cleaned_phone = "".join(filter(str.isdigit, str(to_phone)))
+    final_jid = to_phone if "@" in str(to_phone) else f"{cleaned_phone}@s.whatsapp.net"
+
     payload = {
-        "number": to_phone,
-        "message": message_text
-    }
-    headers = {
-        "x-session-token": jwt_token,
-        "x-tenant-id": tenant_id,
-        "Authorization": f"Bearer {jwt_token}"
+        "number": cleaned_phone,
+        "phone": cleaned_phone,
+        "message": message_text,
+        "text": message_text,
+        "jid": final_jid
     }
 
     logger.info(
-        f"[WA-M2M] Enviando mensagem DIRETA para Whats API. "
+        f"[WA-SERVICE] Enviando mensagem via WhatsAppClient. "
         f"Tenant: {tenant_id}, Sessão: {target_session}, Destinatário: {to_phone}"
     )
 
-    return await make_whatsapp_api_request(
-        "POST",
-        clean_path,
-        headers=headers,
-        json_data=payload,
-        timeout=15.0
+    return await whatsapp_client.send_message(
+        tenant_id=tenant_id,
+        session_id=target_session,
+        message_data=payload
     )
-

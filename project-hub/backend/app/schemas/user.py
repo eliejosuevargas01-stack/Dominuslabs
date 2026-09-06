@@ -19,7 +19,6 @@ class UserBase(BaseModel):
     role: str = "custom"
     permissions: str = "read"
     tenant_id: Optional[str] = None
-    whatsapp_token: Optional[str] = None
 
 class UserCreate(UserBase):
     """

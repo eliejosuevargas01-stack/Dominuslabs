@@ -31,7 +31,6 @@ class User(Base):
     can_manage_crm = Column(Boolean, nullable=True, default=True)
     can_use_scrapper = Column(Boolean, nullable=True, default=True)
     
-    whatsapp_token = Column(String, unique=True, nullable=True)
     preferred_session_id = Column(String, nullable=True)
     
     # Preventive 1h Token storage and expiration tracking

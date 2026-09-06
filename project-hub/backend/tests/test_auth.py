@@ -95,9 +95,9 @@ def test_refresh_token_success(mock_db):
         user_mock = User(
             id=1,
             email="test@dominuslabs.online",
-            whatsapp_token="some_token",
             role="admin"
         )
+
 
         mock_query = MagicMock()
         mock_filter = MagicMock()

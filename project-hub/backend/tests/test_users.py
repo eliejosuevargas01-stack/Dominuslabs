@@ -29,7 +29,7 @@ def test_read_users(mock_get_all, mock_db):
     app.dependency_overrides[get_db] = lambda: mock_db
     app.dependency_overrides[check_admin_role] = mock_check_admin_role
     now = datetime.now()
-    mock_get_all.return_value = [{"id": 1, "email": "test@dominuslabs.online", "role": "admin", "permissions": "read", "tenant_id": "t1", "whatsapp_token": "w1", "created_at": now}]
+    mock_get_all.return_value = [{"id": 1, "email": "test@dominuslabs.online", "role": "admin", "permissions": "read", "tenant_id": "t1", "created_at": now}]
 
     response = client.get("/api/v1/users/")
     assert response.status_code == 200
@@ -44,7 +44,7 @@ def test_create_user(mock_create, mock_get_by_email, mock_db):
     app.dependency_overrides[check_admin_role] = mock_check_admin_role
     mock_get_by_email.return_value = None
     now = datetime.now()
-    mock_create.return_value = {"id": 2, "email": "new@dominuslabs.online", "role": "custom", "permissions": "read", "tenant_id": "t2", "whatsapp_token": "w2", "created_at": now}
+    mock_create.return_value = {"id": 2, "email": "new@dominuslabs.online", "role": "custom", "permissions": "read", "tenant_id": "t2", "created_at": now}
 
     payload = {
         "email": "new@dominuslabs.online",
@@ -112,7 +112,7 @@ def test_update_user(mock_update, mock_get_by_email, mock_get, mock_db):
     mock_get_by_email.return_value = None
 
     now = datetime.now()
-    mock_update.return_value = {"id": 2, "email": "updated@dominuslabs.online", "role": "admin", "permissions": "read,write", "tenant_id": "t2", "whatsapp_token": "w2", "created_at": now}
+    mock_update.return_value = {"id": 2, "email": "updated@dominuslabs.online", "role": "admin", "permissions": "read,write", "tenant_id": "t2", "created_at": now}
 
     payload = {
         "email": "updated@dominuslabs.online",

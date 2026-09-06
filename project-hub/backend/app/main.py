@@ -51,8 +51,6 @@ if "sqlite" in db_type:
 # Previne crash no login: Adiciona o tenant_id apenas se a coluna estiver faltando no SQLite de testes.
             if "tenant_id" not in columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN tenant_id VARCHAR(255);"))
-            if "whatsapp_token" not in columns:
-                conn.execute(text("ALTER TABLE users ADD COLUMN whatsapp_token VARCHAR;"))
             if "access_token" not in columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN access_token VARCHAR;"))
             if "refresh_token" not in columns:
@@ -69,14 +67,17 @@ if "sqlite" in db_type:
             wa_columns = [c["name"] for c in inspector.get_columns("whatsapp_accounts")] if inspector.has_table("whatsapp_accounts") else []
             if "tenant_id" not in wa_columns and inspector.has_table("whatsapp_accounts"):
                 conn.execute(text("ALTER TABLE whatsapp_accounts ADD COLUMN tenant_id VARCHAR(255);"))
-        print("SQLite migration: users and whatsapp_accounts tenant_id/permissions columns checked/added successfully.")
+            if "session_id" not in wa_columns and inspector.has_table("whatsapp_accounts"):
+                conn.execute(text("ALTER TABLE whatsapp_accounts ADD COLUMN session_id VARCHAR(255);"))
+            if "display_name" not in wa_columns and inspector.has_table("whatsapp_accounts"):
+                conn.execute(text("ALTER TABLE whatsapp_accounts ADD COLUMN display_name VARCHAR(255);"))
+        print("SQLite migration: users and whatsapp_accounts tenant_id/session_id/permissions columns checked/added successfully.")
     except Exception as e:
         print(f"SQLite migration warning: {e}")
 else:
     # Postgres DDL executions in separate transactions
     ddl_statements = [
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_token VARCHAR(255);",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_session_id VARCHAR(255);",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions VARCHAR(255) DEFAULT 'read';",
         "ALTER TABLE users ALTER COLUMN can_create_projects DROP NOT NULL;",
@@ -87,7 +88,9 @@ else:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token TEXT;",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_issued_at TIMESTAMP;",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMP;",
-        "ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);"
+        "ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);",
+        "ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS session_id VARCHAR(255);",
+        "ALTER TABLE whatsapp_accounts ADD COLUMN IF NOT EXISTS display_name VARCHAR(255);"
     ]
     for stmt in ddl_statements:
         try:
@@ -99,16 +102,9 @@ else:
 
 # Seed database users
 def seed_database_users():
-    """
-    Função/Método seed_database_users.
-
-    O que faz: Processa seed_database_users sem parâmetros específicos no contexto de o módulo core/base main.
-    Impacto na regra de negócio: Assegura que o fluxo da operação seed_database_users seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-    """
     from app.core.database import SessionLocal
     from app.models.user import User
     from app.core.security import get_password_hash
-    import secrets
     db = SessionLocal()
     try:
         # Seed main admin
@@ -123,15 +119,12 @@ def seed_database_users():
                 hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
                 tenant_id=settings.ADMIN_TENANT_ID,
                 role="admin",
-                permissions="read,write,update,delete",
-                whatsapp_token=f"wa_tok_{secrets.token_hex(16)}"
+                permissions="read,write,update,delete"
             )
             db.add(admin_user)
         else:
             if not existing_admin.tenant_id:
                 existing_admin.tenant_id = settings.ADMIN_TENANT_ID
-            if not existing_admin.whatsapp_token:
-                existing_admin.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
             
         # Seed default viewer / patrik user
         viewer_email = settings.VIEWER_USERNAME
@@ -145,15 +138,12 @@ def seed_database_users():
                 hashed_password=get_password_hash(settings.VIEWER_PASSWORD),
                 tenant_id=settings.ADMIN_TENANT_ID,
                 role="custom",
-                permissions="read,write",
-                whatsapp_token=f"wa_tok_{secrets.token_hex(16)}"
+                permissions="read,write"
             )
             db.add(viewer_user)
         else:
             if not existing_viewer.tenant_id:
                 existing_viewer.tenant_id = settings.ADMIN_TENANT_ID
-            if not existing_viewer.whatsapp_token:
-                existing_viewer.whatsapp_token = f"wa_tok_{secrets.token_hex(16)}"
             
         db.commit()
     except Exception as e:
@@ -231,52 +221,40 @@ async def root_avatar_proxy(
         raise HTTPException(status_code=400, detail="Parâmetro 'jid' é obrigatório.")
     from app.models.user import User
     from app.services.whatsapp_service import resolve_owned_whatsapp_session
-    from app.api.endpoints.whatsapp import get_user_m2m_headers, make_whatsapp_api_request
+    from app.services.whatsapp_client import whatsapp_client
 
     user_email = payload.get("sub")
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=401, detail="Usuário não encontrado.")
     resolved_session = resolve_owned_whatsapp_session(user, target_session, db)
-    user_headers = await get_user_m2m_headers(user.email, db)
 
     try:
-        paths_to_try = []
-        if resolved_session and resolved_session != "default":
-            paths_to_try.append(f"/api/sessions/{resolved_session}/avatar?jid={jid}&json=true")
-            paths_to_try.append(f"/avatar?session={resolved_session}&jid={jid}&json=true")
-            paths_to_try.append(f"/api/sessions/{resolved_session}/avatar?jid={jid}")
-            paths_to_try.append(f"/avatar?session={resolved_session}&jid={jid}")
-        paths_to_try.append(f"/avatar?jid={jid}&json=true")
-        paths_to_try.append(f"/avatar?jid={jid}")
-        for clean_path in paths_to_try:
-            try:
-                res = await make_whatsapp_api_request("GET", clean_path, headers=user_headers)
-                if isinstance(res, dict):
-                    if res.get("_is_binary") and res.get("content"):
-                        return Response(
-                            content=res["content"],
-                            media_type=res.get("content_type") or "image/jpeg",
-                            headers={
-                                "Access-Control-Allow-Origin": "*",
-                                "Cache-Control": "public, max-age=86400"
-                            }
-                        )
-                    url_target = res.get("url") or res.get("avatar_url") or res.get("profile_pic_url") or res.get("profile_url") or res.get("avatar")
-                    if url_target and str(url_target).startswith("http"):
-                        return RedirectResponse(
-                            url_target,
-                            status_code=302,
-                            headers={
-                                "Access-Control-Allow-Origin": "*",
-                                "Cache-Control": "public, max-age=86400"
-                            }
-                        )
-            except Exception:
-                continue
-
-    except HTTPException:
-        raise
+        res = await whatsapp_client.get_session_avatar(
+            tenant_id=user.tenant_id,
+            session_id=resolved_session,
+            jid=jid
+        )
+        if isinstance(res, dict):
+            if res.get("_is_binary") and res.get("content"):
+                return Response(
+                    content=res["content"],
+                    media_type=res.get("content_type") or "image/jpeg",
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Cache-Control": "public, max-age=86400"
+                    }
+                )
+            url_target = res.get("url") or res.get("avatar_url") or res.get("profile_pic_url") or res.get("profile_url") or res.get("avatar")
+            if url_target and str(url_target).startswith("http"):
+                return RedirectResponse(
+                    url_target,
+                    status_code=302,
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Cache-Control": "public, max-age=86400"
+                    }
+                )
     except Exception as e:
         print(f"[ROOT-AVATAR-PROXY] Erro ao buscar avatar para jid={jid}: {e}", flush=True)
 
@@ -322,57 +300,40 @@ async def root_media_proxy(
 
     from app.models.user import User
     from app.services.whatsapp_service import resolve_owned_whatsapp_session
-    from app.api.endpoints.whatsapp import get_user_m2m_headers, make_whatsapp_api_request
+    from app.services.whatsapp_client import whatsapp_client
 
     user_email = payload.get("sub")
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=401, detail="Usuário não encontrado.")
     resolved_session = resolve_owned_whatsapp_session(user, target_session, db)
-    user_headers = await get_user_m2m_headers(user.email, db)
 
-    try:
-        paths_to_try = []
-        if resolved_session and resolved_session != "default":
-            paths_to_try.append(f"/api/sessions/{resolved_session}/media?messageId={msg_id}")
-            paths_to_try.append(f"/media?session={resolved_session}&messageId={msg_id}")
+    response = await whatsapp_client.get_session_media(
+        tenant_id=user.tenant_id,
+        session_id=resolved_session,
+        message_id=msg_id
+    )
 
-        paths_to_try.append(f"/media?messageId={msg_id}")
-        for clean_path in paths_to_try:
-            try:
-                res = await make_whatsapp_api_request("GET", clean_path, headers=user_headers)
-                if isinstance(res, dict):
-                    if res.get("_is_binary") and res.get("content"):
-                        content_type = res.get("content_type") or "audio/ogg"
-                        return Response(
-                            content=res["content"],
-                            media_type=content_type,
-                            headers={
-                                "Accept-Ranges": "bytes",
-                                "Cache-Control": "private, max-age=604800",
-                                "Access-Control-Allow-Origin": "*",
-                                "Content-Type": content_type
-                            }
-                        )
-                    url_target = res.get("url") or res.get("media_url") or res.get("media") or res.get("file_url")
-                    if url_target and str(url_target).startswith("http"):
-                        return RedirectResponse(
-                            url_target,
-                            status_code=302,
-                            headers={
-                                "Access-Control-Allow-Origin": "*",
-                                "Cache-Control": "private, max-age=604800"
-                            }
-                        )
-            except Exception:
-                continue
+    content_type = response.headers.get("content-type", "application/octet-stream")
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[ROOT-MEDIA-PROXY] Erro ao carregar mídia para msg_id={msg_id}: {e}", flush=True)
+    async def media_stream():
+        try:
+            async for chunk in response.aiter_bytes():
+                yield chunk
+        finally:
+            await response.aclose()
 
-    raise HTTPException(status_code=404, detail="Arquivo de mídia não encontrado.")
+    return StreamingResponse(
+        content=media_stream(),
+        media_type=content_type,
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "private, max-age=604800",
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": content_type
+        }
+    )
+
 
 @app.get("/project/{public_token}")
 @limiter.limit("20/minute")
