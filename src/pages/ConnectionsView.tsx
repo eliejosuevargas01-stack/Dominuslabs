@@ -176,12 +176,14 @@ export default function ConnectionsView() {
   // Create WhatsApp Session Handler
   const handleCreateWaSession = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!waSessionName.trim()) return;
+    const name = waSessionName.trim();
+    if (!name) return;
 
     try {
       setWaCreating(true);
       setError(null);
-      const res = await createWhatsappSession(waSessionName.trim());
+      const res = await createWhatsappSession(name);
+      toast.success(`Sessão "${name}" criada com sucesso.`);
       setIsWaModalOpen(false);
       setWaSessionName('');
       
@@ -190,10 +192,12 @@ export default function ConnectionsView() {
       if (createdSession) {
         handleConnectWa(createdSession);
       } else {
-        loadSessions();
+        await loadSessions();
       }
     } catch (err: any) {
-      setError('Falha ao criar sessão do WhatsApp.');
+      const msg = err?.message || 'Falha ao criar sessão do WhatsApp.';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setWaCreating(false);
     }
@@ -218,7 +222,9 @@ export default function ConnectionsView() {
     } catch (err: any) {
       setPollingActive(false);
       setPairingSession(null);
-      setError(`Erro ao conectar sessão: ${session.name}`);
+      const msg = err?.message || `Erro ao conectar sessão: ${session.name}`;
+      setError(msg);
+      toast.error(msg);
     }
   };
 
@@ -232,9 +238,12 @@ export default function ConnectionsView() {
       setLoading(true);
       setError(null);
       await disconnectWhatsappSession(session.id);
-      loadSessions();
+      toast.success(`Dispositivo desconectado da sessão "${session.name}".`);
+      await loadSessions();
     } catch (err: any) {
-      setError(`Erro ao desconectar dispositivo da sessão: ${session.name}`);
+      const msg = err?.message || `Erro ao desconectar dispositivo da sessão: ${session.name}`;
+      setError(msg);
+      toast.error(msg);
       setLoading(false);
     }
   };
@@ -249,9 +258,12 @@ export default function ConnectionsView() {
       setLoading(true);
       setError(null);
       await deleteWhatsappSession(session.id);
-      loadSessions();
+      toast.success(`Conexão "${session.name}" excluída com sucesso.`);
+      await loadSessions();
     } catch (err: any) {
-      setError(`Erro ao excluir sessão do servidor: ${session.name}`);
+      const msg = err?.message || `Erro ao excluir sessão do servidor: ${session.name}`;
+      setError(msg);
+      toast.error(msg);
       setLoading(false);
     }
   };
