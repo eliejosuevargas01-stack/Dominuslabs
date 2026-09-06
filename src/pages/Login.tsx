@@ -79,11 +79,13 @@ export default function Login() {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          {error && (
-            <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-rose-900 text-sm font-semibold text-center">
-              {error}
-            </div>
-          )}
+          <div aria-live="polite" aria-atomic="true">
+            {error && (
+              <div id="login-error" className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-rose-900 text-sm font-semibold text-center">
+                {error}
+              </div>
+            )}
+          </div>
 
           <div className="space-y-1.5">
             <label htmlFor="username" className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
@@ -100,6 +102,8 @@ export default function Login() {
               autoComplete="username"
               className="w-full text-sm border border-zinc-400 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-700/50 focus:border-purple-700 placeholder:text-zinc-500 text-zinc-900 bg-white font-medium"
               disabled={loading}
+              aria-invalid={!!error}
+              aria-describedby={error ? "login-error" : undefined}
             />
           </div>
 
@@ -122,6 +126,8 @@ export default function Login() {
                 autoComplete="current-password"
                 className="w-full text-sm border border-zinc-400 rounded-xl px-3.5 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-purple-700/50 focus:border-purple-700 placeholder:text-zinc-500 text-zinc-900 bg-white font-medium"
                 disabled={loading}
+                aria-invalid={!!error}
+                aria-describedby={error ? "login-error" : undefined}
               />
               <button
                 type="button"
@@ -139,6 +145,7 @@ export default function Login() {
             type="submit"
             className="btn-primary w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold shadow-md cursor-pointer hover:bg-purple-800 active:scale-[0.99] transition-all disabled:opacity-50 mt-4 bg-purple-700 text-white"
             disabled={loading}
+            aria-disabled={loading}
           >
             {loading ? (
               <>
