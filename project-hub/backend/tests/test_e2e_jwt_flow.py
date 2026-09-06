@@ -66,13 +66,18 @@ async def test_full_m2m_flow():
             algorithm="HS256"
         )
 
+        from app.core.crypto import encrypt_payload
+
         async def mock_post(url, **kwargs):
             if "tokens" in url:
-                return httpx.Response(200, json={"access_token": fake_jwt, "expires_in": 300})
+                encrypted_resp = encrypt_payload(
+                    {"access_token": fake_jwt, "expires_in": 300},
+                    target="dominus"
+                )
+                return httpx.Response(200, json=encrypted_resp)
             elif "messages/send" in url:
                 return httpx.Response(200, json={"status": "success", "message_id": f"msg_{user.tenant_id}"})
             return httpx.Response(404, json={"detail": "Not found"})
-
 
         mock_client_instance = AsyncMock()
         mock_client_instance.post = mock_post
@@ -82,13 +87,11 @@ async def test_full_m2m_flow():
 
         mock_client_instance.request = mock_request
 
-
         with patch("app.services.identity_client.get_async_client") as mock_async_client, \
              patch("app.services.whatsapp_client.get_async_client") as mock_async_client_wa:
 
             mock_async_client.return_value.__aenter__.return_value = mock_client_instance
             mock_async_client_wa.return_value.__aenter__.return_value = mock_client_instance
-
 
             # 3. Solicitação do JWT M2M ao Identity Worker
             scope = "whatsapp:messages:send"
@@ -126,5 +129,60 @@ async def test_full_m2m_flow():
         db.close()
 
 
+@pytest.mark.anyio
+async def test_idpw_plaintext_response_rejected_with_502():
+    """Valida que resposta em texto claro do IDPW é sumariamente rejeitada com 502 (fail-closed)."""
+    from app.services.identity_client import identity_client
+    from fastapi import HTTPException
+
+    # Clear identity client cache
+    identity_client._cache.clear()
+
+    mock_client_instance = AsyncMock()
+    # Retorna JSON sem chave '_encrypted: True'
+    mock_client_instance.post.return_value = httpx.Response(
+        200,
+        json={"access_token": "plaintext_token", "expires_in": 300}
+    )
+
+    with patch("app.services.identity_client.get_async_client") as mock_async_client:
+        mock_async_client.return_value.__aenter__.return_value = mock_client_instance
+
+        with pytest.raises(HTTPException) as exc_info:
+            await identity_client.get_token(tenant_id="test_tenant_plaintext", scope="whatsapp:messages:send")
+        assert exc_info.value.status_code == 502
+        assert "criptografia obrigatória" in exc_info.value.detail
+
+
+@pytest.mark.anyio
+async def test_crypto_and_identity_client_fail_closed_when_keys_missing(monkeypatch):
+    """Valida que ausência de chaves criptográficas dispara erro imediatamente (fail-closed)."""
+    from app.core.config import settings
+    from app.core import crypto
+    from app.services.identity_client import identity_client
+    from fastapi import HTTPException
+
+    identity_client._cache.clear()
+
+    # 1. Ausência de DOMINUS_PRIVATE_KEY no crypto.sign_payload deve lançar ValueError
+    monkeypatch.setattr(settings, "DOMINUS_PRIVATE_KEY", "")
+    with pytest.raises(ValueError) as exc_sign:
+        crypto.sign_payload({"test": "data"})
+    assert "DOMINUS_PRIVATE_KEY não configurada" in str(exc_sign.value)
+
+    # 2. Ausência de chave pública de destino no crypto.encrypt_payload deve lançar ValueError
+    monkeypatch.setattr(settings, "IDPW_PUBLIC_KEY", "")
+    with pytest.raises(ValueError) as exc_enc:
+        crypto.encrypt_payload({"test": "data"}, target="idpw")
+    assert "Chave pública não configurada" in str(exc_enc.value)
+
+    # 3. Ausência de chaves no IdentityClient deve levantar 500
+    with pytest.raises(HTTPException) as exc_client:
+        await identity_client.get_token(tenant_id="test_tenant", scope="test:scope")
+    assert exc_client.value.status_code == 500
+    assert "DOMINUS_PRIVATE_KEY ausente" in exc_client.value.detail
+
+
 if __name__ == "__main__":
     asyncio.run(test_full_m2m_flow())
+

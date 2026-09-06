@@ -27,8 +27,7 @@ Este documento detalha como os sistemas externos devem se comunicar com o backen
 **Objetivo:** Orquestrar integrações de CRM, notificações e campanhas.
 
 ### Webhooks de Recepção (Inbound)
-- **Endpoint:** `/webhooks/events/crm-chats` (e similares)
-- **Cabeçalhos Exigidos:** `X-Master-API-Key` ou assinaturas HMAC configuradas.
+- **Cabeçalhos Exigidos:** Assinatura HMAC-SHA256 (`X-N8N-Signature`), Timestamp (`X-N8N-Timestamp`) e ID único de evento (`X-N8N-Event-Id`). A assinatura é calculada sobre `timestamp.event_id.body`.
 - **Payload Esperado (Exemplo de Mensagem Recebida):**
   O N8N deve enviar dados estritos que correspondam aos schemas Pydantic, garantindo consistência com o frontend.
   ```json

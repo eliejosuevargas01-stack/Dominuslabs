@@ -156,41 +156,37 @@ async def proxy_crm_avatar(
     db: Session = Depends(get_db)
 ):
     """
-    Proxy de avatar público/autenticado consumido pelo Dominus CRM via WhatsAppClient.
+    Proxy de avatar autenticado consumido pelo Dominus CRM via WhatsAppClient.
+    Exige autenticação de usuário Dominus e resolução estrita de ownership.
     """
     target_session = (session or session_id or "").strip()
     if not jid:
         raise HTTPException(status_code=400, detail="Parâmetro 'jid' é obrigatório.")
 
-    from app.services.whatsapp_client import whatsapp_client
-    from app.models.whatsapp_account import WhatsappAccount
-    from app.models.user import User
-
-    # Tenta identificar o tenant autenticado ou vinculado à sessão
     auth_header = request.headers.get("Authorization", "")
     effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
-    tenant_id = None
+    if not effective_token:
+        raise HTTPException(status_code=401, detail="Token de autenticação obrigatório.")
 
-    if effective_token:
-        from app.core.auth import decode_access_token
-        payload = decode_access_token(effective_token)
-        if payload and payload.get("sub"):
-            user = db.query(User).filter(User.email == payload["sub"]).first()
-            if user:
-                tenant_id = user.tenant_id
+    from app.core.auth import decode_access_token
+    from app.models.user import User
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    from app.services.whatsapp_client import whatsapp_client
 
-    if not tenant_id and target_session and target_session.lower() != "default":
-        account = db.query(WhatsappAccount).filter(WhatsappAccount.session_id == target_session).first()
-        if account:
-            tenant_id = account.tenant_id
+    payload = decode_access_token(effective_token)
+    if not payload or not payload.get("sub"):
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado.")
 
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Acesso negado: tenant_id não identificado para a sessão.")
+    user = db.query(User).filter(User.email == payload["sub"]).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuário não encontrado.")
+
+    resolved_session = resolve_owned_whatsapp_session(user, target_session, db)
 
     try:
         res = await whatsapp_client.get_session_avatar(
-            tenant_id=tenant_id,
-            session_id=target_session,
+            tenant_id=user.tenant_id,
+            session_id=resolved_session,
             jid=jid
         )
         if isinstance(res, dict):
@@ -198,14 +194,14 @@ async def proxy_crm_avatar(
                 return Response(
                     content=res["content"],
                     media_type=res.get("content_type") or "image/jpeg",
-                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}
+                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=86400"}
                 )
             url_target = res.get("url") or res.get("avatar_url") or res.get("profile_pic_url") or res.get("profile_url") or res.get("avatar")
             if url_target and str(url_target).startswith("http"):
                 return RedirectResponse(
                     url_target,
                     status_code=302,
-                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}
+                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=86400"}
                 )
     except Exception as e:
         print(f"[CRM-AVATAR] Aviso ao buscar avatar proxy para jid={jid}: {e}", flush=True)
@@ -225,39 +221,36 @@ async def proxy_crm_media(
 ):
     """
     Proxy de mídia autenticado pelo Dominus via WhatsAppClient.
+    Exige autenticação de usuário Dominus e resolução estrita de ownership.
     """
     target_session = (session or session_id or "").strip()
     target_msg_id = messageId or message_id
     if not target_msg_id:
         raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
 
-    from app.services.whatsapp_client import whatsapp_client
-    from app.models.whatsapp_account import WhatsappAccount
-    from app.models.user import User
-
     auth_header = request.headers.get("Authorization", "")
     effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
-    tenant_id = None
+    if not effective_token:
+        raise HTTPException(status_code=401, detail="Token de autenticação obrigatório.")
 
-    if effective_token:
-        from app.core.auth import decode_access_token
-        payload = decode_access_token(effective_token)
-        if payload and payload.get("sub"):
-            user = db.query(User).filter(User.email == payload["sub"]).first()
-            if user:
-                tenant_id = user.tenant_id
+    from app.core.auth import decode_access_token
+    from app.models.user import User
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+    from app.services.whatsapp_client import whatsapp_client
 
-    if not tenant_id and target_session and target_session.lower() != "default":
-        account = db.query(WhatsappAccount).filter(WhatsappAccount.session_id == target_session).first()
-        if account:
-            tenant_id = account.tenant_id
+    payload = decode_access_token(effective_token)
+    if not payload or not payload.get("sub"):
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado.")
 
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Acesso negado: tenant_id não identificado para a sessão.")
+    user = db.query(User).filter(User.email == payload["sub"]).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuário não encontrado.")
+
+    resolved_session = resolve_owned_whatsapp_session(user, target_session, db)
 
     response = await whatsapp_client.get_session_media(
-        tenant_id=tenant_id,
-        session_id=target_session,
+        tenant_id=user.tenant_id,
+        session_id=resolved_session,
         message_id=target_msg_id
     )
 
@@ -319,16 +312,41 @@ def get_session_preference(
     return {"session_id": user.preferred_session_id}
 
 @router.put("/preferences/session")
+@router.put("/session-preference")
 def set_session_preference(
     payload: SessionPreferencePayload,
     db: Session = Depends(get_db),
     current_user: str = Depends(check_crm_permission),
 ):
-    """Define a sessão WhatsApp preferida do usuário para envio de mensagens."""
+    """Define a sessão WhatsApp preferida do usuário após validar ownership positivo."""
     user = db.query(User).filter(User.email == current_user).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-    user.preferred_session_id = payload.session_id
+
+    clean_session = (payload.session_id or "").strip()
+    if not clean_session or clean_session.lower() == "default":
+        raise HTTPException(status_code=400, detail="Sessão inválida.")
+
+    from app.models.whatsapp_account import WhatsappAccount
+    variants = {
+        clean_session,
+        clean_session.replace("-", " "),
+        clean_session.replace(" ", "-"),
+        clean_session.lower(),
+        clean_session.lower().replace("-", " "),
+        clean_session.lower().replace(" ", "-")
+    }
+    account = db.query(WhatsappAccount).filter(
+        WhatsappAccount.tenant_id == user.tenant_id,
+        WhatsappAccount.session_id.in_(variants)
+    ).first()
+    if not account:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sessão '{payload.session_id}' não encontrada ou não pertence ao tenant '{user.tenant_id}'."
+        )
+
+    user.preferred_session_id = account.session_id
     db.commit()
     return {"session_id": user.preferred_session_id, "ok": True}
 

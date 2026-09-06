@@ -60,17 +60,16 @@ def authenticate_n8n_request(request: Request, raw_body_bytes: bytes) -> Dict[st
                 detail="Acesso negado: Webhooks n8n aceitam exclusivamente identidade de serviço, não tokens de usuários humanos."
             )
 
-    # 3. Rejeitar WHATSAPP_MASTER_SECRET
+    # 3. Rejeitar X-Master-API-Key incondicionalmente
     master_key = request.headers.get("X-Master-API-Key") or request.headers.get("X-API-Key")
-    master_secret = getattr(settings, "WHATSAPP_MASTER_SECRET", None)
-    if master_key and master_secret and secrets.compare_digest(master_key.strip(), master_secret.strip()):
+    if master_key:
         log_realtime_event("WEBHOOK_AUTH_FAILED", extra={
-            "reason": "WHATSAPP_MASTER_SECRET não é permitido em rotas do n8n",
+            "reason": "X-Master-API-Key não é permitida em rotas do n8n",
             "path": request.url.path
         })
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="WHATSAPP_MASTER_SECRET não é permitido em rotas do n8n."
+            detail="X-Master-API-Key não é permitida em rotas do n8n."
         )
 
     # 4. Validar se o N8N_WEBHOOK_SECRET está configurado no servidor
@@ -171,16 +170,15 @@ def authenticate_n8n_request(request: Request, raw_body_bytes: bytes) -> Dict[st
         )
 
     # 8. Validar Assinatura HMAC ANTES de registrar no cache de replay (anti-poisoning)
-    expected_with_ts = hmac.new(
+    # Formato canônico estrito: HMAC(secret, timestamp + "." + event_id + "." + raw_body)
+    # Vincula criptograficamente timestamp, event_id e corpo da requisição sem fallbacks.
+    expected_sig = hmac.new(
         n8n_secret.encode(),
-        f"{ts_header}.".encode() + raw_body_bytes,
+        f"{ts_header}.{event_id}.".encode() + raw_body_bytes,
         hashlib.sha256
     ).hexdigest()
-    expected_raw = hmac.new(n8n_secret.encode(), raw_body_bytes, hashlib.sha256).hexdigest()
 
-    valid_sig = secrets.compare_digest(sig_clean, expected_with_ts) or secrets.compare_digest(sig_clean, expected_raw)
-
-    if not valid_sig:
+    if not secrets.compare_digest(sig_clean, expected_sig):
         log_realtime_event("WEBHOOK_AUTH_FAILED", extra={
             "reason": "Assinatura HMAC inválida",
             "path": request.url.path

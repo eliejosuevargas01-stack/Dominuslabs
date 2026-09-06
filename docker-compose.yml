@@ -15,7 +15,6 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
       - ADMIN_TENANT_ID=${ADMIN_TENANT_ID:-admin}
       - N8N_WEBHOOK_SECRET=${N8N_WEBHOOK_SECRET:-n8n-webhook-secret-production-32-chars}
-      - WHATSAPP_MASTER_SECRET=${WHATSAPP_MASTER_SECRET:-whatsapp-master-secret-32-chars}
       - ENCRYPTION_MASTER_KEY=${ENCRYPTION_MASTER_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
       - DATABASE_URL=${DATABASE_URL:-}
     volumes:

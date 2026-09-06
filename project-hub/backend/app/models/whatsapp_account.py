@@ -10,8 +10,6 @@ from datetime import datetime, timezone
 from app.core.database import Base
 
 
-from sqlalchemy.orm import synonym
-
 
 class WhatsappAccount(Base):
     """
@@ -29,6 +27,3 @@ class WhatsappAccount(Base):
     display_name = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
-
-    # Alias retrocompatível para session_id suportado pelo ORM e queries
-    idpw = synonym("session_id")

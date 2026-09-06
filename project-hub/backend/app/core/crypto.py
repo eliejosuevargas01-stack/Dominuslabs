@@ -96,8 +96,8 @@ def encrypt_payload(payload_dict: Dict[str, Any], target: str) -> Dict[str, Any]
     """
     target_public_key_pem = get_public_key(target)
     if not target_public_key_pem:
-        logger.warning(f"No public key found for target: {target}. Returning original payload.")
-        return payload_dict
+        logger.error(f"Chave pública não configurada para o destino: {target}. Criptografia é obrigatória (fail-closed).")
+        raise ValueError(f"Chave pública não configurada para o destino: {target}. Criptografia é obrigatória (fail-closed).")
     try:
         # Load the public key
         public_key = load_pem_public_key(target_public_key_pem)
@@ -227,8 +227,8 @@ def sign_payload(payload_dict: Dict[str, Any]) -> str:
     """
     private_key_pem = clean_pem(settings.DOMINUS_PRIVATE_KEY)
     if not private_key_pem:
-        logger.warning("DOMINUS_PRIVATE_KEY não configurada. Assinatura vazia gerada.")
-        return ""
+        logger.error("DOMINUS_PRIVATE_KEY não configurada. Assinatura digital é obrigatória (fail-closed).")
+        raise ValueError("DOMINUS_PRIVATE_KEY não configurada. Assinatura digital é obrigatória (fail-closed).")
     try:
         try:
             private_key = load_pem_private_key(private_key_pem, password=None)

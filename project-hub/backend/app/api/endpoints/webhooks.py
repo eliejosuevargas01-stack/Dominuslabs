@@ -39,72 +39,6 @@ global_listeners = []   # [asyncio.Queue]
 lead_listeners = {}     # {lead_id: [(user_email, queue)]}
 crm_chat_listeners: List[tuple] = [] # [(user_email, tenant_id, queue)]
 
-def _authenticate_webhook_request(
-    request: Request,
-    raw_body_bytes: bytes,
-    token: Optional[str] = None,
-    x_master_api_key: Optional[str] = None
-) -> Optional[Dict[str, Any]]:
-    """
-    Autentica requisição de webhook por:
-    1. Master API Key (WHATSAPP_MASTER_SECRET) -> auth_type: 'master', is_admin: True
-    2. Webhook Secret / HMAC (WEBHOOK_SECRET ou N8N_WEBHOOK_SECRET) -> auth_type: 'webhook_secret', is_admin: True
-    3. JWT Token válido -> auth_type: 'jwt', tenant_id: payload.tenant_id, is_admin: (role == 'admin')
-    Retorna dicionário com os dados de autenticação ou None se inválido/ausente.
-    """
-    # 1. Master API Key
-    master_secret = getattr(settings, "WHATSAPP_MASTER_SECRET", None)
-    if master_secret:
-        header_key = x_master_api_key or request.headers.get("X-Master-API-Key") or request.headers.get("X-API-Key")
-        query_key = request.query_params.get("x_master_api_key") or request.query_params.get("master_api_key") or request.query_params.get("api_key")
-        candidate_key = header_key or query_key
-        if candidate_key and secrets.compare_digest(candidate_key.strip(), master_secret.strip()):
-            return {"type": "master", "is_admin": True, "tenant_id": None}
-
-    # 2. Webhook Secret / HMAC
-    webhook_secrets = [s for s in [getattr(settings, "WEBHOOK_SECRET", None), getattr(settings, "N8N_WEBHOOK_SECRET", None), master_secret] if s]
-    signature = request.headers.get("X-Signature") or request.headers.get("X-Webhook-Secret") or request.headers.get("X-Hub-Signature-256")
-    if signature and webhook_secrets:
-        sig_clean = signature.replace("sha256=", "").strip()
-        for w_secret in webhook_secrets:
-            if secrets.compare_digest(sig_clean, w_secret.strip()):
-                return {"type": "webhook_secret", "is_admin": True, "tenant_id": None}
-            if raw_body_bytes:
-                import hmac
-                import hashlib
-                expected = hmac.new(w_secret.encode(), raw_body_bytes, hashlib.sha256).hexdigest()
-                if secrets.compare_digest(sig_clean, expected):
-                    return {"type": "webhook_secret", "is_admin": True, "tenant_id": None}
-
-    # 3. JWT Token
-    auth_header = request.headers.get("Authorization")
-    auth_token = token
-    if not auth_token and auth_header and auth_header.lower().startswith("bearer "):
-        auth_token = auth_header[7:].strip()
-    if auth_token:
-        payload = decode_access_token(auth_token)
-        if payload and payload.get("sub"):
-            role = payload.get("role", "")
-            tenant_id = payload.get("tenant_id")
-            is_admin = role == "admin" or tenant_id == getattr(settings, "ADMIN_TENANT_ID", "admin")
-            return {
-                "type": "jwt",
-                "is_admin": is_admin,
-                "tenant_id": tenant_id,
-                "sub": payload.get("sub")
-            }
-
-    return None
-
-def _is_valid_m2m_or_hmac(
-    request: Request,
-    raw_body_bytes: bytes,
-    token: Optional[str] = None,
-    x_master_api_key: Optional[str] = None
-) -> bool:
-    """Valida se a requisição possui chave M2M, HMAC signature válida ou token JWT válido."""
-    return _authenticate_webhook_request(request, raw_body_bytes, token, x_master_api_key) is not None
-
 async def notify_lead_listeners(lead_id: str, event: str = "reload"):
     """
     Função/Método notify_lead_listeners.
@@ -307,15 +241,10 @@ async def _process_update_chat(
     jid: Optional[str] = None,
     phone: Optional[str] = None,
     is_from_me: Optional[bool] = None,
-    sender: Optional[str] = None,
-    token: Optional[str] = None,
-    x_master_api_key: Optional[str] = None
+    sender: Optional[str] = None
 ):
     """
     Função/Método _process_update_chat.
-
-    O que faz: Processa _process_update_chat recebendo os parâmetros (request, contact_id, lead_id, tenant_id, session_id, id, jid, phone, is_from_me, sender) no contexto de o endpoint de API para webhooks.
-    Impacto na regra de negócio: Assegura que o fluxo da operação _process_update_chat seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     body_bytes = await request.body()
     auth_info = authenticate_n8n_request(request, body_bytes)
@@ -406,16 +335,8 @@ async def update_chat_webhook_post(
     jid: Optional[str] = None,
     phone: Optional[str] = None,
     is_from_me: Optional[bool] = None,
-    sender: Optional[str] = None,
-    token: Optional[str] = Query(None),
-    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key")
+    sender: Optional[str] = None
 ):
-    """
-    Função/Método update_chat_webhook_post.
-
-    O que faz: Atualização e modificação de informações para update_chat_webhook_post recebendo os parâmetros (request, contact_id, lead_id, tenant_id, session_id, id, jid, phone, is_from_me, sender) no contexto de o endpoint de API para webhooks.
-    Impacto na regra de negócio: Assegura que o fluxo da operação update_chat_webhook_post seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-    """
     return await _process_update_chat(
         request=request,
         contact_id=contact_id,
@@ -426,9 +347,7 @@ async def update_chat_webhook_post(
         jid=jid,
         phone=phone,
         is_from_me=is_from_me,
-        sender=sender,
-        token=token,
-        x_master_api_key=x_master_api_key
+        sender=sender
     )
 
 @router.get("/crm/update-chat")
@@ -442,16 +361,8 @@ async def update_chat_webhook_get(
     jid: Optional[str] = None,
     phone: Optional[str] = None,
     is_from_me: Optional[bool] = None,
-    sender: Optional[str] = None,
-    token: Optional[str] = Query(None),
-    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key")
+    sender: Optional[str] = None
 ):
-    """
-    Função/Método update_chat_webhook_get.
-
-    O que faz: Atualização e modificação de informações para update_chat_webhook_get recebendo os parâmetros (request, contact_id, lead_id, tenant_id, session_id, id, jid, phone, is_from_me, sender) no contexto de o endpoint de API para webhooks.
-    Impacto na regra de negócio: Assegura que o fluxo da operação update_chat_webhook_get seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-    """
     return await _process_update_chat(
         request=request,
         contact_id=contact_id,
@@ -462,9 +373,7 @@ async def update_chat_webhook_get(
         jid=jid,
         phone=phone,
         is_from_me=is_from_me,
-        sender=sender,
-        token=token,
-        x_master_api_key=x_master_api_key
+        sender=sender
     )
 
 async def notify_listeners(public_token: str):
@@ -815,31 +724,29 @@ async def deploy_webhook(request: Request, db: Session = Depends(get_db)):
 @router.post("/inbound/whatsapp")
 async def whatsapp_inbound_webhook(request: Request):
     """
-    Inbound webhook for WhatsApp messages.
-    Receives message payload and appends to in-memory conversation list.
+    Inbound webhook for WhatsApp messages via n8n.
+    Exige autenticação HMAC canônica n8n (timestamp.event_id.body).
     """
-    signature = request.headers.get("X-Signature")
-    if hasattr(settings, "WEBHOOK_SECRET") and settings.WEBHOOK_SECRET:
-        import hmac
-        import hashlib
-        body = await request.body()
-        expected_signature = hmac.new(settings.WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
-        if not signature or not hmac.compare_digest(signature, expected_signature):
-            return {"status": "ignored", "reason": "invalid signature"}
+    body_bytes = await request.body()
+    auth_info = authenticate_n8n_request(request, body_bytes)
 
-    payload = await request.json()
+    try:
+        payload = json.loads(body_bytes) if body_bytes else {}
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON inválido.")
+
     lead_id = payload.get("lead_id")
     message_text = payload.get("message")
     sender = payload.get("sender", "lead")
     tenant_id = payload.get("tenant_id")
     if not tenant_id:
-        return {"status": "ignored", "reason": "missing tenant_id"}
+        raise HTTPException(status_code=400, detail="tenant_id é obrigatório.")
     if not lead_id or not message_text:
-        return {"status": "ignored", "reason": "missing lead_id or message"}
-        
+        raise HTTPException(status_code=400, detail="lead_id e message são obrigatórios.")
+
     from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS, n8n_service
     n8n_service.invalidate_leads_cache()
-    
+
     new_msg = {
         "id": f"msg_in_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}",
         "sender": sender,
@@ -850,49 +757,48 @@ async def whatsapp_inbound_webhook(request: Request):
     if lead_id not in MOCK_CONVERSATIONS:
         MOCK_CONVERSATIONS[lead_id] = []
     MOCK_CONVERSATIONS[lead_id].append(new_msg)
-    
+
     # Update last interaction timestamp on lead
     for lead in MOCK_LEADS:
         if lead["id"] == lead_id:
             lead["last_interaction"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
             if sender == "lead":
-                lead["status"] = "RESPONDED" # Toggle status to responded
+                lead["status"] = "RESPONDED"
             break
-            
+
     # Notify listeners in real time
     await notify_lead_listeners(lead_id, "reload")
     await notify_crm_chat_listeners(lead_id, tenant_id=tenant_id)
-            
+
     return {"status": "success", "message": new_msg}
+
 
 @router.post("/inbound/instagram")
 async def instagram_inbound_webhook(request: Request):
     """
-    Inbound webhook for Instagram messages.
-    Receives message payload and appends to in-memory conversation list.
+    Inbound webhook for Instagram messages via n8n.
+    Exige autenticação HMAC canônica n8n (timestamp.event_id.body).
     """
-    signature = request.headers.get("X-Signature")
-    if hasattr(settings, "WEBHOOK_SECRET") and settings.WEBHOOK_SECRET:
-        import hmac
-        import hashlib
-        body = await request.body()
-        expected_signature = hmac.new(settings.WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
-        if not signature or not hmac.compare_digest(signature, expected_signature):
-            return {"status": "ignored", "reason": "invalid signature"}
+    body_bytes = await request.body()
+    auth_info = authenticate_n8n_request(request, body_bytes)
 
-    payload = await request.json()
+    try:
+        payload = json.loads(body_bytes) if body_bytes else {}
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON inválido.")
+
     lead_id = payload.get("lead_id")
     message_text = payload.get("message")
     sender = payload.get("sender", "lead")
     tenant_id = payload.get("tenant_id")
     if not tenant_id:
-        return {"status": "ignored", "reason": "missing tenant_id"}
+        raise HTTPException(status_code=400, detail="tenant_id é obrigatório.")
     if not lead_id or not message_text:
-        return {"status": "ignored", "reason": "missing lead_id or message"}
-        
+        raise HTTPException(status_code=400, detail="lead_id e message são obrigatórios.")
+
     from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS, n8n_service
     n8n_service.invalidate_leads_cache()
-    
+
     new_msg = {
         "id": f"msg_in_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}",
         "sender": sender,
@@ -903,7 +809,7 @@ async def instagram_inbound_webhook(request: Request):
     if lead_id not in MOCK_CONVERSATIONS:
         MOCK_CONVERSATIONS[lead_id] = []
     MOCK_CONVERSATIONS[lead_id].append(new_msg)
-    
+
     # Update last interaction timestamp on lead
     for lead in MOCK_LEADS:
         if lead["id"] == lead_id:
@@ -911,33 +817,37 @@ async def instagram_inbound_webhook(request: Request):
             if sender == "lead":
                 lead["status"] = "RESPONDED"
             break
-            
+
     # Notify listeners in real time
     await notify_lead_listeners(lead_id, "reload")
     await notify_crm_chat_listeners(lead_id, tenant_id=tenant_id)
-            
+
     return {"status": "success", "message": new_msg}
+
 
 @router.post("/waha/session-status")
 async def waha_session_status_webhook(request: Request):
     """
-    Endpoint to receive session status updates from WAHA.
-    If a session drops or fails, we notify the frontend via SSE.
+    Endpoint to receive session status updates via n8n.
+    Exige autenticação HMAC canônica n8n (timestamp.event_id.body).
     """
+    body_bytes = await request.body()
+    auth_info = authenticate_n8n_request(request, body_bytes)
+
     try:
-        payload = await request.json()
+        payload = json.loads(body_bytes) if body_bytes else {}
     except Exception:
-        return {"status": "ignored", "reason": "invalid json"}
-        
+        raise HTTPException(status_code=400, detail="JSON inválido.")
+
     session_id = payload.get("session")
     event_type = payload.get("event")
-    
-    # WAHA usually sends event="session.status" and payload.status
+
     inner_payload = payload.get("payload", {})
     status = inner_payload.get("status", "").upper() if isinstance(inner_payload, dict) else ""
     event_tenant_id = (inner_payload.get("tenant_id") if isinstance(inner_payload, dict) else None) or payload.get("tenant_id")
     if not event_tenant_id:
-        return {"status": "ignored", "reason": "missing tenant_id"}
+        raise HTTPException(status_code=400, detail="tenant_id é obrigatório.")
+
     if event_type == "session.status" and status in ["STOPPED", "FAILED", "DISCONNECTED", "UNPAIRED", "TIMEOUT"]:
         # Broadcast to all CRM chat listeners of matching tenant that a session has disconnected
         msg = json.dumps({
@@ -949,24 +859,60 @@ async def waha_session_status_webhook(request: Request):
         for user_email, listener_tenant_id, queue in list(crm_chat_listeners):
             if listener_tenant_id == event_tenant_id:
                 await queue.put(msg)
-            
+
     return {"status": "success"}
+
 
 @router.post("/outbound/whatsapp/send")
 async def n8n_outbound_whatsapp_send(
-    payload: Dict[str, Any] = Body(...),
-    x_master_api_key: Optional[str] = Header(None, alias="X-Master-API-Key"),
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    if not x_master_api_key or x_master_api_key != settings.WHATSAPP_MASTER_SECRET:
-        raise HTTPException(status_code=401, detail="Invalid or missing Master API Key")
+    """
+    Envio outbound acionado pelo n8n via WhatsAppClient.
+    Exige autenticação HMAC canônica do n8n e resolução estrita de ownership de sessão no banco de dados.
+    Rejeita incondicionalmente X-Master-API-Key e fallbacks para admin/default.
+    """
+    # 1. Rejeição explícita de X-Master-API-Key
+    if request.headers.get("X-Master-API-Key") or request.headers.get("X-API-Key"):
+        raise HTTPException(status_code=401, detail="X-Master-API-Key não é permitida.")
 
-    session_id = payload.get("session_id", "default")
+    # 2. Autenticação obrigatória n8n via HMAC canônica (timestamp.event_id.body)
+    body_bytes = await request.body()
+    auth_info = authenticate_n8n_request(request, body_bytes)
+
+    try:
+        payload = json.loads(body_bytes) if body_bytes else {}
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="Payload deve ser um objeto JSON.")
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON payload inválido.")
+
+    # 3. Exigência estrita de tenant_id e session_id (sem fallbacks para admin ou default)
+    tenant_id = payload.get("tenant_id")
+    session_id = payload.get("session_id")
+    if not tenant_id or str(tenant_id).strip() == "" or str(tenant_id).lower() == "default":
+        raise HTTPException(status_code=400, detail="tenant_id é obrigatório e não pode ser default.")
+    if not session_id or str(session_id).strip() == "" or str(session_id).lower() == "default":
+        raise HTTPException(status_code=400, detail="session_id é obrigatório e não pode ser default.")
+
+    # 4. Prova positiva de vínculo da sessão no banco de dados para o tenant
+    from app.models.whatsapp_account import WhatsappAccount
+    account = db.query(WhatsappAccount).filter(
+        WhatsappAccount.tenant_id == tenant_id,
+        WhatsappAccount.session_id == session_id
+    ).first()
+    if not account:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sessão '{session_id}' não encontrada ou não vinculada ao tenant '{tenant_id}'."
+        )
+
     phone = payload.get("phone") or payload.get("number") or payload.get("jid") or payload.get("contact_jid")
     message = payload.get("message") or payload.get("text")
     media = payload.get("media")
     base64_content = payload.get("base64_content")
-    
+
     if base64_content and not media:
         media = {
             "data": base64_content,
@@ -980,12 +926,8 @@ async def n8n_outbound_whatsapp_send(
 
     cleaned_phone = "".join(filter(str.isdigit, str(phone)))
     final_jid = phone if "@" in str(phone) else f"{cleaned_phone}@s.whatsapp.net"
-    
-    from app.services.whatsapp_client import whatsapp_client
-    
-    tenant_id = payload.get("tenant_id") or getattr(settings, "ADMIN_TENANT_ID", "admin") or "admin"
-    session_id = payload.get("session_id") or "default_session"
 
+    from app.services.whatsapp_client import whatsapp_client
 
     json_data = {
         "phone": cleaned_phone,
@@ -997,16 +939,16 @@ async def n8n_outbound_whatsapp_send(
         json_data["text"] = message
     if media:
         json_data["media"] = media
-        
+
     for k, v in payload.items():
         if k not in ["phone", "number", "message", "text", "session_id", "tenant_id", "jid", "contact_jid", "master_api_key", "x_master_api_key", "base64_content", "media", "mimeType", "fileName", "kind"]:
             json_data[k] = v
 
     res = await whatsapp_client.send_message(
         tenant_id=tenant_id,
-        session_id=session_id,
+        session_id=account.session_id,
         message_data=json_data
     )
-    
+
     return JSONResponse(status_code=200, content=res)
 

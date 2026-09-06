@@ -34,7 +34,6 @@ jobs:
           SECRET_KEY: test-secret-key-for-ci-minimum-32-chars-long
           ADMIN_TENANT_ID: test-admin-tenant
           N8N_WEBHOOK_SECRET: test-n8n-webhook-secret-32-chars-min
-          WHATSAPP_MASTER_SECRET: test-whatsapp-master-secret-32-chars
           ENCRYPTION_MASTER_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
         run: |
           pytest tests -v

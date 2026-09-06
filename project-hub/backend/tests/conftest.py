@@ -20,8 +20,29 @@ limiter.enabled = False
 # Ensure test secrets are available for test suite
 if not settings.N8N_WEBHOOK_SECRET:
     settings.N8N_WEBHOOK_SECRET = "test-n8n-webhook-secret"
-if not settings.WHATSAPP_MASTER_SECRET:
-    settings.WHATSAPP_MASTER_SECRET = "test-whatsapp-master-secret"
+
+# Ensure test RSA keys are available for hybrid encryption
+if not settings.DOMINUS_PRIVATE_KEY:
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.hazmat.primitives import serialization
+
+    _test_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    _priv_pem = _test_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    ).decode("utf-8")
+    _pub_pem = _test_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode("utf-8")
+
+    settings.DOMINUS_PRIVATE_KEY = _priv_pem
+    settings.DOMINUS_PUBLIC_KEY = _pub_pem
+    settings.IDPW_PUBLIC_KEY = _pub_pem
+    settings.WHATS_API_PUBLIC_KEY = _pub_pem
+    settings.N8N_PUBLIC_KEY = _pub_pem
+
 
 # Create an in-memory SQLite database for testing
 SQLALCHEMY_DATABASE_URL = "sqlite://"

@@ -17,14 +17,16 @@ def make_n8n_post_args(payload: dict) -> tuple[bytes, dict]:
     body_bytes = json.dumps(payload).encode()
     secret = settings.N8N_WEBHOOK_SECRET
     current_ts = str(int(time.time()))
-    sig = hmac.new(secret.encode(), f"{current_ts}.".encode() + body_bytes, hashlib.sha256).hexdigest()
+    event_id = f"evt-{uuid.uuid4()}"
+    sig = hmac.new(secret.encode(), f"{current_ts}.{event_id}.".encode() + body_bytes, hashlib.sha256).hexdigest()
     headers = {
         "Content-Type": "application/json",
         "X-N8N-Signature": sig,
         "X-N8N-Timestamp": current_ts,
-        "X-N8N-Event-Id": f"evt-{uuid.uuid4()}",
+        "X-N8N-Event-Id": event_id,
     }
     return body_bytes, headers
+
 
 
 class FakeWebSocket:
@@ -159,10 +161,7 @@ def test_n8n_order_envelope_maps_to_order_manager_record():
     assert record["items_source"][0]["external_item_id"] == "item-1"
 
 
-def test_same_external_item_id_is_scoped_to_each_order(client, monkeypatch):
-    from app.core.config import settings
-
-    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
+def test_same_external_item_id_is_scoped_to_each_order(client):
     payload = {
         "pedido": {
             "id": "order-scope-a", "tenant_id": "admin", "cliente_id": "125203162075156@lid",
@@ -286,8 +285,9 @@ def test_receive_order_returns_duplicate_after_a_concurrent_integrity_error():
             self.rolled_back = True
 
     current_ts = str(int(time.time()))
+    event_id = "evt-race-123"
     body_bytes = payload.model_dump_json().encode()
-    sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), f"{current_ts}.".encode() + body_bytes, hashlib.sha256).hexdigest()
+    sig = hmac.new(settings.N8N_WEBHOOK_SECRET.encode(), f"{current_ts}.{event_id}.".encode() + body_bytes, hashlib.sha256).hexdigest()
     scope = {
         "type": "http",
         "method": "POST",
@@ -296,7 +296,7 @@ def test_receive_order_returns_duplicate_after_a_concurrent_integrity_error():
             (b"content-type", b"application/json"),
             (b"x-n8n-signature", sig.encode()),
             (b"x-n8n-timestamp", current_ts.encode()),
-            (b"x-n8n-event-id", b"evt-race-123"),
+            (b"x-n8n-event-id", event_id.encode()),
         ],
         "query_string": b"",
     }
@@ -450,9 +450,7 @@ def test_total_derived_when_subtotals_are_zero(client):
     assert data["order"]["total"] == 45.0
 
 
-def test_receive_order_rejects_whatsapp_master_secret(client, monkeypatch):
-    from app.core.config import settings
-    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-secret-key")
+def test_receive_order_rejects_whatsapp_master_secret(client):
     payload = {
         "pedido": {
             "id": "order-reject", "tenant_id": "admin", "cliente_id": "client@lid",
@@ -470,17 +468,14 @@ def test_receive_order_rejects_whatsapp_master_secret(client, monkeypatch):
     }
     res = client.post("/api/v1/orders", json=payload, headers={"X-Master-API-Key": "super-secret-key"})
     assert res.status_code == 401
-    assert "WHATSAPP_MASTER_SECRET não é permitido" in res.json()["detail"]
+    assert "X-Master-API-Key não é permitida" in res.json()["detail"]
 
 
-def test_operator_routes_reject_master_key_and_require_bearer(client, monkeypatch):
+def test_operator_routes_reject_master_key_and_require_bearer(client):
     """
     P0/Section 20: Operador não aceita WHATSAPP_MASTER_SECRET nem X-Master-API-Key.
     Deve exigir autenticação de operador humano exclusivamente via Bearer JWT.
     """
-    from app.core.config import settings
-    monkeypatch.setattr(settings, "WHATSAPP_MASTER_SECRET", "super-master-key")
-
     # Trying to list orders using master key instead of Bearer token -> 401
     res = client.get("/api/v1/orders", headers={"X-Master-API-Key": "super-master-key"})
     assert res.status_code == 401

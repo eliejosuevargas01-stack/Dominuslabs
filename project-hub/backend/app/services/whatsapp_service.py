@@ -53,7 +53,7 @@ def resolve_owned_whatsapp_session(user: User, session_id: Optional[str], db: Se
         clean_target.lower().replace(" ", "-")
     }
 
-    # 1. Prova positiva via WhatsappAccount vinculado ao banco
+    # 1. Prova positiva estrita via WhatsappAccount vinculado ao banco para o tenant
     accounts = db.query(WhatsappAccount).filter(
         WhatsappAccount.session_id.in_(variants)
     ).all()
@@ -71,24 +71,7 @@ def resolve_owned_whatsapp_session(user: User, session_id: Optional[str], db: Se
         matching = next((a.session_id for a in accounts if a.tenant_id == user_tenant and a.session_id == target_session), None)
         return matching or accounts[0].session_id
 
-    # 2. Prova positiva via preferência de usuário do mesmo tenant
-    session_users = db.query(User).filter(
-        User.preferred_session_id.in_(variants)
-    ).all()
-    if session_users:
-        for session_user in session_users:
-            if session_user.tenant_id != user_tenant:
-                logger.warning(
-                    f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Sessão '{session_user.preferred_session_id}' pertence ao tenant '{session_user.tenant_id}', "
-                    f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Acesso negado: a sessão informada pertence a outro tenant."
-                )
-        return target_session
-
-    # 3. Nenhuma prova de vínculo positivo encontrada no tenant -> Rejeitar como desconhecida (fail-closed)
+    # 2. Nenhuma prova de vínculo positivo em WhatsappAccount encontrada no tenant -> Rejeitar como desconhecida (fail-closed)
     logger.warning(
         f"[WA-OWNERSHIP] Sessão '{target_session}' desconhecida para o tenant '{user_tenant}' (user={user.email})."
     )
