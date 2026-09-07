@@ -33,3 +33,15 @@
   - Executar suíte de testes unitários (`npm test` / Vitest).
   - Validar build de produção (`npm run build`).
   - Executar auditoria de rotas e console via Chrome DevTools MCP.
+
+## Tarefa 6: Fechamento do Upload e Achados Derivados
+
+- **Responsável:** agente principal local.
+- **Ações:**
+  - validar conteúdo e tamanho de uploads de produto antes da persistência;
+  - remover `tenant_id` do formulário de mídia e usar o cliente autenticado compartilhado;
+  - resolver URLs relativas de mídia pelo origin da API para impedir imagens quebradas em frontend e backend separados;
+  - eliminar JWT de URLs de avatar/mídia e consumir proxies privados via Bearer + Blob;
+  - corrigir colisão multi-tenant do SSE e marcadores assíncronos do CI;
+  - substituir fallback `MOCK_LEADS` por cache previamente validado ou erro 503;
+  - executar testes backend sem `pytest-asyncio`, suíte frontend, lint, build, SAST e QA visual local.

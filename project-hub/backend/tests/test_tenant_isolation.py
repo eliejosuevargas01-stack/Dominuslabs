@@ -303,6 +303,7 @@ async def test_crm_messages_and_inbound_isolation_between_tenants(monkeypatch):
         N8NService,
         MOCK_CONVERSATIONS,
         MOCK_ACTIVITIES,
+        N8NIntegrationUnavailableError,
         RAW_LEADS_CACHE
     )
     from app.core.config import settings
@@ -349,10 +350,14 @@ async def test_crm_messages_and_inbound_isolation_between_tenants(monkeypatch):
     assert acts_a[0]["event_type"] == "stage_change"
     assert len(acts_b) == 0
 
-    # 5. Deleção no Tenant A limpa o cache de A sem afetar B
-    await N8NService.delete_lead(lead_id, tenant_id=tenant_a)
-    assert f"{tenant_a}:{lead_id}" not in MOCK_CONVERSATIONS
-    assert f"{tenant_a}:{lead_id}" not in MOCK_ACTIVITIES
+    # 5. Sem n8n, a deleção falha de forma controlada e não simula sucesso
+    # nem remove estado local antes da confirmação do sistema de origem.
+    with pytest.raises(N8NIntegrationUnavailableError):
+        await N8NService.delete_lead(lead_id, tenant_id=tenant_a)
+    assert f"{tenant_a}:{lead_id}" in MOCK_CONVERSATIONS
+    assert f"{tenant_a}:{lead_id}" in MOCK_ACTIVITIES
 
+    MOCK_CONVERSATIONS.pop(f"{tenant_a}:{lead_id}", None)
+    MOCK_ACTIVITIES.pop(f"{tenant_a}:{lead_id}", None)
 
 

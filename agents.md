@@ -17,3 +17,8 @@
 ## 4. Jules QA & Code Reviewer (Gatekeepers de Qualidade)
 - **Papel:** Execução de testes de regressão, análise estática de segurança e verificação de bloqueadores P0/P1 antes de qualquer autorização de deploy.
 - **Restrições:** Travamento absoluto contra deploys automáticos em produção sem consentimento explícito do usuário.
+
+## Fechamento desta sessão
+
+- A implementação e o QA serão executados localmente pelo agente principal, conforme solicitação do usuário.
+- Não haverá delegação nem deploy. Caso uma delegação se torne indispensável, o único canal autorizado é o Antigravity CLI.

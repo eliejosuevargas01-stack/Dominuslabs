@@ -5,9 +5,8 @@ O que faz: Implementa a lógica estrutural e funcional para o endpoint de API pa
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para product_media funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
 import os
-import shutil
 import uuid
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
@@ -21,10 +20,30 @@ from app.schemas.product_media import ProductMediaResponse
 
 router = APIRouter()
 
+
+def _detect_product_media_format(content: bytes) -> tuple[str, str]:
+    """Return the media kind and canonical extension from trusted file bytes."""
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image", ".png"
+    if content.startswith(b"\xff\xd8\xff"):
+        return "image", ".jpg"
+    if content.startswith((b"GIF87a", b"GIF89a")):
+        return "image", ".gif"
+    if len(content) >= 12 and content.startswith(b"RIFF") and content[8:12] == b"WEBP":
+        return "image", ".webp"
+    if len(content) >= 12 and content[4:8] == b"ftyp":
+        major_brand = content[8:12]
+        if major_brand in {b"isom", b"iso2", b"avc1", b"mp41", b"mp42", b"M4V ", b"dash"}:
+            return "video", ".mp4"
+
+    raise HTTPException(
+        status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+        detail="Formato de mídia não suportado. Envie PNG, JPEG, GIF, WebP ou MP4.",
+    )
+
 @router.post("/", response_model=ProductMediaResponse)
 def upload_product_media(
     product_id: uuid.UUID = Form(...),
-    tenant_id: str = Form("default"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: str = Depends(check_product_update_permission)
@@ -32,7 +51,7 @@ def upload_product_media(
     """
     Função/Método upload_product_media.
 
-    O que faz: Processa upload_product_media recebendo os parâmetros (product_id, tenant_id, file, db, current_user) no contexto de o endpoint de API para product_media.
+    O que faz: Processa upload_product_media recebendo os parâmetros (product_id, file, db, current_user) no contexto de o endpoint de API para product_media.
     Impacto na regra de negócio: Assegura que o fluxo da operação upload_product_media seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     user = db.query(User).filter(User.email == current_user).first()
@@ -47,16 +66,15 @@ def upload_product_media(
     if not product:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
 
-    file_type = file.content_type or "application/octet-stream"
-    if file_type.startswith("image/"):
-        media_type = "image"
-    elif file_type.startswith("video/"):
-        media_type = "video"
-    else:
-        raise HTTPException(status_code=400, detail="Only images and videos are supported")
+    content = file.file.read(settings.PRODUCT_MEDIA_MAX_BYTES + 1)
+    if len(content) > settings.PRODUCT_MEDIA_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"A mídia excede o limite de {settings.PRODUCT_MEDIA_MAX_BYTES} bytes.",
+        )
 
-    ext = os.path.splitext(file.filename)[1] if file.filename else ""
-    filename = f"prod_{uuid.uuid4()}{ext}"
+    media_type, canonical_extension = _detect_product_media_format(content)
+    filename = f"prod_{uuid.uuid4()}{canonical_extension}"
     
     folder_path = os.path.join(settings.UPLOAD_DIR, "products")
     os.makedirs(folder_path, exist_ok=True)
@@ -65,8 +83,15 @@ def upload_product_media(
     
     # URL that the frontend will use to fetch the file via the static uploads endpoint
     relative_url = f"/uploads/products/{filename}"
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        with open(file_path, "wb") as buffer:
+            buffer.write(content)
+    except Exception:
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
+        raise
 
     db_media = ProductMedia(
         tenant_id=authorized_tenant_id,

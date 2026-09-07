@@ -44,8 +44,7 @@ KNOWN_CONTACT_NAMES = {
 
 logger = logging.getLogger("n8n_service")
 
-# Stateful mock database for in-memory development fallback
-MOCK_LEADS = []
+# Ephemeral conversation/activity state used only for tenant-scoped realtime data.
 MOCK_CONVERSATIONS = {}
 MOCK_ACTIVITIES = {}
 
@@ -54,6 +53,12 @@ class SecurityTenantMismatchError(ValueError):
     """
     Exceção de segurança disparada quando o n8n ou webhook externo retorna dados com tenant_id divergente do esperado.
     """
+    pass
+
+
+class N8NIntegrationUnavailableError(RuntimeError):
+    """Raised when CRM lead data cannot be obtained from n8n or a validated cache."""
+
     pass
 
 
@@ -1232,19 +1237,18 @@ class N8NService:
             if time.time() - tenant_cache.get("time", 0.0) < N8NService.CACHE_TTL:
                 if tenant_cache.get("url") == url:
                     logger.info(f"Returning CRM Leads from in-memory cache for tenant_id={tenant_id}.")
-                    return tenant_cache.get("data", [])
+                    return copy.deepcopy(tenant_cache.get("data", []))
 
         if not url:
-            logger.info("CRM_GET_LEADS_WEBHOOK_URL not configured. Returning mock leads.")
-            mapped_mock = [map_n8n_lead(l, tenant_id=tenant_id) for l in MOCK_LEADS if l.get("tenant_id") == tenant_id]
-            mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
-            mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
-            N8NService._leads_cache[tenant_id] = {
-                "data": mapped_mock,
-                "time": time.time(),
-                "url": url
-            }
-            return mapped_mock
+            if tenant_cache is not None and isinstance(tenant_cache.get("data"), list):
+                logger.warning(
+                    "CRM_GET_LEADS_WEBHOOK_URL not configured; returning previously validated cache for tenant_id=%s.",
+                    tenant_id,
+                )
+                return copy.deepcopy(tenant_cache["data"])
+            raise N8NIntegrationUnavailableError(
+                "Integração CRM indisponível: webhook de leads não configurado."
+            )
 
         outgoing_body = N8NService._enrich_payload({"action": "get_contacts"}, user_id=user_id, tenant_id=tenant_id)
         encrypted_body = encrypt_payload(outgoing_body, "n8n")
@@ -1263,22 +1267,29 @@ class N8NService:
                     raw_leads = data["leads"]
                 elif isinstance(data, dict) and "mensagens" in data:
                     raw_leads = [data]
-            except Exception as e:
-                logger.error(f"Error calling POST leads webhook: {e}. Falling back to mock data.", exc_info=True)
-        if not raw_leads:
-            mapped_mock = [map_n8n_lead(l, tenant_id=tenant_id) for l in MOCK_LEADS if l.get("tenant_id") == tenant_id]
-            mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
-            mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
-            for m in mapped_mock:
-                c_jid = m.get("contact_jid") or m.get("jid") or m.get("id")
-                if c_jid:
-                    ProgressiveContactCache.set_contact(c_jid, m, tenant_id=tenant_id)
-            N8NService._leads_cache[tenant_id] = {
-                "data": mapped_mock,
-                "time": time.time(),
-                "url": url
-            }
-            return mapped_mock
+            except Exception as exc:
+                if tenant_cache is not None and isinstance(tenant_cache.get("data"), list):
+                    logger.warning(
+                        "CRM leads webhook failed; returning previously validated cache for tenant_id=%s: %s",
+                        tenant_id,
+                        exc,
+                    )
+                    return copy.deepcopy(tenant_cache["data"])
+                logger.error("Error calling POST leads webhook: %s", exc, exc_info=True)
+                raise N8NIntegrationUnavailableError(
+                    "Integração CRM indisponível ao consultar leads."
+                ) from exc
+
+        if raw_leads is None:
+            if tenant_cache is not None and isinstance(tenant_cache.get("data"), list):
+                logger.warning(
+                    "CRM leads webhook returned an unsupported payload; using validated cache for tenant_id=%s.",
+                    tenant_id,
+                )
+                return copy.deepcopy(tenant_cache["data"])
+            raise N8NIntegrationUnavailableError(
+                "Integração CRM retornou uma resposta de leads inválida."
+            )
 
         raw_leads = unpack_n8n_raw_leads(raw_leads)
         mapped_leads = []
@@ -1393,8 +1404,14 @@ class N8NService:
         """
         Atualização de lead com Zero-Trust e isolamento estrito por tenant_id.
         """
-        N8NService.invalidate_leads_cache(tenant_id=tenant_id)
+        if not tenant_id:
+            raise ValueError("[Zero-Trust] tenant_id é obrigatório para update_lead")
+
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
+        if not url:
+            raise N8NIntegrationUnavailableError(
+                "Integração CRM indisponível: webhook de atualização não configurado."
+            )
 
         cache_k = f"{tenant_id}:{lead_id}" if tenant_id else str(lead_id)
         # Try to find in cache strictly partitioned by tenant
@@ -1441,56 +1458,6 @@ class N8NService:
         # Sanitize outgoing payload to contain ONLY Portuguese keys
         outgoing_payload = sanitize_outgoing_payload(outgoing_payload)
 
-        # Update in cache for subsequent calls
-        RAW_LEADS_CACHE[cache_k] = copy.deepcopy(outgoing_payload)
-
-        # Also update mock leads for local consistency/fallback
-        reconstructed_payload_meta = {}
-        if isinstance(outgoing_payload.get("payload"), dict):
-            reconstructed_payload_meta = outgoing_payload["payload"]
-        elif isinstance(outgoing_payload.get("payload"), str):
-            reconstructed_payload_meta = safe_parse_json(outgoing_payload["payload"])
-
-        reconstructed_presenca = {}
-        if isinstance(outgoing_payload.get("presenca_digital"), dict):
-            reconstructed_presenca = outgoing_payload["presenca_digital"]
-        elif isinstance(outgoing_payload.get("presenca_digital"), str):
-            reconstructed_presenca = safe_parse_json(outgoing_payload["presenca_digital"])
-
-        reconstructed_reputacao = {}
-        if isinstance(outgoing_payload.get("reputacao_google"), dict):
-            reconstructed_reputacao = outgoing_payload["reputacao_google"]
-        elif isinstance(outgoing_payload.get("reputacao_google"), str):
-            reconstructed_reputacao = safe_parse_json(outgoing_payload["reputacao_google"])
-
-        reconstructed_oportunidades = {}
-        if isinstance(outgoing_payload.get("oportunidades_identificadas"), dict):
-            reconstructed_oportunidades = outgoing_payload["oportunidades_identificadas"]
-        elif isinstance(outgoing_payload.get("oportunidades_identificadas"), str):
-            reconstructed_oportunidades = safe_parse_json(outgoing_payload["oportunidades_identificadas"])
-        for i, lead in enumerate(MOCK_LEADS):
-            if lead["id"] == lead_id and lead.get("tenant_id") == tenant_id:
-                for k, v in payload.items():
-                    lead[k] = v
-                lead["payload"] = reconstructed_payload_meta
-                lead["presenca_digital"] = reconstructed_presenca
-                lead["reputacao_google"] = reconstructed_reputacao
-                lead["oportunidades_identificadas"] = reconstructed_oportunidades
-                lead["last_interaction"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
-                if current_user:
-                    lead["alterado_por"] = current_user
-                    lead["updated_by"] = current_user
-                MOCK_LEADS[i] = lead
-                break
-        if not url:
-            logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead updated locally in-memory.")
-            updated_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id and l.get("tenant_id") == tenant_id), None)
-            mapped = map_n8n_lead(updated_lead, tenant_id=tenant_id) if updated_lead else map_n8n_lead({"id": lead_id, **payload, "tenant_id": tenant_id}, tenant_id=tenant_id)
-            if current_user:
-                mapped["alterado_por"] = current_user
-                mapped["updated_by"] = current_user
-            return mapped
-
         # Encrypt action, lead_id, user_id and tenant_id inside payload for Zero-Trust stealth
         outgoing_payload["action"] = "update_lead"
         outgoing_payload["id"] = lead_id
@@ -1509,14 +1476,15 @@ class N8NService:
                 if isinstance(res_data, dict) and ("company_name" in res_data or "nome_empresa" in res_data or "empresa_nome" in res_data):
                     mapped = map_n8n_lead(res_data, tenant_id=tenant_id)
                 else:
-                    fallback_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id and l.get("tenant_id") == tenant_id), None)
-                    if fallback_lead:
-                        mapped = map_n8n_lead(fallback_lead, tenant_id=tenant_id)
-                    else:
-                        mapped = map_n8n_lead({"id": lead_id, **payload, "tenant_id": tenant_id}, tenant_id=tenant_id)
+                    mapped = map_n8n_lead(
+                        {**outgoing_payload, "tenant_id": tenant_id},
+                        tenant_id=tenant_id,
+                    )
                 if current_user:
                     mapped["alterado_por"] = current_user
                     mapped["updated_by"] = current_user
+                RAW_LEADS_CACHE[cache_k] = copy.deepcopy({**outgoing_payload, "tenant_id": tenant_id})
+                N8NService.invalidate_leads_cache(tenant_id=tenant_id)
                 return mapped
             except Exception as e:
                 logger.error(f"Error calling UPDATE lead webhook: {e}")
@@ -1527,22 +1495,16 @@ class N8NService:
         """
         Remoção segura e exclusão lógica/física para delete_lead em modo Zero-Trust fail-closed.
         """
-        N8NService.invalidate_leads_cache(tenant_id=tenant_id)
+        if not tenant_id:
+            raise ValueError("[Zero-Trust] tenant_id é obrigatório para delete_lead")
+
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
-
-        # Remove from mock lists strictly partitioned by tenant
-        for i, lead in enumerate(MOCK_LEADS):
-            if str(lead.get("id")) == str(lead_id) and (not tenant_id or lead.get("tenant_id") == tenant_id):
-                MOCK_LEADS.pop(i)
-                break
-        cache_k = f"{tenant_id}:{lead_id}" if tenant_id else str(lead_id)
-        RAW_LEADS_CACHE.pop(cache_k, None)
-        MOCK_CONVERSATIONS.pop(cache_k, None)
-        MOCK_ACTIVITIES.pop(cache_k, None)
-
         if not url:
-            logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead deleted locally in-memory.")
-            return {"status": "success", "message": "Lead deleted locally (MOCK Mode)", "id": lead_id}
+            raise N8NIntegrationUnavailableError(
+                "Integração CRM indisponível: webhook de exclusão não configurado."
+            )
+
+        cache_k = f"{tenant_id}:{lead_id}"
 
         outgoing_body = N8NService._enrich_payload({"action": "delete_lead", "id": lead_id, "lead_id": lead_id}, user_id=user_id, tenant_id=tenant_id)
         encrypted_payload = encrypt_payload(outgoing_body, "n8n")
@@ -1557,9 +1519,17 @@ class N8NService:
                     if isinstance(res_data, dict) and res_data.get("_encrypted") is True:
                         res_data = decrypt_payload(res_data)
                     if isinstance(res_data, dict):
+                        RAW_LEADS_CACHE.pop(cache_k, None)
+                        MOCK_CONVERSATIONS.pop(cache_k, None)
+                        MOCK_ACTIVITIES.pop(cache_k, None)
+                        N8NService.invalidate_leads_cache(tenant_id=tenant_id)
                         return res_data
                 except Exception:
                     pass
+                RAW_LEADS_CACHE.pop(cache_k, None)
+                MOCK_CONVERSATIONS.pop(cache_k, None)
+                MOCK_ACTIVITIES.pop(cache_k, None)
+                N8NService.invalidate_leads_cache(tenant_id=tenant_id)
                 return {"status": "success", "id": lead_id}
             except Exception as e:
                 logger.error(f"Error calling DELETE lead webhook: {e}")

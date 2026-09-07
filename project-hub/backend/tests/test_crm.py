@@ -94,18 +94,21 @@ def test_send_message(mock_send_whatsapp_message, mock_db):
     assert "msg1" in response.json()["id"] or "msg_" in response.json()["id"]
     mock_send_whatsapp_message.assert_called_once()
 
-@patch("app.api.endpoints.crm.get_contacts_action", new_callable=AsyncMock)
-def test_get_contacts(mock_get_contacts, mock_db):
+@patch("app.api.endpoints.crm.n8n_service.get_leads", new_callable=AsyncMock)
+def test_get_contacts(mock_get_leads, mock_db):
     app.dependency_overrides[get_db] = lambda: mock_db
     app.dependency_overrides[get_current_user] = lambda: "test@dominuslabs.online"
-    # crm.py might not have get_contacts natively, we will mock the function assuming it calls N8NService
-    mock_get_contacts.return_value = [{"id": "c1", "name": "Contact 1"}]
+    mock_get_leads.return_value = [{
+        "id": "c1",
+        "contact_jid": "contact@s.whatsapp.net",
+        "nome": "Contact 1",
+    }]
 
-    # Send GET request. Since it may not exist, we just simulate what it would test.
-    # We will test /crm/contacts if it returns a 404 or a list.
     response = client.get("/api/v1/crm/contacts")
-    # if it doesn't exist it returns 404. Let's assert based on reality.
-    assert response.status_code in [200, 404]
+
+    assert response.status_code == 200
+    assert response.json()[0]["contact_jid"] == "contact@s.whatsapp.net"
+    assert response.json()[0]["push_name"] == "Contact 1"
 
 
 def test_map_n8n_lead_rejects_tenant_mismatch():
@@ -160,7 +163,7 @@ def test_map_n8n_message_rejects_tenant_mismatch():
     assert "SECURITY_TENANT_MISMATCH" in str(exc_info_nested.value)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_get_leads_drops_cross_tenant_items_from_n8n():
     from app.services.n8n_service import N8NService
 
@@ -192,7 +195,7 @@ async def test_get_leads_drops_cross_tenant_items_from_n8n():
             assert l["tenant_id"] == "tenant-a"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_get_conversations_drops_cross_tenant_items_from_n8n():
     from app.services.n8n_service import N8NService
 
@@ -218,7 +221,7 @@ async def test_get_conversations_drops_cross_tenant_items_from_n8n():
             assert c["tenant_id"] == "tenant-a"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_get_messages_drops_cross_tenant_messages():
     from app.services.n8n_service import N8NService, RAW_LEADS_CACHE
 
@@ -243,3 +246,79 @@ async def test_get_messages_drops_cross_tenant_messages():
         assert "msg_a" in result_ids
         assert "msg_b" not in result_ids
 
+
+@pytest.mark.anyio
+async def test_get_leads_without_n8n_uses_only_tenant_validated_cache(monkeypatch):
+    from app.core.config import settings
+    from app.services.n8n_service import N8NService
+
+    monkeypatch.setattr(settings, "CRM_GET_LEADS_WEBHOOK_URL", "")
+    N8NService._leads_cache.clear()
+    N8NService._leads_cache["tenant-a"] = {
+        "data": [{"id": "lead-a", "tenant_id": "tenant-a"}],
+        "time": 0.0,
+        "url": "https://previously-validated.example/webhook",
+    }
+    N8NService._leads_cache["tenant-b"] = {
+        "data": [{"id": "lead-b", "tenant_id": "tenant-b"}],
+        "time": 0.0,
+        "url": "https://previously-validated.example/webhook",
+    }
+
+    result = await N8NService.get_leads(user_id="user-a", tenant_id="tenant-a")
+    result[0]["id"] = "mutated-copy"
+
+    assert N8NService._leads_cache["tenant-a"]["data"][0]["id"] == "lead-a"
+    assert all(lead["tenant_id"] == "tenant-a" for lead in N8NService._leads_cache["tenant-a"]["data"])
+    N8NService._leads_cache.clear()
+
+
+@pytest.mark.anyio
+async def test_lead_operations_fail_closed_when_n8n_is_not_configured(monkeypatch):
+    from app.core.config import settings
+    from app.services.n8n_service import (
+        MOCK_CONVERSATIONS,
+        N8NIntegrationUnavailableError,
+        N8NService,
+        RAW_LEADS_CACHE,
+    )
+
+    tenant_id = "tenant-without-integration"
+    lead_id = "lead-preserved"
+    cache_key = f"{tenant_id}:{lead_id}"
+    monkeypatch.setattr(settings, "CRM_GET_LEADS_WEBHOOK_URL", "")
+    monkeypatch.setattr(settings, "CRM_UPDATE_LEAD_WEBHOOK_URL", "")
+    N8NService._leads_cache.clear()
+    RAW_LEADS_CACHE[cache_key] = {"id": lead_id, "tenant_id": tenant_id}
+    MOCK_CONVERSATIONS[cache_key] = [{"id": "message-preserved"}]
+
+    with pytest.raises(N8NIntegrationUnavailableError):
+        await N8NService.get_leads(user_id="user-a", tenant_id=tenant_id)
+    with pytest.raises(N8NIntegrationUnavailableError):
+        await N8NService.update_lead(
+            lead_id,
+            {"status": "Qualificado"},
+            current_user="user-a",
+            tenant_id=tenant_id,
+        )
+    with pytest.raises(N8NIntegrationUnavailableError):
+        await N8NService.delete_lead(lead_id, user_id="user-a", tenant_id=tenant_id)
+
+    assert RAW_LEADS_CACHE[cache_key]["id"] == lead_id
+    assert MOCK_CONVERSATIONS[cache_key][0]["id"] == "message-preserved"
+    RAW_LEADS_CACHE.pop(cache_key, None)
+    MOCK_CONVERSATIONS.pop(cache_key, None)
+
+
+@patch("app.api.endpoints.crm.n8n_service.get_leads", new_callable=AsyncMock)
+def test_crm_leads_returns_503_when_integration_is_unavailable(mock_get_leads, mock_db):
+    from app.services.n8n_service import N8NIntegrationUnavailableError
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+    app.dependency_overrides[get_current_user] = lambda: "test@dominuslabs.online"
+    mock_get_leads.side_effect = N8NIntegrationUnavailableError("Integração CRM indisponível.")
+
+    response = client.get("/api/v1/crm/leads")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Integração CRM indisponível."

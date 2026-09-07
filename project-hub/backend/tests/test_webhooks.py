@@ -504,7 +504,7 @@ def test_lead_events_sse_unknown_lead_rejected_with_404(client):
         assert "não encontrado" in res.json()["detail"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_lead_events_sse_matching_tenant_lead_accepted(db):
     from starlette.requests import Request
     from app.core.auth import create_access_token
@@ -540,7 +540,48 @@ async def test_lead_events_sse_matching_tenant_lead_accepted(db):
     assert ("tenant-a", "lead_owned_a") not in lead_listeners
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
+async def test_lead_events_accepts_own_lead_when_another_tenant_uses_same_id(db):
+    from starlette.requests import Request
+    from app.core.auth import create_access_token
+    from app.services.n8n_service import RAW_LEADS_CACHE
+    from app.api.endpoints.webhooks import lead_events, lead_listeners
+
+    RAW_LEADS_CACHE.clear()
+    lead_listeners.clear()
+    RAW_LEADS_CACHE["tenant-a:lead-x"] = {
+        "id": "lead-x",
+        "tenant_id": "tenant-a",
+        "nome": "Lead A",
+    }
+    RAW_LEADS_CACHE["tenant-b:lead-x"] = {
+        "id": "lead-x",
+        "tenant_id": "tenant-b",
+        "nome": "Lead B",
+    }
+    token = create_access_token({
+        "sub": "user_a@dominus.online",
+        "tenant_id": "tenant-a",
+        "role": "operator",
+    })
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/api/v1/webhooks/events/leads/lead-x",
+        "headers": [(b"authorization", f"Bearer {token}".encode())],
+    })
+
+    response = await lead_events(lead_id="lead-x", request=request, db=db)
+    try:
+        assert response.status_code == 200
+        assert await response.body_iterator.__anext__() == ": connected\n\n"
+    finally:
+        await response.body_iterator.aclose()
+        RAW_LEADS_CACHE.clear()
+        lead_listeners.clear()
+
+
+@pytest.mark.anyio
 async def test_global_sse_requires_an_access_token():
     from fastapi import HTTPException
     from starlette.requests import Request
@@ -562,7 +603,7 @@ async def test_global_sse_requires_an_access_token():
     assert not global_listeners
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_global_sse_accepts_access_token_and_releases_listener():
     from starlette.requests import Request
     from app.api.endpoints.webhooks import all_projects_events, global_listeners
@@ -588,7 +629,7 @@ async def test_global_sse_accepts_access_token_and_releases_listener():
     assert not global_listeners
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_project_sse_requires_a_valid_public_capability(db):
     from fastapi import HTTPException
     from starlette.requests import Request
@@ -610,7 +651,7 @@ async def test_project_sse_requires_a_valid_public_capability(db):
     assert not project_listeners
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_project_sse_accepts_known_public_capability_and_releases_listener(db):
     from starlette.requests import Request
     from app.api.endpoints.webhooks import project_events, project_listeners
@@ -695,7 +736,7 @@ def test_waha_session_status_does_not_block_on_a_full_crm_sse_queue(client):
             crm_chat_listeners.remove(listener_entry)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_crm_chat_sse_limits_connections_per_authenticated_user(monkeypatch):
     from fastapi import HTTPException
     from starlette.requests import Request
@@ -723,7 +764,7 @@ async def test_crm_chat_sse_limits_connections_per_authenticated_user(monkeypatc
         await response.body_iterator.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_lead_sse_limits_connections_per_authenticated_user(db, monkeypatch):
     from fastapi import HTTPException
     from starlette.requests import Request
@@ -753,7 +794,7 @@ async def test_lead_sse_limits_connections_per_authenticated_user(db, monkeypatc
         await response.body_iterator.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_rejected_lead_sse_connection_does_not_allocate_a_listener_key(db, monkeypatch):
     from fastapi import HTTPException
     from starlette.requests import Request

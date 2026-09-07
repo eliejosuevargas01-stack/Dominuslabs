@@ -12,6 +12,7 @@ const apiMocks = vi.hoisted(() => ({
   deleteProduct: vi.fn(),
   uploadProductMedia: vi.fn(),
   getUserTenant: vi.fn(() => 'tenant-test'),
+  resolveApiAssetUrl: vi.fn((assetUrl: string) => `http://api.test${assetUrl}`),
 }));
 
 const toastMocks = vi.hoisted(() => ({
@@ -80,10 +81,11 @@ describe('CompanySettingsView product media', () => {
     await waitFor(() => expect(apiMocks.uploadProductMedia).toHaveBeenCalledWith(
       file,
       'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
-      'tenant-test',
     ));
     expect(apiMocks.createProduct.mock.invocationCallOrder[0])
       .toBeLessThan(apiMocks.uploadProductMedia.mock.invocationCallOrder[0]);
     expect(apiMocks.updateProduct).not.toHaveBeenCalled();
+    expect(await screen.findByRole('img', { name: 'Produto com foto' }))
+      .toHaveAttribute('src', 'http://api.test/uploads/products/prod_test.png');
   });
 });

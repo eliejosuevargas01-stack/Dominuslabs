@@ -9,6 +9,10 @@ from app.models.product import Product
 from app.models.product_media import ProductMedia
 
 
+PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"valid-test-png-payload"
+MP4_BYTES = b"\x00\x00\x00\x18ftypmp42" + b"valid-test-mp4-payload"
+
+
 @pytest.fixture
 def auth_headers(db):
     from app.repositories.user_repo import user_repo
@@ -56,8 +60,8 @@ def test_upload_product_media_image(
 
     response = client.post(
         f"{settings.API_V1_STR}/product-media/",
-        files={"file": ("product.png", b"fake image data", "image/png")},
-        data={"product_id": str(product.id), "tenant_id": "untrusted-tenant"},
+        files={"file": ("product.png", PNG_BYTES, "image/png")},
+        data={"product_id": str(product.id)},
         headers=auth_headers,
     )
 
@@ -67,6 +71,7 @@ def test_upload_product_media_image(
     assert data["tenant_id"] == settings.ADMIN_TENANT_ID
     assert data["media_type"] == "image"
     assert data["media_url"].startswith("/uploads/products/prod_")
+    assert data["media_url"].endswith(".png")
 
     media = db.query(ProductMedia).filter(ProductMedia.product_id == product.id).one()
     db.refresh(product)
@@ -87,13 +92,14 @@ def test_upload_product_media_video(
 
     response = client.post(
         f"{settings.API_V1_STR}/product-media/",
-        files={"file": ("product.mp4", b"fake video data", "video/mp4")},
+        files={"file": ("product.mp4", MP4_BYTES, "video/mp4")},
         data={"product_id": str(product.id)},
         headers=auth_headers,
     )
 
     assert response.status_code == 200
     assert response.json()["media_type"] == "video"
+    assert response.json()["media_url"].endswith(".mp4")
 
 
 def test_upload_product_media_invalid_type(
@@ -113,8 +119,75 @@ def test_upload_product_media_invalid_type(
         headers=auth_headers,
     )
 
-    assert response.status_code == 400
-    assert "supported" in response.json()["detail"].lower()
+    assert response.status_code == 415
+    assert "suportado" in response.json()["detail"].lower()
+
+
+def test_upload_product_media_uses_detected_format_and_server_extension(
+    client: TestClient,
+    db,
+    auth_headers: dict,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
+    product = create_product(db)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/product-media/",
+        files={"file": ("payload.svg", PNG_BYTES, "image/svg+xml")},
+        data={"product_id": str(product.id), "tenant_id": "attacker-controlled"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["media_type"] == "image"
+    assert response.json()["media_url"].endswith(".png")
+    assert response.json()["tenant_id"] == settings.ADMIN_TENANT_ID
+
+
+def test_upload_product_media_rejects_spoofed_content_type(
+    client: TestClient,
+    db,
+    auth_headers: dict,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
+    product = create_product(db)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/product-media/",
+        files={"file": ("payload.png", b"<script>alert('xss')</script>", "image/png")},
+        data={"product_id": str(product.id)},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 415
+    assert not (tmp_path / "products").exists()
+
+
+def test_upload_product_media_rejects_oversized_file(
+    client: TestClient,
+    db,
+    auth_headers: dict,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
+    monkeypatch.setattr(settings, "PRODUCT_MEDIA_MAX_BYTES", 16)
+    product = create_product(db)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/product-media/",
+        files={"file": ("large.png", PNG_BYTES, "image/png")},
+        data={"product_id": str(product.id)},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 413
+    assert "16 bytes" in response.json()["detail"]
+    assert not (tmp_path / "products").exists()
 
 
 def test_upload_product_media_rejects_temporary_product_id(
@@ -127,7 +200,7 @@ def test_upload_product_media_rejects_temporary_product_id(
 
     response = client.post(
         f"{settings.API_V1_STR}/product-media/",
-        files={"file": ("product.png", b"fake image data", "image/png")},
+        files={"file": ("product.png", PNG_BYTES, "image/png")},
         data={"product_id": "item-123456"},
         headers=auth_headers,
     )
@@ -146,7 +219,7 @@ def test_upload_product_media_requires_existing_product(
 
     response = client.post(
         f"{settings.API_V1_STR}/product-media/",
-        files={"file": ("product.png", b"fake image data", "image/png")},
+        files={"file": ("product.png", PNG_BYTES, "image/png")},
         data={"product_id": str(uuid.uuid4())},
         headers=auth_headers,
     )
@@ -168,10 +241,18 @@ def test_upload_product_media_rejects_cross_tenant_product(
 
     response = client.post(
         f"{settings.API_V1_STR}/product-media/",
-        files={"file": ("product.png", b"fake image data", "image/png")},
-        data={"product_id": str(foreign_product.id), "tenant_id": "foreign-tenant"},
+        files={"file": ("product.png", PNG_BYTES, "image/png")},
+        data={"product_id": str(foreign_product.id)},
         headers=auth_headers,
     )
 
     assert response.status_code == 404
     assert not (tmp_path / "products").exists()
+
+
+def test_product_media_endpoint_has_no_tenant_form_parameter():
+    import inspect
+
+    from app.api.endpoints.product_media import upload_product_media
+
+    assert "tenant_id" not in inspect.signature(upload_product_media).parameters

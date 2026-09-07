@@ -11,7 +11,7 @@ Princípios:
 """
 import logging
 from typing import Optional, Dict, Any, List
-from fastapi import APIRouter, Depends, HTTPException, status, Body, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -413,14 +413,13 @@ async def get_session_avatar(
     request: Request,
     session_id: str,
     jid: str,
-    token: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
     Proxy de imagem de perfil autenticado pelo Dominus via WhatsAppClient.
     """
     auth_header = request.headers.get("Authorization", "")
-    effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
+    effective_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None
     if not effective_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -453,14 +452,14 @@ async def get_session_avatar(
                 return Response(
                     content=res["content"],
                     media_type=res.get("content_type") or "image/jpeg",
-                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}
+                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=86400", "Vary": "Authorization"}
                 )
             url_target = res.get("url") or res.get("avatar_url") or res.get("profile_pic_url") or res.get("profile_url") or res.get("avatar")
             if url_target and str(url_target).startswith("http"):
                 return RedirectResponse(
                     url_target,
                     status_code=302,
-                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}
+                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=86400", "Vary": "Authorization"}
                 )
     except Exception as e:
         logger.warning(f"[WA-AVATAR] Erro ao buscar avatar para jid={jid}: {e}")
@@ -472,7 +471,6 @@ async def get_session_avatar(
 async def get_session_media(
     request: Request,
     session_id: str,
-    token: Optional[str] = Query(None),
     messageId: Optional[str] = None,
     message_id: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -481,7 +479,7 @@ async def get_session_media(
     Proxy de mídia (áudio, imagem, vídeo) autenticado pelo Dominus via WhatsAppClient.
     """
     auth_header = request.headers.get("Authorization", "")
-    effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
+    effective_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None
     if not effective_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -526,7 +524,8 @@ async def get_session_media(
         media_type=content_type,
         headers={
             "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "public, max-age=86400"
+            "Cache-Control": "private, max-age=86400",
+            "Vary": "Authorization"
         }
     )
 

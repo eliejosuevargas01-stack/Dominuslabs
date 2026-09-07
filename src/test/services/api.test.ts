@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { getDynamicApiUrl } from '../../services/api';
+import { API_BASE, getDynamicApiUrl, resolveApiAssetUrl, uploadProductMedia } from '../../services/api';
 
 describe('getDynamicApiUrl', () => {
   const originalLocation = window.location;
@@ -59,6 +59,20 @@ describe('getDynamicApiUrl', () => {
     setLocation('example.com', 'https:');
     const resultHttps = getDynamicApiUrl();
     expect(resultHttps).toBe('https://example.com/api/v1');
+  });
+});
+
+describe('resolveApiAssetUrl', () => {
+  it('resolves backend upload paths against the API origin', () => {
+    const apiOrigin = new URL(API_BASE, window.location.origin).origin;
+
+    expect(resolveApiAssetUrl('/uploads/products/prod_test.png'))
+      .toBe(`${apiOrigin}/uploads/products/prod_test.png`);
+  });
+
+  it('keeps absolute media URLs on their original origin', () => {
+    expect(resolveApiAssetUrl('https://cdn.example.com/products/prod_test.png'))
+      .toBe('https://cdn.example.com/products/prod_test.png');
   });
 });
 
@@ -147,5 +161,37 @@ describe('Silent Reauth System', () => {
     expect(t5).toBe('shared_new_token');
     // Deve ter chamado o endpoint /auth/refresh APENAS UMA VEZ
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('uploadProductMedia', () => {
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('uses the shared authenticated client and never sends a tenant form field', async () => {
+    localStorage.setItem('admin_token', 'valid-access-token');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ media_url: '/uploads/products/prod_test.png' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const file = new File(['png-bytes'], 'product.png', { type: 'image/png' });
+
+    await uploadProductMedia(file, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/product-media/');
+    expect(request.headers).toMatchObject({ Authorization: 'Bearer valid-access-token' });
+    expect((request.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+    expect(request.body).toBeInstanceOf(FormData);
+    const formData = request.body as FormData;
+    expect(formData.get('product_id')).toBe('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
+    expect(formData.get('file')).toBe(file);
+    expect(formData.has('tenant_id')).toBe(false);
   });
 });

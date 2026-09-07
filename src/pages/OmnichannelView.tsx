@@ -24,16 +24,16 @@ import {
   API_BASE
 } from '../services/api';
 import { SSEClient } from '../services/sseClient';
+import {
+  AuthenticatedImage,
+  AuthenticatedVideo,
+} from '../components/AuthenticatedMedia';
+import {
+  isAuthenticatedMediaUrl,
+  useAuthenticatedBlobUrl,
+} from '../services/authenticatedMedia';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-
-const getAuthToken = (): string => {
-  try {
-    return localStorage.getItem('admin_token') || localStorage.getItem('token') || '';
-  } catch (e) {
-    return '';
-  }
-};
 
 // ============================================================================
 // KNOWN CONTACT DICTIONARY (FOR NAME RESOLUTION)
@@ -196,17 +196,47 @@ function getAvatarColor(initials: string, name: string) {
   return AVATAR_COLORS_FALLBACK[index];
 }
 
+function isPrivateProxyReference(url: string, resource: 'avatar' | 'media'): boolean {
+  const pathWithoutQuery = url.split('?', 1)[0];
+  return (
+    pathWithoutQuery.endsWith(`/${resource}`)
+    && (
+      pathWithoutQuery.includes('/api/')
+      || pathWithoutQuery.includes('/sessions/')
+      || pathWithoutQuery === `/${resource}`
+    )
+  );
+}
+
 function getAvatarSrc(url?: string, session_id?: string, jid?: string, allowProxy: boolean = false): string | null {
+  let targetSession = session_id || '';
+  let targetJid = jid || '';
+
   if (url && typeof url === 'string') {
     const trimmed = url.trim();
-    if (trimmed.includes('pps.whatsapp.net') || trimmed.includes('fbcdn.net')) {
-      return trimmed;
-    }
-    if (trimmed.startsWith('data:image')) {
-      return trimmed;
-    }
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return trimmed;
+    if (isPrivateProxyReference(trimmed, 'avatar')) {
+      if (!allowProxy) return null;
+      try {
+        const parsed = new URL(trimmed, window.location.origin);
+        const qSession = parsed.searchParams.get('session') || parsed.searchParams.get('session_id');
+        const qJid = parsed.searchParams.get('jid');
+        const pathSession = parsed.pathname.match(/\/sessions\/([^/]+)\/avatar$/)?.[1];
+        if (qSession && qSession.toLowerCase() !== 'default') targetSession = qSession;
+        if (pathSession && pathSession.toLowerCase() !== 'default') targetSession = decodeURIComponent(pathSession);
+        if (qJid) targetJid = qJid;
+      } catch {
+        return null;
+      }
+    } else {
+      if (trimmed.includes('pps.whatsapp.net') || trimmed.includes('fbcdn.net')) {
+        return trimmed;
+      }
+      if (trimmed.startsWith('data:image')) {
+        return trimmed;
+      }
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return trimmed;
+      }
     }
   }
 
@@ -214,28 +244,8 @@ function getAvatarSrc(url?: string, session_id?: string, jid?: string, allowProx
   // Never construct dynamic proxy for sidebar items without a real image URL,
   // preventing 50 simultaneous slow proxy requests that exhaust the backend.
   if (allowProxy) {
-    let targetSession = session_id || '';
-    let targetJid = jid || '';
-
-    if (url && typeof url === 'string') {
-      const trimmed = url.trim();
-      if (trimmed.includes('/avatar?') || trimmed.includes('/sessions/')) {
-        try {
-          const fullUrl = trimmed.startsWith('http') ? trimmed : `https://dummy.local${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
-          const parsed = new URL(fullUrl);
-          const qSession = parsed.searchParams.get('session') || parsed.searchParams.get('session_id');
-          const qJid = parsed.searchParams.get('jid');
-          
-          if (qSession && qSession.toLowerCase() !== 'default') targetSession = qSession;
-          if (qJid) targetJid = qJid;
-        } catch (e) {}
-      }
-    }
-
     if (targetJid && targetSession && targetSession.toLowerCase() !== 'default') {
-      const token = getAuthToken();
-      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
-      return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(targetSession)}/avatar?jid=${encodeURIComponent(targetJid)}${tokenParam}`;
+      return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(targetSession)}/avatar?jid=${encodeURIComponent(targetJid)}`;
     }
   }
 
@@ -298,9 +308,6 @@ function getMediaUrl(msg: any, defaultSessionId?: string): string | null {
   const msgId = msg.message_id || msg.id;
   const rawUrl = msg.media_url || msg.image_url || msg.url || msg.file_url;
 
-  const token = getAuthToken();
-  const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
-
   if (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) {
     const trimmed = rawUrl.trim();
     if (trimmed.startsWith('data:')) {
@@ -309,23 +316,18 @@ function getMediaUrl(msg: any, defaultSessionId?: string): string | null {
     if (trimmed.includes('pps.whatsapp.net') || trimmed.includes('fbcdn.net')) {
       return trimmed;
     }
+    if (isPrivateProxyReference(trimmed, 'media')) {
+      if (!msgId) return null;
+      return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}`;
+    }
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      if (trimmed.includes('/api/whatsapp/sessions/') || trimmed.includes('/api/v1/whatsapp/') || trimmed.includes('/api/crm/media') || trimmed.includes('dominuslabs')) {
-        if (!trimmed.includes('token=')) {
-          const separator = trimmed.includes('?') ? '&' : '?';
-          return token ? `${trimmed}${separator}token=${encodeURIComponent(token)}` : trimmed;
-        }
-        return trimmed;
-      }
       return trimmed;
     }
     if (trimmed.startsWith('/api/')) {
       if (sessId && msgId) {
-        return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}${tokenParam}`;
+        return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}`;
       }
-      const cleanPath = trimmed.startsWith('/api/v1') ? trimmed.replace('/api/v1', '') : trimmed.replace('/api', '');
-      const separator = cleanPath.includes('?') ? '&' : '?';
-      return `${API_BASE}${cleanPath}${token ? `${separator}token=${encodeURIComponent(token)}` : ''}`;
+      return null;
     }
   }
 
@@ -338,7 +340,7 @@ function getMediaUrl(msg: any, defaultSessionId?: string): string | null {
     // Only construct proxy for audio (which is guarded with preload="none") or when rawUrl exists.
     // Never blindly proxy image/video without a real URL reference to prevent concurrent request avalanches.
     if (isAudioMsg || rawUrl) {
-      return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}${tokenParam}`;
+      return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(sessId)}/media?messageId=${encodeURIComponent(msgId)}`;
     }
   }
   return null;
@@ -350,6 +352,21 @@ function CustomAudioPlayer({ src, isOutgoing }: { src: string; isOutgoing?: bool
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [authenticatedLoadRequested, setAuthenticatedLoadRequested] = useState(false);
+  const pendingPlayRef = useRef(false);
+  const requiresAuthentication = isAuthenticatedMediaUrl(src);
+  const { resolvedUrl, isLoading, hasError } = useAuthenticatedBlobUrl(
+    src,
+    !requiresAuthentication || authenticatedLoadRequested,
+  );
+
+  useEffect(() => {
+    if (!pendingPlayRef.current || !resolvedUrl || !audioRef.current) return;
+    pendingPlayRef.current = false;
+    void audioRef.current.play()
+      .then(() => setIsPlaying(true))
+      .catch(() => setIsPlaying(false));
+  }, [resolvedUrl]);
 
   const togglePlay = () => {
     if (!audioRef.current) return;
@@ -357,6 +374,11 @@ function CustomAudioPlayer({ src, isOutgoing }: { src: string; isOutgoing?: bool
       audioRef.current.pause();
       setIsPlaying(false);
     } else {
+      if (!resolvedUrl && requiresAuthentication) {
+        pendingPlayRef.current = true;
+        setAuthenticatedLoadRequested(true);
+        return;
+      }
       audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
     }
   };
@@ -420,7 +442,7 @@ function CustomAudioPlayer({ src, isOutgoing }: { src: string; isOutgoing?: bool
     }`}>
       <audio
         ref={audioRef}
-        src={src}
+        src={resolvedUrl ?? undefined}
         preload="none"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
@@ -437,7 +459,9 @@ function CustomAudioPlayer({ src, isOutgoing }: { src: string; isOutgoing?: bool
             : 'bg-purple-600 hover:bg-purple-700 hover:scale-105 active:scale-95'
         }`}
       >
-        {isPlaying ? (
+        {isLoading ? (
+          <RefreshCw className="w-5 h-5 animate-spin" />
+        ) : isPlaying ? (
           <Pause className="w-5 h-5 fill-current" />
         ) : (
           <Play className="w-5 h-5 fill-current ml-0.5" />
@@ -488,6 +512,90 @@ function CustomAudioPlayer({ src, isOutgoing }: { src: string; isOutgoing?: bool
           </button>
         </div>
       </div>
+      {hasError ? <span className="sr-only">Falha ao carregar áudio autenticado.</span> : null}
+    </div>
+  );
+}
+
+function AuthenticatedDocumentLink({ src }: { src: string }) {
+  const requiresAuthentication = isAuthenticatedMediaUrl(src);
+  const [loadRequested, setLoadRequested] = useState(false);
+  const pendingOpenRef = useRef(false);
+  const anchorRef = useRef<HTMLAnchorElement | null>(null);
+  const { resolvedUrl, isLoading, hasError } = useAuthenticatedBlobUrl(
+    src,
+    !requiresAuthentication || loadRequested,
+  );
+
+  useEffect(() => {
+    if (!pendingOpenRef.current || !resolvedUrl || !anchorRef.current) return;
+    pendingOpenRef.current = false;
+    anchorRef.current.click();
+  }, [resolvedUrl]);
+
+  const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (requiresAuthentication && !resolvedUrl) {
+      event.preventDefault();
+      pendingOpenRef.current = true;
+      setLoadRequested(true);
+    }
+  };
+
+  return (
+    <div className="media-container mb-2">
+      <a
+        ref={anchorRef}
+        href={resolvedUrl ?? '#'}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={handleClick}
+        aria-busy={isLoading || undefined}
+        className="flex items-center gap-3 p-3 rounded-2xl bg-purple-50 hover:bg-purple-100/90 border border-purple-200/80 text-purple-950 transition-all shadow-sm max-w-xs group"
+      >
+        <div className="p-2.5 rounded-xl bg-purple-600 text-white shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+          {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-bold truncate">Documento / Anexo</p>
+          <p className="text-[10px] text-purple-700 flex items-center gap-1 font-medium mt-0.5">
+            <Download className="w-3 h-3" />
+            {hasError ? 'Falha ao carregar o anexo' : isLoading ? 'Carregando anexo...' : 'Clique para abrir/baixar'}
+          </p>
+        </div>
+      </a>
+    </div>
+  );
+}
+
+function ActiveChatAvatar({ chat }: { chat: any }) {
+  const displayName = resolveContactName(chat);
+  const initials = getInitials(displayName);
+  const color = getAvatarColor(initials, displayName);
+  const sourceUrl = getAvatarSrc(
+    chat.profile_pic_url,
+    chat.session_id,
+    chat.contact_jid,
+    true,
+  );
+  const [failedSourceUrl, setFailedSourceUrl] = useState<string | null>(null);
+  const imageFailed = Boolean(sourceUrl && failedSourceUrl === sourceUrl);
+
+  return (
+    <div className="relative w-10 h-10 shrink-0">
+      <div className={`avatar-header-fallback absolute inset-0 rounded-full ${color.bg} ${color.text} flex items-center justify-center font-bold text-xs shadow-sm`}>
+        {initials}
+      </div>
+      {sourceUrl && !imageFailed ? (
+        <AuthenticatedImage
+          sourceUrl={sourceUrl}
+          deferUntilVisible={false}
+          alt={displayName}
+          referrerPolicy="no-referrer"
+          className="absolute inset-0 w-10 h-10 rounded-full object-cover border border-zinc-200"
+          onError={() => setFailedSourceUrl(sourceUrl)}
+          onResourceError={() => setFailedSourceUrl(sourceUrl)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -506,17 +614,18 @@ function renderMessageMedia(msg: any, defaultSessionId?: string, onOpenLightbox?
     return (
       <div 
         className="media-container mb-2 overflow-hidden rounded-2xl border border-zinc-200/80 shadow-md max-w-xs sm:max-w-sm  group relative cursor-pointer"
-        onClick={() => onOpenLightbox && onOpenLightbox(mediaSrc)}
       >
-        <img
-          src={mediaSrc}
+        <AuthenticatedImage
+          sourceUrl={mediaSrc}
           alt="Imagem"
           referrerPolicy="no-referrer"
           className="w-full max-h-72 object-cover rounded-2xl transition-transform duration-300 group-hover:scale-105"
           loading="lazy"
+          onClick={(event) => onOpenLightbox?.(event.currentTarget.src)}
           onError={(e) => {
             (e.target as HTMLElement).style.display = 'none';
           }}
+          onResourceError={() => undefined}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3 rounded-2xl">
           <span className="text-white text-xs font-semibold flex items-center gap-1.5  bg-black/40 px-3 py-1 rounded-full border border-white/20 shadow-sm">
@@ -530,56 +639,36 @@ function renderMessageMedia(msg: any, defaultSessionId?: string, onOpenLightbox?
   if (isVideo && mediaSrc) {
     return (
       <div className="media-container mb-2 overflow-hidden rounded-2xl border border-zinc-800 shadow-md max-w-xs sm:max-w-sm bg-black">
-        <video
+        <AuthenticatedVideo
+          sourceUrl={mediaSrc}
           controls
           preload="none"
           className="w-full max-h-72 rounded-2xl"
-          src={mediaSrc}
-        >
-          Seu navegador não suporta a reprodução de vídeo.
-        </video>
+        />
       </div>
     );
   }
 
   if (isAudio && mediaSrc) {
-    return <CustomAudioPlayer src={mediaSrc} isOutgoing={isFromMe} />;
+    return <CustomAudioPlayer key={mediaSrc} src={mediaSrc} isOutgoing={isFromMe} />;
   }
 
   if (isDocument && mediaSrc) {
-    return (
-      <div className="media-container mb-2">
-        <a
-          href={mediaSrc}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-3 p-3 rounded-2xl bg-purple-50 hover:bg-purple-100/90 border border-purple-200/80 text-purple-950 transition-all shadow-sm max-w-xs group"
-        >
-          <div className="p-2.5 rounded-xl bg-purple-600 text-white shrink-0 shadow-sm group-hover:scale-105 transition-transform">
-            <FileText className="w-5 h-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold truncate">Documento / Anexo</p>
-            <p className="text-[10px] text-purple-700 flex items-center gap-1 font-medium mt-0.5">
-              <Download className="w-3 h-3" /> Clique para abrir/baixar
-            </p>
-          </div>
-        </a>
-      </div>
-    );
+    return <AuthenticatedDocumentLink src={mediaSrc} />;
   }
 
   if (mediaSrc) {
     return (
       <div 
         className="media-container mb-2 overflow-hidden rounded-2xl border border-zinc-200/80 shadow-md max-w-xs sm:max-w-sm  group relative cursor-pointer"
-        onClick={() => onOpenLightbox && onOpenLightbox(mediaSrc)}
       >
-        <img
-          src={mediaSrc}
+        <AuthenticatedImage
+          sourceUrl={mediaSrc}
           alt="Arquivo de Mídia"
           referrerPolicy="no-referrer"
           className="w-full max-h-72 object-cover rounded-2xl group-hover:scale-105 transition-transform duration-300"
+          loading="lazy"
+          onClick={(event) => onOpenLightbox?.(event.currentTarget.src)}
           onError={(e) => {
             (e.target as HTMLElement).style.display = 'none';
           }}
@@ -2135,29 +2224,7 @@ function playOutgoingSound() {
                   </button>
 
                   {/* Avatar */}
-                  <div className="relative">
-                    {getAvatarSrc(selectedChat.profile_pic_url, selectedChat.session_id, selectedChat.contact_jid, true) ? (
-                      <img
-                        src={getAvatarSrc(selectedChat.profile_pic_url, selectedChat.session_id, selectedChat.contact_jid, true)!}
-                        alt={resolveContactName(selectedChat)}
-                        referrerPolicy="no-referrer"
-                        className="w-10 h-10 rounded-full object-cover border border-zinc-200"
-                        onError={(e) => {
-                          (e.target as HTMLElement).style.display = 'none';
-                          const parent = (e.target as HTMLElement).parentElement;
-                          if (parent) {
-                            const fallback = parent.querySelector('.avatar-header-fallback');
-                            if (fallback) (fallback as HTMLElement).classList.remove('hidden');
-                          }
-                        }}
-                      />
-                    ) : null}
-                    <div className={`avatar-header-fallback w-10 h-10 rounded-full ${getAvatarColor(getInitials(resolveContactName(selectedChat)), resolveContactName(selectedChat)).bg} ${getAvatarColor(getInitials(resolveContactName(selectedChat)), resolveContactName(selectedChat)).text} flex items-center justify-center font-bold text-xs shadow-sm ${
-                      getAvatarSrc(selectedChat.profile_pic_url, selectedChat.session_id, selectedChat.contact_jid, true) ? 'hidden' : 'flex'
-                    }`}>
-                      {getInitials(resolveContactName(selectedChat))}
-                    </div>
-                  </div>
+                  <ActiveChatAvatar chat={selectedChat} />
 
                   <div>
                     <h3 className="text-sm font-bold text-zinc-800 leading-tight">

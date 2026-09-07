@@ -366,6 +366,51 @@ def test_crm_avatar_and_media_proxy_reject_anonymous(client):
     assert res_media.status_code == 401
 
 
+def test_avatar_and_media_proxies_reject_jwt_in_query_string(
+    client: TestClient,
+    auth_headers: dict,
+    test_whatsapp_account,
+):
+    token = auth_headers["Authorization"].removeprefix("Bearer ")
+    requests = (
+        (f"{settings.API_V1_STR}/whatsapp/sessions/123/avatar", {"jid": "contact@s.whatsapp.net"}),
+        (f"{settings.API_V1_STR}/whatsapp/sessions/123/media", {"messageId": "msg-1"}),
+        (f"{settings.API_V1_STR}/crm/avatar", {"session_id": "123", "jid": "contact@s.whatsapp.net"}),
+        (f"{settings.API_V1_STR}/crm/media", {"session_id": "123", "messageId": "msg-1"}),
+        ("/api/sessions/123/avatar", {"jid": "contact@s.whatsapp.net"}),
+        ("/api/sessions/123/media", {"messageId": "msg-1"}),
+    )
+
+    for path, params in requests:
+        response = client.get(path, params={**params, "token": token})
+        assert response.status_code == 401, path
+
+
+@patch("app.services.whatsapp_client.whatsapp_client.get_session_avatar", new_callable=AsyncMock)
+def test_avatar_proxy_accepts_bearer_header_and_uses_private_cache(
+    mock_avatar,
+    client: TestClient,
+    auth_headers: dict,
+    test_whatsapp_account,
+):
+    mock_avatar.return_value = {
+        "_is_binary": True,
+        "content": b"avatar-bytes",
+        "content_type": "image/png",
+    }
+
+    response = client.get(
+        f"{settings.API_V1_STR}/whatsapp/sessions/123/avatar",
+        params={"jid": "contact@s.whatsapp.net"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"avatar-bytes"
+    assert response.headers["cache-control"].startswith("private")
+    assert response.headers["vary"] == "Authorization"
+
+
 def test_crm_set_session_preference_rejects_unowned_session(client, db):
     """Garante que definir preferred_session_id falha com 404 se a sessão não existir na WhatsappAccount do tenant."""
     user = User(
@@ -431,5 +476,4 @@ def test_resolve_owned_whatsapp_session_same_name_different_tenants(db):
     with pytest.raises(HTTPException) as exc_404:
         resolve_owned_whatsapp_session(user_c, "sessao_inexistente", db)
     assert exc_404.value.status_code == 404
-
 

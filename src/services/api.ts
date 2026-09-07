@@ -15,6 +15,17 @@ export const getDynamicApiUrl = () => {
 
 export const API_BASE = import.meta.env.VITE_API_URL || getDynamicApiUrl();
 
+export function resolveApiAssetUrl(assetUrl: string): string {
+  if (!assetUrl) return assetUrl;
+
+  try {
+    const apiOrigin = new URL(API_BASE, window.location.origin).origin;
+    return new URL(assetUrl, `${apiOrigin}/`).toString();
+  } catch {
+    return assetUrl;
+  }
+}
+
 function getHeaders(contentType: string | null = "application/json") {
   const headers: Record<string, string> = {};
   if (contentType) {
@@ -341,23 +352,15 @@ export interface CompanySettings {
   preparation_time_minutes?: number;
 }
 
-export async function uploadProductMedia(file: File, productId: string, tenantId: string = "default") {
+export async function uploadProductMedia(file: File, productId: string) {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("product_id", productId);
-  formData.append("tenant_id", tenantId);
 
-  const token = localStorage.getItem("admin_token");
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  const res = await fetch(`${API_BASE}/product-media/`, {
+  const res = await fetchWithAuth(`${API_BASE}/product-media/`, {
     method: "POST",
-    headers, // Do NOT set Content-Type for FormData
     body: formData,
-  });
+  }, null);
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
@@ -776,4 +779,3 @@ export const deleteProduct = async (id: string, tenantId: string = 'default'): P
   });
   if (!response.ok) throw new Error('Erro ao deletar produto');
 };
-

@@ -50,6 +50,7 @@ class Settings(BaseSettings):
 
     # Uploads
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads"))
+    PRODUCT_MEDIA_MAX_BYTES: int = int(os.getenv("PRODUCT_MEDIA_MAX_BYTES", str(10 * 1024 * 1024)))
 
     # Database URL
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")

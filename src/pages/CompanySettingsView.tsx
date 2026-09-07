@@ -29,7 +29,7 @@ import {
   UploadCloud
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchCompanySettings, updateCompanySettings, fetchProducts, createProduct, updateProduct, deleteProduct, uploadProductMedia, getUserTenant, type CompanySettings, type MenuItem } from '../services/api';
+import { fetchCompanySettings, updateCompanySettings, fetchProducts, createProduct, updateProduct, deleteProduct, uploadProductMedia, getUserTenant, resolveApiAssetUrl, type CompanySettings, type MenuItem } from '../services/api';
 
 const TONE_OPTIONS = [
   { id: 'Formal', label: 'Corporativo & Institucional', desc: 'Comunicação executiva, altamente formal, fundamentada em diretrizes corporativas e conformidade.' },
@@ -178,7 +178,7 @@ export default function CompanySettingsView() {
 
         setUploadingMedia(true);
         try {
-          const media = await uploadProductMedia(pendingMediaFile, savedProduct.id, tenantId);
+          const media = await uploadProductMedia(pendingMediaFile, savedProduct.id);
           savedProduct = { ...savedProduct, image_url: media.media_url };
           setPendingMediaFile(null);
         } catch (error: unknown) {
@@ -844,7 +844,7 @@ export default function CompanySettingsView() {
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <div className="flex items-center gap-3">
                           {item.image_url && (
-                            <img src={item.image_url} alt={item.name} className="w-10 h-10 rounded-md object-cover border border-zinc-200" />
+                            <img src={resolveApiAssetUrl(item.image_url)} alt={item.name} className="w-10 h-10 rounded-md object-cover border border-zinc-200" />
                           )}
                           <span className="font-bold text-zinc-900 text-base">{item.name}</span>
                         </div>

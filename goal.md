@@ -28,3 +28,15 @@ O sistema sofria degradação progressiva após o carregamento inicial ("no iní
 4. **Regras de Negócio do Order Manager:**
    - O som/alarme sonoro de notificação de pedido deve cessar imediatamente no momento em que o operador clica em **Aceitar** ou **Rejeitar**.
    - Integração com Waze e payload de pedido formatado corretamente com os campos recebidos do webhook.
+
+## Fechamento de Segurança e Upload (sessão atual)
+
+Sem reverter as correções anteriores, a conclusão exige:
+
+1. upload de mídia de produto sem erro 500, limitado a 10 MiB, validado pelo formato real dos bytes e exibido pela origem correta da API;
+2. extensão de arquivo escolhida no servidor e tenant derivado somente do usuário autenticado;
+3. mídia/avatar privados carregados com Bearer no cabeçalho e Blob URL revogada, nunca com JWT na URL;
+4. SSE de lead aceitando IDs iguais quando o tenant autenticado também possui o lead;
+5. CRM sem dados ou sucesso simulados por `MOCK_LEADS` quando o n8n estiver indisponível;
+6. testes assíncronos executáveis no CI sem dependência implícita de `pytest-asyncio`;
+7. QA integral executado localmente, sem deploy automático.

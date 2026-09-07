@@ -4,13 +4,17 @@ Documentação do módulo crm.py.
 O que faz: Implementa a lógica estrutural e funcional para o endpoint de API para crm.
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o endpoint de API para crm funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from typing import List, Optional
 from pydantic import BaseModel
 
 from app.schemas.crm import Lead, LeadUpdate, Message, MessageSendPayload, CrmDashboardMetrics
-from app.services.n8n_service import n8n_service, MOCK_CONVERSATIONS
+from app.services.n8n_service import (
+    MOCK_CONVERSATIONS,
+    N8NIntegrationUnavailableError,
+    n8n_service,
+)
 from app.core.auth import get_current_user, check_crm_permission
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
@@ -19,6 +23,10 @@ from app.models.user import User
 from app.services.whatsapp_service import send_whatsapp_message, get_oauth_token, invalidate_token, check_token_validity
 
 router = APIRouter()
+
+
+def _crm_integration_unavailable(exc: N8NIntegrationUnavailableError) -> HTTPException:
+    return HTTPException(status_code=503, detail=str(exc))
 
 def resolve_current_user_tenant(db: Session, current_user: str) -> tuple[User, str]:
     """
@@ -42,15 +50,9 @@ async def read_leads(
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
     try:
-        leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
-        if leads and len(leads) > 0:
-            return leads
-    except Exception as e:
-        print(f"[CRM] n8n get_leads falhou: {e}", flush=True)
-
-    from app.services.n8n_service import map_n8n_lead
-    raw_contacts = await get_contacts_action(db=db, current_user=current_user)
-    return [map_n8n_lead(c, tenant_id=tenant_id) for c in raw_contacts if isinstance(c, dict)]
+        return await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
+    except N8NIntegrationUnavailableError as exc:
+        raise _crm_integration_unavailable(exc) from exc
 
 @router.get("/leads/{lead_id}", response_model=Lead)
 async def read_lead(
@@ -62,7 +64,10 @@ async def read_lead(
     Fetch a single lead by its ID.
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
+    try:
+        leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
+    except N8NIntegrationUnavailableError as exc:
+        raise _crm_integration_unavailable(exc) from exc
     lead = next((l for l in leads if str(l.get("id")) == str(lead_id)), None)
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -79,8 +84,15 @@ async def update_lead(
     Update a lead's profile details.
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    result = await n8n_service.update_lead(lead_id, lead_in.model_dump(), current_user=current_user, tenant_id=tenant_id)
-    return result
+    try:
+        return await n8n_service.update_lead(
+            lead_id,
+            lead_in.model_dump(),
+            current_user=current_user,
+            tenant_id=tenant_id,
+        )
+    except N8NIntegrationUnavailableError as exc:
+        raise _crm_integration_unavailable(exc) from exc
 
 @router.delete("/leads/{lead_id}")
 async def delete_lead(
@@ -92,8 +104,14 @@ async def delete_lead(
     Delete a lead.
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    result = await n8n_service.delete_lead(lead_id, user_id=current_user, tenant_id=tenant_id)
-    return result
+    try:
+        return await n8n_service.delete_lead(
+            lead_id,
+            user_id=current_user,
+            tenant_id=tenant_id,
+        )
+    except N8NIntegrationUnavailableError as exc:
+        raise _crm_integration_unavailable(exc) from exc
 
 # ---------------------------------------------------------------------------
 # Omnichannel Actions (get_contacts, get_conversations, get_chat_history)
@@ -123,6 +141,8 @@ async def get_contacts_action(
                 "tenant_id": tenant_id
             })
         return contacts
+    except N8NIntegrationUnavailableError as exc:
+        raise _crm_integration_unavailable(exc) from exc
     except Exception as e:
         print(f"[CRM] get_contacts_action error: {e}", flush=True)
         return []
@@ -144,8 +164,11 @@ async def get_conversations_action(
     except Exception as e:
         print(f"[CRM] n8n get_conversations error: {e}", flush=True)
 
-    # Fallback return standard leads format mapped to conversations preview
-    leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
+    # Fallback return standard leads format mapped to conversations preview.
+    try:
+        leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
+    except N8NIntegrationUnavailableError as exc:
+        raise _crm_integration_unavailable(exc) from exc
     result = []
     for l in leads:
         result.append({
@@ -184,7 +207,6 @@ async def proxy_crm_avatar(
     jid: str,
     session: Optional[str] = None,
     session_id: Optional[str] = None,
-    token: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -196,7 +218,7 @@ async def proxy_crm_avatar(
         raise HTTPException(status_code=400, detail="Parâmetro 'jid' é obrigatório.")
 
     auth_header = request.headers.get("Authorization", "")
-    effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
+    effective_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None
     if not effective_token:
         raise HTTPException(status_code=401, detail="Token de autenticação obrigatório.")
 
@@ -226,14 +248,14 @@ async def proxy_crm_avatar(
                 return Response(
                     content=res["content"],
                     media_type=res.get("content_type") or "image/jpeg",
-                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=86400"}
+                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=86400", "Vary": "Authorization"}
                 )
             url_target = res.get("url") or res.get("avatar_url") or res.get("profile_pic_url") or res.get("profile_url") or res.get("avatar")
             if url_target and str(url_target).startswith("http"):
                 return RedirectResponse(
                     url_target,
                     status_code=302,
-                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=86400"}
+                    headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=86400", "Vary": "Authorization"}
                 )
     except Exception as e:
         print(f"[CRM-AVATAR] Aviso ao buscar avatar proxy para jid={jid}: {e}", flush=True)
@@ -248,7 +270,6 @@ async def proxy_crm_media(
     message_id: Optional[str] = None,
     session: Optional[str] = None,
     session_id: Optional[str] = None,
-    token: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -261,7 +282,7 @@ async def proxy_crm_media(
         raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
 
     auth_header = request.headers.get("Authorization", "")
-    effective_token = token or (auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None)
+    effective_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None
     if not effective_token:
         raise HTTPException(status_code=401, detail="Token de autenticação obrigatório.")
 
@@ -300,7 +321,8 @@ async def proxy_crm_media(
         media_type=content_type,
         headers={
             "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "public, max-age=86400"
+            "Cache-Control": "private, max-age=86400",
+            "Vary": "Authorization"
         }
     )
 

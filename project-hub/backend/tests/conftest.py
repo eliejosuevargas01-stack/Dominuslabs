@@ -17,6 +17,12 @@ from app.core.config import settings
 # Disable rate limiting for pytest suite
 limiter.enabled = False
 
+
+@pytest.fixture
+def anyio_backend():
+    """Run AnyIO-marked async tests on asyncio, which is the app runtime."""
+    return "asyncio"
+
 # Ensure test secrets are available for test suite
 if not settings.N8N_WEBHOOK_SECRET:
     settings.N8N_WEBHOOK_SECRET = "test-n8n-webhook-secret"

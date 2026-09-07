@@ -23,7 +23,7 @@ Plano técnico estruturado com base nas descobertas do **Deep Research do Dominu
 - Refatorar a função `getAvatarSrc(url, session_id, jid, allowProxy = false)`:
   - Se a URL for direta (`pps.whatsapp.net`, `fbcdn.net`, `data:image` ou URL absoluta HTTP), retorna a imagem diretamente.
   - Se `allowProxy === false` (modo padrão da sidebar), retorna `null` para permitir a renderização das iniciais coloridas, eliminando requisições contra o backend.
-  - Se `allowProxy === true` (cabeçalho da conversa aberta), constrói a URL de proxy para o contato selecionado com token JWT.
+  - Se `allowProxy === true` (cabeçalho da conversa aberta), constrói uma URL sem credenciais e a consome com Bearer via `fetchWithAuth`, convertendo a resposta em Blob URL com cleanup.
 - Assegurar fechamento de socket no `onerror` do stream `crm-chats`.
 
 #### [MODIFY] [src/pages/OrderManagerView.tsx](file:///home/eliezer/Escritorio/dominuslabs/src/pages/OrderManagerView.tsx)
@@ -66,3 +66,28 @@ Plano técnico estruturado com base nas descobertas do **Deep Research do Dominu
   - Inspecionar `get_console_message` no Chrome DevTools MCP para atestar ausência de erros de CORS ou desconexões.
 - **Validação de Áudio no Order Manager:**
   - Simular ou alterar o status de um pedido para pendente e verificar que ao clicar em Aceitar ou Rejeitar, o alarme é silenciado na hora.
+
+---
+
+## Fechamento da sessão atual
+
+### Backend
+
+- `project-hub/backend/app/api/endpoints/product_media.py`: validação por assinatura real, limite configurável, extensão canônica e ausência de `tenant_id` no formulário.
+- proxies de avatar/mídia em `main.py`, `crm.py` e `whatsapp.py`: apenas `Authorization: Bearer`, com cache privado.
+- `n8n_service.py`: cache de leads somente após validação por tenant e erro controlado quando o n8n não estiver disponível.
+- `webhooks.py`: ownership positivo do próprio tenant antes da busca de colisões entre tenants.
+- testes async marcados com AnyIO e backend validado também com o plugin `pytest-asyncio` desabilitado.
+
+### Frontend
+
+- `uploadProductMedia` usa `fetchWithAuth(..., null)` e envia somente arquivo + UUID persistido do produto.
+- URLs relativas retornadas pelo upload são resolvidas contra o origin da API antes da renderização no catálogo.
+- recursos privados do Omnichannel são buscados sob demanda, transformados em Blob URL e revogados no cleanup; URLs públicas continuam diretas.
+
+### Gates locais
+
+- `npm run lint`, `npm test`, `npm run build`;
+- suíte completa do pytest com `-p no:asyncio`;
+- Bandit e verificação de diff;
+- fluxo visual local de cadastro + upload na página Governança e Empresa.

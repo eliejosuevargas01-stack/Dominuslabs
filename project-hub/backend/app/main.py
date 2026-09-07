@@ -2,7 +2,7 @@
 Ponto de entrada (Entrypoint) da aplicação FastAPI.
 Inicializa o servidor, configura os middlewares (como CORS e o limitador de taxa para proteção DDoS), e gerencia as rotas de fallback para servir o frontend (SPA) compilado no mesmo contêiner.
 """
-from fastapi import FastAPI, Depends, HTTPException, Request, Query
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -196,7 +196,6 @@ async def root_avatar_proxy(
     session_id: Optional[str] = None,
     session: Optional[str] = None,
     jid: Optional[str] = None,
-    token: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -205,10 +204,8 @@ async def root_avatar_proxy(
     - /api/sessions/{session_id}/avatar?jid=...
     - /avatar?session={session_id}&jid=...
     """
-    auth_header = request.headers.get("Authorization")
-    auth_token = token
-    if not auth_token and auth_header and auth_header.lower().startswith("bearer "):
-        auth_token = auth_header[7:].strip()
+    auth_header = request.headers.get("Authorization", "")
+    auth_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
 
     if not auth_token:
         raise HTTPException(status_code=401, detail="Token de autenticação obrigatório.")
@@ -244,7 +241,8 @@ async def root_avatar_proxy(
                     media_type=res.get("content_type") or "image/jpeg",
                     headers={
                         "Access-Control-Allow-Origin": "*",
-                        "Cache-Control": "public, max-age=86400"
+                        "Cache-Control": "private, max-age=86400",
+                        "Vary": "Authorization"
                     }
                 )
             url_target = res.get("url") or res.get("avatar_url") or res.get("profile_pic_url") or res.get("profile_url") or res.get("avatar")
@@ -254,7 +252,8 @@ async def root_avatar_proxy(
                     status_code=302,
                     headers={
                         "Access-Control-Allow-Origin": "*",
-                        "Cache-Control": "public, max-age=86400"
+                        "Cache-Control": "private, max-age=86400",
+                        "Vary": "Authorization"
                     }
                 )
     except Exception as e:
@@ -275,17 +274,14 @@ async def root_media_proxy(
     session: Optional[str] = None,
     messageId: Optional[str] = None,
     message_id: Optional[str] = None,
-    token: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
     Proxy de mídias (imagem, áudio, vídeo, documentos) consumido pelo frontend.
     Mapeia /api/sessions/{session_id}/media?messageId=...
     """
-    auth_header = request.headers.get("Authorization")
-    auth_token = token
-    if not auth_token and auth_header and auth_header.lower().startswith("bearer "):
-        auth_token = auth_header[7:].strip()
+    auth_header = request.headers.get("Authorization", "")
+    auth_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
 
     if not auth_token:
         raise HTTPException(status_code=401, detail="Token de autenticação obrigatório.")
@@ -332,6 +328,7 @@ async def root_media_proxy(
             "Accept-Ranges": "bytes",
             "Cache-Control": "private, max-age=604800",
             "Access-Control-Allow-Origin": "*",
+            "Vary": "Authorization",
             "Content-Type": content_type
         }
     )
