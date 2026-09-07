@@ -49,6 +49,28 @@ MOCK_LEADS = []
 MOCK_CONVERSATIONS = {}
 MOCK_ACTIVITIES = {}
 
+
+class SecurityTenantMismatchError(ValueError):
+    """
+    Exceção de segurança disparada quando o n8n ou webhook externo retorna dados com tenant_id divergente do esperado.
+    """
+    pass
+
+
+def validate_response_tenant(received_tenant: Optional[str], expected_tenant: Optional[str], entity_type: str = "item") -> None:
+    """
+    Valida estritamente se o tenant retornado pelo n8n / serviço externo corresponde ao esperado.
+    Se o payload retornado contiver tenant_id e este diferir de expected_tenant:
+    Registra SECURITY_TENANT_MISMATCH e levanta SecurityTenantMismatchError (fail-closed).
+    """
+    if received_tenant is not None and expected_tenant is not None:
+        rec = str(received_tenant).strip()
+        exp = str(expected_tenant).strip()
+        if rec and exp and rec != exp:
+            logger.error(f"SECURITY_TENANT_MISMATCH: {entity_type} returned tenant '{rec}' does not match expected tenant '{exp}'")
+            raise SecurityTenantMismatchError(f"SECURITY_TENANT_MISMATCH: {entity_type} returned tenant '{rec}' does not match expected tenant '{exp}'")
+
+
 def safe_parse_json(val: Any) -> dict:
     """
     Função/Método safe_parse_json.
@@ -72,6 +94,9 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None, tenant_id: Optional
     Mapeia os dados do Lead provenientes do webhook N8N para a estrutura do sistema Dominus.
     Regra de Negócio: Mapeia um lead raw para garantir a consistência das entidades para o Frontend CRM e evitar dados corrompidos.
     """
+    if not isinstance(lead, dict):
+        return {}
+
     raw_id = str(lead.get("id") or lead.get("lead_id") or lead.get("_id") or "")
     c_jid = str(lead.get("contact_jid") or lead.get("jid") or "")
     session_id = lead.get("session_id") or lead.get("whatsapp_instance") or ""
@@ -86,7 +111,11 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None, tenant_id: Optional
     else:
         lead_id = "unknown_lead"
 
-    resolved_tenant = tenant_id or lead.get("tenant_id")
+    received_tenant = lead.get("tenant_id")
+    if received_tenant and tenant_id:
+        validate_response_tenant(received_tenant, tenant_id, entity_type=f"Lead {lead_id}")
+
+    resolved_tenant = tenant_id or received_tenant
     if lead_id and lead_id.lower() != "none" and lead_id != "":
         if resolved_tenant:
             cache_k = f"{resolved_tenant}:{lead_id}"
@@ -289,7 +318,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None, tenant_id: Optional
     mapped_lead = {
         **lead,
         "id": lead_id,
-        "tenant_id": resolved_tenant or lead.get("tenant_id"),
+        "tenant_id": resolved_tenant,
         "push_name": person_name,
         "nome": person_name,
         "company_name": person_name,
@@ -427,10 +456,16 @@ def extract_text_content(m: dict) -> str:
 
 def map_n8n_message(msg: dict, lead_channel: str = "whatsapp", tenant_id: Optional[str] = None) -> List[dict]:
     """
-    Mapeia mensagens individuais ou aninhadas do n8n para a estrutura do Dominus.
+    Mapeia mensagens individuais ou aninhadas do n8n para a estrutura do Dominus com validação estrita de tenant.
     """
-    mapped = []
-    resolved_tenant = msg.get("tenant_id") or tenant_id
+    if not isinstance(msg, dict):
+        return []
+
+    received_tenant = msg.get("tenant_id")
+    if received_tenant and tenant_id:
+        validate_response_tenant(received_tenant, tenant_id, entity_type="Message payload")
+
+    resolved_tenant = tenant_id or received_tenant
 
     # 1. Support nested "mensagens" array format from n8n chat history payload
     if "mensagens" in msg and isinstance(msg["mensagens"], list):
@@ -443,9 +478,14 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp", tenant_id: Option
         profile_pic_url = msg.get("profile_pic_url") or ""
         if profile_pic_url and profile_pic_url.startswith("/"):
             profile_pic_url = f"https://dominuslabs.online{profile_pic_url}"
+        mapped = []
         for m in msg["mensagens"]:
             if not isinstance(m, dict):
                 continue
+            m_tenant = m.get("tenant_id")
+            if m_tenant and tenant_id:
+                validate_response_tenant(m_tenant, tenant_id, entity_type=f"Nested message {m.get('message_id') or m.get('id')}")
+
             msg_id = str(m.get("message_id") or m.get("id") or "")
             is_from_me = m.get("is_from_me") if m.get("is_from_me") is not None else m.get("from_me") if m.get("from_me") is not None else m.get("fromMe", parent_is_from_me)
             sender = "user" if is_from_me else "lead"
@@ -460,7 +500,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp", tenant_id: Option
                 "id": msg_id,
                 "message_id": msg_id,
                 "session_id": m.get("session_id") or session_id,
-                "tenant_id": m.get("tenant_id") or resolved_tenant,
+                "tenant_id": tenant_id or m_tenant or resolved_tenant,
                 "contact_jid": contact_jid,
                 "is_from_me": is_from_me,
                 "sender": sender,
@@ -505,7 +545,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp", tenant_id: Option
 
         ts = msg.get("message_timestamp") or msg.get("created_at") or msg.get("timestamp") or msg.get("createdAt")
 
-        mapped.append({
+        mapped = [{
             "id": msg_id,
             "message_id": msg_id,
             "session_id": msg.get("session_id"),
@@ -538,7 +578,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp", tenant_id: Option
             "reaction_text": msg.get("reaction_text") or msg.get("reactionText") or None,
             "reaction_target_message_id": msg.get("reaction_target_message_id") or msg.get("reactionTargetMessageId") or None,
             "reaction_target_sender_jid": msg.get("reaction_target_sender_jid") or msg.get("reactionTargetSenderJid") or None,
-        })
+        }]
         return mapped
 
     # Support legacy composite message object
@@ -1196,7 +1236,7 @@ class N8NService:
 
         if not url:
             logger.info("CRM_GET_LEADS_WEBHOOK_URL not configured. Returning mock leads.")
-            mapped_mock = [map_n8n_lead({**l, "tenant_id": tenant_id}, tenant_id=tenant_id) for l in MOCK_LEADS]
+            mapped_mock = [map_n8n_lead(l, tenant_id=tenant_id) for l in MOCK_LEADS if l.get("tenant_id") == tenant_id]
             mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
             mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
             N8NService._leads_cache[tenant_id] = {
@@ -1226,7 +1266,7 @@ class N8NService:
             except Exception as e:
                 logger.error(f"Error calling POST leads webhook: {e}. Falling back to mock data.", exc_info=True)
         if not raw_leads:
-            mapped_mock = [map_n8n_lead({**l, "tenant_id": tenant_id}, tenant_id=tenant_id) for l in MOCK_LEADS]
+            mapped_mock = [map_n8n_lead(l, tenant_id=tenant_id) for l in MOCK_LEADS if l.get("tenant_id") == tenant_id]
             mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
             mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
             for m in mapped_mock:
@@ -1241,7 +1281,20 @@ class N8NService:
             return mapped_mock
 
         raw_leads = unpack_n8n_raw_leads(raw_leads)
-        mapped_leads = [map_n8n_lead(l, tenant_id=tenant_id) for l in raw_leads if isinstance(l, dict)]
+        mapped_leads = []
+        for l in raw_leads:
+            if not isinstance(l, dict):
+                continue
+            l_tenant = l.get("tenant_id")
+            if l_tenant and tenant_id and str(l_tenant).strip() != str(tenant_id).strip():
+                logger.error(f"SECURITY_TENANT_MISMATCH: Dropping lead {l.get('id')} from tenant '{l_tenant}' (expected '{tenant_id}')")
+                continue
+            try:
+                mapped_leads.append(map_n8n_lead(l, tenant_id=tenant_id))
+            except SecurityTenantMismatchError as e:
+                logger.error(f"SECURITY_TENANT_MISMATCH caught during get_leads: {e}")
+                continue
+
         mapped_leads.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
         mapped_leads.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
         
@@ -1290,7 +1343,19 @@ class N8NService:
                     raw_convs = data.get("conversas") or data.get("conversations") or data.get("leads") or [data]
                 
                 unpacked = unpack_n8n_raw_leads(raw_convs)
-                mapped = [map_n8n_lead(l, tenant_id=tenant_id) for l in unpacked if isinstance(l, dict)]
+                mapped = []
+                for l in unpacked:
+                    if not isinstance(l, dict):
+                        continue
+                    l_tenant = l.get("tenant_id")
+                    if l_tenant and tenant_id and str(l_tenant).strip() != str(tenant_id).strip():
+                        logger.error(f"SECURITY_TENANT_MISMATCH: Dropping conversation {l.get('id')} from tenant '{l_tenant}' (expected '{tenant_id}')")
+                        continue
+                    try:
+                        mapped.append(map_n8n_lead(l, tenant_id=tenant_id))
+                    except SecurityTenantMismatchError as e:
+                        logger.error(f"SECURITY_TENANT_MISMATCH caught during get_conversations: {e}")
+                        continue
                 
                 # Step 2: Append conversation inbox state to cached contact profile & compute last_message_preview
                 for m in mapped:
@@ -1404,7 +1469,7 @@ class N8NService:
         elif isinstance(outgoing_payload.get("oportunidades_identificadas"), str):
             reconstructed_oportunidades = safe_parse_json(outgoing_payload["oportunidades_identificadas"])
         for i, lead in enumerate(MOCK_LEADS):
-            if lead["id"] == lead_id:
+            if lead["id"] == lead_id and lead.get("tenant_id") == tenant_id:
                 for k, v in payload.items():
                     lead[k] = v
                 lead["payload"] = reconstructed_payload_meta
@@ -1419,7 +1484,7 @@ class N8NService:
                 break
         if not url:
             logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead updated locally in-memory.")
-            updated_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
+            updated_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id and l.get("tenant_id") == tenant_id), None)
             mapped = map_n8n_lead(updated_lead, tenant_id=tenant_id) if updated_lead else map_n8n_lead({"id": lead_id, **payload, "tenant_id": tenant_id}, tenant_id=tenant_id)
             if current_user:
                 mapped["alterado_por"] = current_user
@@ -1444,7 +1509,7 @@ class N8NService:
                 if isinstance(res_data, dict) and ("company_name" in res_data or "nome_empresa" in res_data or "empresa_nome" in res_data):
                     mapped = map_n8n_lead(res_data, tenant_id=tenant_id)
                 else:
-                    fallback_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
+                    fallback_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id and l.get("tenant_id") == tenant_id), None)
                     if fallback_lead:
                         mapped = map_n8n_lead(fallback_lead, tenant_id=tenant_id)
                     else:
@@ -1530,7 +1595,11 @@ class N8NService:
             for m in cached_lead["mensagens"]:
                 if not isinstance(m, dict):
                     continue
-                mapped_list = map_n8n_message(m, lead_channel, tenant_id=tenant_id)
+                try:
+                    mapped_list = map_n8n_message(m, lead_channel, tenant_id=tenant_id)
+                except SecurityTenantMismatchError as e:
+                    logger.error(f"SECURITY_TENANT_MISMATCH caught during embedded cached messages: {e}")
+                    continue
                 for mapped_msg in mapped_list:
                     msg_id = str(mapped_msg.get("id") or mapped_msg.get("message_id") or "")
                     content = str(mapped_msg.get("content") or mapped_msg.get("message") or "").strip()
@@ -1601,7 +1670,15 @@ class N8NService:
                 seen_keys = set()
                 for m in raw_msgs:
                     if isinstance(m, dict):
-                        mapped_list = map_n8n_message(m, lead_channel, tenant_id=tenant_id)
+                        m_tenant = m.get("tenant_id")
+                        if m_tenant and tenant_id and str(m_tenant).strip() != str(tenant_id).strip():
+                            logger.error(f"SECURITY_TENANT_MISMATCH: Skipping message {m.get('id')} from tenant '{m_tenant}' (expected '{tenant_id}')")
+                            continue
+                        try:
+                            mapped_list = map_n8n_message(m, lead_channel, tenant_id=tenant_id)
+                        except SecurityTenantMismatchError as e:
+                            logger.error(f"SECURITY_TENANT_MISMATCH caught during get_messages: {e}")
+                            continue
                         for mapped_msg in mapped_list:
                             msg_session = str(mapped_msg.get("session_id") or m.get("session_id") or "")
                             if target_session and msg_session:

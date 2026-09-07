@@ -461,3 +461,83 @@ def test_n8n_webhook_raw_body_only_hmac_rejected(client):
     assert res.status_code == 401
     assert "Assinatura HMAC inválida" in res.json()["detail"]
 
+
+def test_lead_events_sse_cross_tenant_rejected_with_403(client):
+    from app.core.auth import create_access_token
+    from app.services.n8n_service import RAW_LEADS_CACHE
+
+    # Populate cache with a lead belonging to tenant-b
+    RAW_LEADS_CACHE["tenant-b:lead_secret_b"] = {
+        "id": "lead_secret_b",
+        "tenant_id": "tenant-b",
+        "nome": "Segredo B"
+    }
+
+    # User from tenant-a tries to subscribe to lead_secret_b
+    token_a = create_access_token({"sub": "user_a@dominus.online", "tenant_id": "tenant-a", "role": "operator"})
+
+    res = client.get(
+        "/api/v1/webhooks/events/leads/lead_secret_b",
+        headers={"Authorization": f"Bearer {token_a}"}
+    )
+    assert res.status_code == 403
+    assert "Acesso negado" in res.json()["detail"]
+
+
+def test_lead_events_sse_unknown_lead_rejected_with_404(client):
+    from app.core.auth import create_access_token
+    from app.services.n8n_service import RAW_LEADS_CACHE, N8NService
+    from unittest.mock import patch, AsyncMock
+
+    RAW_LEADS_CACHE.clear()
+
+    token_a = create_access_token({"sub": "user_a@dominus.online", "tenant_id": "tenant-a", "role": "operator"})
+
+    with patch.object(N8NService, "get_messages", new_callable=AsyncMock) as mock_get_msgs:
+        mock_get_msgs.return_value = []
+
+        res = client.get(
+            "/api/v1/webhooks/events/leads/lead_does_not_exist",
+            headers={"Authorization": f"Bearer {token_a}"}
+        )
+        assert res.status_code == 404
+        assert "não encontrado" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_lead_events_sse_matching_tenant_lead_accepted(db):
+    from starlette.requests import Request
+    from app.core.auth import create_access_token
+    from app.services.n8n_service import RAW_LEADS_CACHE
+    from app.api.endpoints.webhooks import lead_events, lead_listeners
+
+    RAW_LEADS_CACHE["tenant-a:lead_owned_a"] = {
+        "id": "lead_owned_a",
+        "tenant_id": "tenant-a",
+        "nome": "Lead Legítimo A"
+    }
+
+    token_a = create_access_token({"sub": "user_a@dominus.online", "tenant_id": "tenant-a", "role": "operator"})
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/v1/webhooks/events/leads/lead_owned_a",
+        "headers": [(b"authorization", f"Bearer {token_a}".encode())],
+    }
+    request = Request(scope)
+
+    response = await lead_events(lead_id="lead_owned_a", request=request, db=db)
+    assert response.status_code == 200
+    assert response.media_type == "text/event-stream"
+    assert ("tenant-a", "lead_owned_a") in lead_listeners
+
+    # Verify generator yields initial connected event and cleans up on close
+    gen = response.body_iterator
+    first_item = await gen.__anext__()
+    assert first_item == ": connected\n\n"
+    await gen.aclose()
+    assert ("tenant-a", "lead_owned_a") not in lead_listeners
+
+
+

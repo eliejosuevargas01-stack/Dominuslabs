@@ -126,31 +126,44 @@ async def lead_events(
     if not user_tenant_id:
         raise HTTPException(status_code=403, detail="Acesso negado: token sem tenant_id associado.")
 
-    # Validar se o tenant_id do usuário coincide com o tenant do lead consultado no banco
-    lead_tenant_id = None
-    try:
-        try:
-            from app.models.lead import Lead
-        except ImportError:
-            from app.models import Lead
-        db_lead = db.query(Lead).filter((Lead.id == lead_id) | (getattr(Lead, "remote_jid", Lead.id) == lead_id)).first()
-        if db_lead:
-            lead_tenant_id = getattr(db_lead, "tenant_id", None)
-    except Exception:
-        pass
+    # Validar positivamente se o lead pertence ao tenant_id do usuário em modo fail-closed
+    target_id = str(lead_id).strip()
+    target_jid = target_id.split("___")[0] if "___" in target_id else target_id
 
-    if not lead_tenant_id:
+    from app.services.n8n_service import RAW_LEADS_CACHE, ProgressiveContactCache, SecurityTenantMismatchError, n8n_service
+
+    # 1. Rejeitar imediatamente se o lead for conhecido como pertencente a outro tenant
+    for cache_key, cached_lead in RAW_LEADS_CACHE.items():
+        if ":" in cache_key:
+            k_tenant, k_lead = cache_key.split(":", 1)
+            if (k_lead == target_id or k_lead == target_jid) and k_tenant != user_tenant_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Acesso negado: o lead pertence a outro tenant."
+                )
+
+    # 2. Verificar no cache do tenant do usuário
+    lead_found = False
+    if f"{user_tenant_id}:{target_id}" in RAW_LEADS_CACHE or f"{user_tenant_id}:{target_jid}" in RAW_LEADS_CACHE:
+        lead_found = True
+    elif ProgressiveContactCache.get(target_jid, user_tenant_id) or ProgressiveContactCache.get(target_id, user_tenant_id):
+        lead_found = True
+    else:
+        # 3. Tentar carregar/verificar via N8NService com o tenant do usuário
         try:
-            from app.services.n8n_service import MOCK_LEADS
-            for lead in MOCK_LEADS:
-                if lead.get("id") == lead_id or lead.get("phone") == lead_id or lead.get("jid") == lead_id:
-                    lead_tenant_id = lead.get("tenant_id")
-                    break
+            msgs = await n8n_service.get_messages(lead_id=target_id, user_id=user_email, tenant_id=user_tenant_id)
+            if f"{user_tenant_id}:{target_id}" in RAW_LEADS_CACHE or len(msgs) > 0 or ProgressiveContactCache.get(target_jid, user_tenant_id):
+                lead_found = True
+        except SecurityTenantMismatchError:
+            raise HTTPException(status_code=403, detail="Acesso negado: o lead pertence a outro tenant.")
         except Exception:
             pass
 
-    if lead_tenant_id and lead_tenant_id != user_tenant_id:
-        raise HTTPException(status_code=403, detail="Acesso negado: o tenant do lead não coincide com o do usuário")
+    if not lead_found:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Lead '{lead_id}' não encontrado para o tenant '{user_tenant_id}'."
+        )
 
     listener_key = (user_tenant_id, lead_id)
     queue = asyncio.Queue()
@@ -163,6 +176,7 @@ async def lead_events(
         Gera eventos SSE de lead filtrados exclusivamente para o tenant do usuário.
         """
         try:
+            yield ": connected\n\n"
             while True:
                 if await request.is_disconnected():
                     break
@@ -213,6 +227,7 @@ async def crm_chats_events(request: Request):
         Impacto na regra de negócio: Assegura que o fluxo da operação event_generator seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         try:
+            yield ": connected\n\n"
             while True:
                 if await request.is_disconnected():
                     break
@@ -742,7 +757,7 @@ async def whatsapp_inbound_webhook(request: Request):
     if not lead_id or not message_text:
         raise HTTPException(status_code=400, detail="lead_id e message são obrigatórios.")
 
-    from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS, n8n_service
+    from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS, RAW_LEADS_CACHE, n8n_service
     n8n_service.invalidate_leads_cache(tenant_id=tenant_id)
 
     new_msg = {
@@ -757,9 +772,14 @@ async def whatsapp_inbound_webhook(request: Request):
         MOCK_CONVERSATIONS[cache_k] = []
     MOCK_CONVERSATIONS[cache_k].append(new_msg)
 
-    # Update last interaction timestamp on lead
+    # Update last interaction timestamp on lead in cache and mock strictly partitioned by tenant
+    if cache_k in RAW_LEADS_CACHE:
+        RAW_LEADS_CACHE[cache_k]["last_interaction"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
+        if sender == "lead":
+            RAW_LEADS_CACHE[cache_k]["status"] = "RESPONDED"
+
     for lead in MOCK_LEADS:
-        if lead["id"] == lead_id and (lead.get("tenant_id") == tenant_id or not lead.get("tenant_id")):
+        if lead["id"] == lead_id and lead.get("tenant_id") == tenant_id:
             lead["last_interaction"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
             if sender == "lead":
                 lead["status"] = "RESPONDED"
@@ -795,7 +815,7 @@ async def instagram_inbound_webhook(request: Request):
     if not lead_id or not message_text:
         raise HTTPException(status_code=400, detail="lead_id e message são obrigatórios.")
 
-    from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS, n8n_service
+    from app.services.n8n_service import MOCK_CONVERSATIONS, MOCK_LEADS, RAW_LEADS_CACHE, n8n_service
     n8n_service.invalidate_leads_cache(tenant_id=tenant_id)
 
     new_msg = {
@@ -810,9 +830,14 @@ async def instagram_inbound_webhook(request: Request):
         MOCK_CONVERSATIONS[cache_k] = []
     MOCK_CONVERSATIONS[cache_k].append(new_msg)
 
-    # Update last interaction timestamp on lead
+    # Update last interaction timestamp on lead in cache and mock strictly partitioned by tenant
+    if cache_k in RAW_LEADS_CACHE:
+        RAW_LEADS_CACHE[cache_k]["last_interaction"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
+        if sender == "lead":
+            RAW_LEADS_CACHE[cache_k]["status"] = "RESPONDED"
+
     for lead in MOCK_LEADS:
-        if lead["id"] == lead_id and (lead.get("tenant_id") == tenant_id or not lead.get("tenant_id")):
+        if lead["id"] == lead_id and lead.get("tenant_id") == tenant_id:
             lead["last_interaction"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
             if sender == "lead":
                 lead["status"] = "RESPONDED"

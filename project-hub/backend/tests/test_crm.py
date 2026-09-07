@@ -1,4 +1,5 @@
 import pytest
+import httpx
 from unittest.mock import patch, AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 
@@ -105,3 +106,140 @@ def test_get_contacts(mock_get_contacts, mock_db):
     response = client.get("/api/v1/crm/contacts")
     # if it doesn't exist it returns 404. Let's assert based on reality.
     assert response.status_code in [200, 404]
+
+
+def test_map_n8n_lead_rejects_tenant_mismatch():
+    from app.services.n8n_service import map_n8n_lead, SecurityTenantMismatchError
+
+    # Lead claiming tenant-b when caller expected tenant-a
+    malicious_lead = {
+        "id": "lead_cross_tenant_1",
+        "tenant_id": "tenant-b",
+        "nome": "Cliente confidencial do Tenant B"
+    }
+
+    with pytest.raises(SecurityTenantMismatchError) as exc_info:
+        map_n8n_lead(malicious_lead, tenant_id="tenant-a")
+    
+    assert "SECURITY_TENANT_MISMATCH" in str(exc_info.value)
+    assert "tenant-b" in str(exc_info.value)
+    assert "tenant-a" in str(exc_info.value)
+
+
+def test_map_n8n_message_rejects_tenant_mismatch():
+    from app.services.n8n_service import map_n8n_message, SecurityTenantMismatchError
+
+    # Message claiming tenant-b when caller expected tenant-a
+    malicious_msg = {
+        "message_id": "msg_cross_1",
+        "tenant_id": "tenant-b",
+        "contact_jid": "5511999999999@s.whatsapp.net",
+        "content": "Mensagem secreta do Tenant B"
+    }
+
+    with pytest.raises(SecurityTenantMismatchError) as exc_info:
+        map_n8n_message(malicious_msg, tenant_id="tenant-a")
+
+    assert "SECURITY_TENANT_MISMATCH" in str(exc_info.value)
+
+    # Nested message in array claiming tenant-b
+    nested_malicious_msg = {
+        "tenant_id": "tenant-a",
+        "mensagens": [
+            {
+                "id": "msg_nested_cross_1",
+                "tenant_id": "tenant-b",
+                "content": "Mensagem aninhada cross-tenant"
+            }
+        ]
+    }
+
+    with pytest.raises(SecurityTenantMismatchError) as exc_info_nested:
+        map_n8n_message(nested_malicious_msg, tenant_id="tenant-a")
+
+    assert "SECURITY_TENANT_MISMATCH" in str(exc_info_nested.value)
+
+
+@pytest.mark.asyncio
+async def test_get_leads_drops_cross_tenant_items_from_n8n():
+    from app.services.n8n_service import N8NService
+
+    mixed_leads_payload = [
+        {"id": "lead_a1", "tenant_id": "tenant-a", "nome": "Lead Legítimo A"},
+        {"id": "lead_b1", "tenant_id": "tenant-b", "nome": "Lead Vazado B"},
+        {"id": "lead_a2", "nome": "Lead Sem Tenant Explícito (Herdado)"}
+    ]
+
+    with patch.object(httpx.AsyncClient, "post", new_callable=AsyncMock) as mock_post:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mixed_leads_payload
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        # Call get_leads for tenant-a
+        N8NService.invalidate_leads_cache("tenant-a")
+        results = await N8NService.get_leads(user_id="user_a", tenant_id="tenant-a")
+
+        # Must contain only lead_a1 and lead_a2; lead_b1 MUST be dropped
+        result_ids = [l["id"] for l in results]
+        assert "lead_a1" in result_ids
+        assert "lead_a2" in result_ids
+        assert "lead_b1" not in result_ids
+
+        # Ensure all returned leads have tenant_id == "tenant-a"
+        for l in results:
+            assert l["tenant_id"] == "tenant-a"
+
+
+@pytest.mark.asyncio
+async def test_get_conversations_drops_cross_tenant_items_from_n8n():
+    from app.services.n8n_service import N8NService
+
+    mixed_convs_payload = {
+        "conversations": [
+            {"id": "conv_a1", "contact_jid": "55111111@s.whatsapp.net", "tenant_id": "tenant-a", "nome": "Conv A"},
+            {"id": "conv_b1", "contact_jid": "55222222@s.whatsapp.net", "tenant_id": "tenant-b", "nome": "Conv B"}
+        ]
+    }
+
+    with patch.object(httpx.AsyncClient, "post", new_callable=AsyncMock) as mock_post:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mixed_convs_payload
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        results = await N8NService.get_conversations(user_id="user_a", tenant_id="tenant-a")
+        result_ids = [c["id"] for c in results]
+        assert "55111111@s.whatsapp.net" in result_ids
+        assert "55222222@s.whatsapp.net" not in result_ids
+        for c in results:
+            assert c["tenant_id"] == "tenant-a"
+
+
+@pytest.mark.asyncio
+async def test_get_messages_drops_cross_tenant_messages():
+    from app.services.n8n_service import N8NService, RAW_LEADS_CACHE
+
+    RAW_LEADS_CACHE.clear()
+    mixed_messages_payload = {
+        "messages": [
+            {"id": "msg_a", "tenant_id": "tenant-a", "content": "Oi tenant A", "session_id": "sess_a"},
+            {"id": "msg_b", "tenant_id": "tenant-b", "content": "Oi tenant B", "session_id": "sess_b"}
+        ]
+    }
+
+    with patch.object(httpx.AsyncClient, "post", new_callable=AsyncMock) as mock_post:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '{"dummy": true}'
+        mock_response.json.return_value = mixed_messages_payload
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        results = await N8NService.get_messages("5511999999999@s.whatsapp.net", user_id="user_a", tenant_id="tenant-a")
+        result_ids = [m["id"] for m in results]
+        assert "msg_a" in result_ids
+        assert "msg_b" not in result_ids
+
