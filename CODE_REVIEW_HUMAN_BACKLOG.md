@@ -21,3 +21,10 @@ Itens e melhorias não-bloqueantes apontados pelo Code Review (Dominus-MCP) para
 - **Evidência:** A asserção `mock_process.assert_called_once()` permanece comentada após um problema anterior de injeção de mock.
 - **Ação sugerida:** Corrigir o ponto de patch do mock e reativar a asserção para validar o efeito interno, não apenas a resposta HTTP.
 - **Prioridade:** Follow-up humano não bloqueante; não há defeito funcional confirmado na rota.
+
+## 4. Remover import redundante de JSON no notificador CRM
+- **Fonte:** Re-revisão Dominus-MCP do commit `943e59e4`.
+- **Arquivo:** `project-hub/backend/app/api/endpoints/webhooks.py` (`notify_crm_chat_listeners`).
+- **Evidência:** A função possui `import json` local embora o módulo já seja importado no topo do arquivo.
+- **Ação sugerida:** Remover o import local em uma limpeza futura, mantendo a importação de módulo única.
+- **Prioridade:** Follow-up humano não bloqueante; sem impacto funcional ou de segurança.
