@@ -48,8 +48,9 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
       <div className="lg:hidden fixed top-3 left-4 z-50">
         <button
           onClick={() => setIsOpen(!isOpen)}
+          aria-expanded={isOpen}
           aria-label={isOpen ? "Fechar menu" : "Abrir menu"}
-          className="p-2 rounded-xl   border border-zinc-200 shadow-sm text-slate-700 hover:text-purple-700 transition-all cursor-pointer flex items-center justify-center"
+          className="p-2 rounded-xl   border border-zinc-200 shadow-sm text-slate-700 hover:text-purple-700 transition-all cursor-pointer flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
         >
           {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
@@ -64,7 +65,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
         {/* Logo and Menu Links */}
         <div className={`p-4 transition-all duration-300 ${isCollapsed ? 'lg:px-2' : ''}`}>
           <div className={`flex ${isCollapsed ? 'flex-col lg:items-center gap-4' : 'items-center justify-between'} mb-6 mt-4 lg:mt-0`}>
-            <Link to="/project-hub" className="flex items-center gap-3 group">
+            <Link to="/project-hub" className="flex items-center gap-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 rounded-lg">
               <img src="/logo.png" alt="Dominus Labs" className="w-8 h-8 rounded-lg object-contain shadow-sm group-hover:scale-105 transition-transform flex-shrink-0" />
               <span className={`font-display font-semibold text-xl tracking-tight text-zinc-900 transition-all duration-200 ${isCollapsed ? 'lg:hidden' : 'block'}`}>
                 Dominuslabs
@@ -74,7 +75,9 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
             {/* Toggle Button for Desktop */}
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="hidden lg:flex p-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900 transition-all cursor-pointer items-center justify-center bg-white shadow-sm"
+              aria-expanded={!isCollapsed}
+              aria-label={isCollapsed ? "Expandir menu" : "Recolher menu"}
+              className="hidden lg:flex p-1.5 rounded-lg border border-zinc-200 hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900 transition-all cursor-pointer items-center justify-center bg-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
               title={isCollapsed ? "Expandir menu" : "Recolher menu"}
             >
               {isCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
@@ -91,7 +94,8 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
                   to={item.path}
                   onClick={() => setIsOpen(false)}
                   title={item.name}
-                  className={`flex items-center rounded-lg transition-all duration-200 group px-3 py-2.5 gap-3 ${
+                  aria-current={active ? 'page' : undefined}
+                  className={`flex items-center rounded-lg transition-all duration-200 group px-3 py-2.5 gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 ${
                     isCollapsed
                       ? 'lg:justify-center lg:w-10 lg:h-10 lg:p-0 lg:gap-0 lg:mx-auto'
                       : ''
@@ -126,7 +130,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
               handleLogout();
             }}
             title="Sair"
-            className={`w-full flex items-center rounded-lg font-medium text-sm text-zinc-600 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer group px-3 py-2.5 gap-3 ${
+            className={`w-full flex items-center rounded-lg font-medium text-sm text-zinc-600 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer group px-3 py-2.5 gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 ${
               isCollapsed
                 ? 'md:justify-center md:w-10 md:h-10 md:p-0 md:gap-0 md:mx-auto'
                 : ''
