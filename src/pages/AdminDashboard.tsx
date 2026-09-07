@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { fetchProjects, createProject, API_BASE, getUserRole, deleteProject } from '../services/api';
+import { SSEClient } from '../services/sseClient';
 import { 
   Folder, 
   Layers, 
@@ -92,18 +93,18 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadDashboardData();
 
-    const eventSource = new EventSource(`${API_BASE}/webhooks/events`);
-    eventSource.onmessage = (event) => {
-      if (event.data === 'reload') {
-        loadDashboardData(true);
-      }
-    };
-    eventSource.onerror = () => {
-      try { eventSource.close(); } catch (_) {}
-    };
+    const sseClient = new SSEClient({
+      url: `${API_BASE}/webhooks/events`,
+      onMessage: (data: unknown) => {
+        if (data === 'reload') {
+          loadDashboardData(true);
+        }
+      },
+    });
+    void sseClient.connect();
 
     return () => {
-      eventSource.close();
+      sseClient.disconnect();
     };
   }, []);
 

@@ -540,4 +540,109 @@ async def test_lead_events_sse_matching_tenant_lead_accepted(db):
     assert ("tenant-a", "lead_owned_a") not in lead_listeners
 
 
+@pytest.mark.asyncio
+async def test_global_sse_requires_an_access_token():
+    from fastapi import HTTPException
+    from starlette.requests import Request
+    from app.api.endpoints.webhooks import all_projects_events, global_listeners
+
+    global_listeners.clear()
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/api/v1/webhooks/events",
+        "headers": [],
+        "client": ("127.0.0.1", 12345),
+    })
+
+    with pytest.raises(HTTPException) as exc_info:
+        await all_projects_events(request=request)
+
+    assert exc_info.value.status_code == 401
+    assert not global_listeners
+
+
+@pytest.mark.asyncio
+async def test_global_sse_accepts_access_token_and_releases_listener():
+    from starlette.requests import Request
+    from app.api.endpoints.webhooks import all_projects_events, global_listeners
+    from app.core.auth import create_access_token
+
+    global_listeners.clear()
+    token = create_access_token({"sub": "operator@dominus.online", "tenant_id": "tenant-a", "role": "operator"})
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/api/v1/webhooks/events",
+        "headers": [(b"authorization", f"Bearer {token}".encode())],
+        "client": ("127.0.0.1", 12345),
+    })
+
+    response = await all_projects_events(request=request)
+    assert response.status_code == 200
+    assert global_listeners[0].maxsize == 1
+
+    generator = response.body_iterator
+    assert await generator.__anext__() == ": connected\n\n"
+    await generator.aclose()
+    assert not global_listeners
+
+
+@pytest.mark.asyncio
+async def test_project_sse_requires_a_valid_public_capability(db):
+    from fastapi import HTTPException
+    from starlette.requests import Request
+    from app.api.endpoints.webhooks import project_events, project_listeners
+
+    project_listeners.clear()
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/api/v1/webhooks/events/unknown-project-token",
+        "headers": [],
+        "client": ("127.0.0.1", 12345),
+    })
+
+    with pytest.raises(HTTPException) as exc_info:
+        await project_events(public_token="unknown-project-token", request=request, db=db)
+
+    assert exc_info.value.status_code == 404
+    assert not project_listeners
+
+
+@pytest.mark.asyncio
+async def test_project_sse_accepts_known_public_capability_and_releases_listener(db):
+    from starlette.requests import Request
+    from app.api.endpoints.webhooks import project_events, project_listeners
+    from app.models.project import Project, ProjectStatus
+
+    project_listeners.clear()
+    project = Project(
+        name="Projeto SSE",
+        client_name="Cliente SSE",
+        project_type="Landing Page",
+        value=1000.0,
+        status=ProjectStatus.NEW,
+    )
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": f"/api/v1/webhooks/events/{project.public_token}",
+        "headers": [],
+        "client": ("127.0.0.1", 12345),
+    })
+
+    response = await project_events(public_token=project.public_token, request=request, db=db)
+    assert response.status_code == 200
+    assert project_listeners[project.public_token][0].maxsize == 1
+
+    generator = response.body_iterator
+    assert await generator.__anext__() == ": connected\n\n"
+    await generator.aclose()
+    assert project.public_token not in project_listeners
+
 

@@ -17,6 +17,7 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.services.webhook_service import webhook_service
 from app.core.auth import decode_access_token
+from app.core.limiter import limiter
 from app.core.realtime_logger import log_realtime_event
 from app.core.n8n_auth import authenticate_n8n_request
 
@@ -34,10 +35,44 @@ class LeadChatUpdateRequest(BaseModel):
     lead_id: str
 
 # In-memory queues for Server-Sent Events (SSE)
+# A single pending reload is sufficient. Bounding queues prevents a slow or
+# disconnected browser from turning an inbound webhook into an unbounded-memory
+# producer.
+SSE_QUEUE_MAX_SIZE = 1
+MAX_PROJECT_SSE_LISTENERS_PER_TOKEN = 10
+MAX_GLOBAL_SSE_LISTENERS = 20
+SSE_RESPONSE_HEADERS = {
+    "Cache-Control": "no-cache, no-transform",
+    "X-Accel-Buffering": "no",
+}
+
 project_listeners = {}  # {public_token: [asyncio.Queue]}
 global_listeners = []   # [asyncio.Queue]
 lead_listeners = {}     # {(tenant_id, lead_id): [(user_email, queue)]}
 crm_chat_listeners: List[tuple] = [] # [(user_email, tenant_id, queue)]
+
+
+def _enqueue_sse_event(queue: asyncio.Queue, event: str) -> None:
+    """Queue one reload event without letting a slow listener block webhooks."""
+    try:
+        queue.put_nowait(event)
+    except asyncio.QueueFull:
+        # A pending reload already tells the client to refetch, so duplicates can
+        # safely be discarded until it catches up.
+        pass
+
+
+def _require_authenticated_sse_user(request: Request) -> str:
+    """Authenticate an administrative SSE connection using a bearer access token."""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Token de autenticação obrigatório.")
+
+    payload = decode_access_token(auth_header[7:].strip())
+    if not payload or not payload.get("sub") or payload.get("type") == "refresh":
+        raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado.")
+
+    return str(payload["sub"])
 
 async def notify_lead_listeners(lead_id: str, tenant_id: Optional[str] = None, event: str = "reload"):
     """
@@ -48,7 +83,7 @@ async def notify_lead_listeners(lead_id: str, tenant_id: Optional[str] = None, e
     key = (tenant_id, lead_id)
     if key in lead_listeners:
         for user_email, queue in list(lead_listeners[key]):
-            await queue.put(event)
+            _enqueue_sse_event(queue, event)
 
 async def notify_crm_chat_listeners(
     lead_id: str,
@@ -100,7 +135,7 @@ async def notify_crm_chat_listeners(
     })
     for user_email, listener_tenant_id, queue in list(crm_chat_listeners):
         if listener_tenant_id == tenant_id:
-            await queue.put(payload)
+            _enqueue_sse_event(queue, payload)
 
 @router.get("/events/leads/{lead_id}")
 async def lead_events(
@@ -166,7 +201,7 @@ async def lead_events(
         )
 
     listener_key = (user_tenant_id, lead_id)
-    queue = asyncio.Queue()
+    queue = asyncio.Queue(maxsize=SSE_QUEUE_MAX_SIZE)
     if listener_key not in lead_listeners:
         lead_listeners[listener_key] = []
     lead_listeners[listener_key].append((user_email, queue))
@@ -193,7 +228,7 @@ async def lead_events(
                 if not lead_listeners[listener_key]:
                     del lead_listeners[listener_key]
                     
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_RESPONSE_HEADERS)
 
 @router.get("/events/crm-chats")
 async def crm_chats_events(request: Request):
@@ -215,7 +250,7 @@ async def crm_chats_events(request: Request):
     if not tenant_id:
         raise HTTPException(status_code=403, detail="Acesso negado: token sem tenant_id associado.")
 
-    queue = asyncio.Queue()
+    queue = asyncio.Queue(maxsize=SSE_QUEUE_MAX_SIZE)
     listener_entry = (user_email, tenant_id, queue)
     crm_chat_listeners.append(listener_entry)
     
@@ -242,7 +277,7 @@ async def crm_chats_events(request: Request):
             if listener_entry in crm_chat_listeners:
                 crm_chat_listeners.remove(listener_entry)
                     
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_RESPONSE_HEADERS)
 
 async def _process_update_chat(
     request: Request,
@@ -399,23 +434,34 @@ async def notify_listeners(public_token: str):
     # Notify specific project listeners
     if public_token in project_listeners:
         for queue in list(project_listeners[public_token]):
-            await queue.put("reload")
+            _enqueue_sse_event(queue, "reload")
     # Notify global dashboard listeners
     for queue in list(global_listeners):
-        await queue.put("reload")
+        _enqueue_sse_event(queue, "reload")
 
 @router.get("/events/{public_token}")
-async def project_events(public_token: str, request: Request):
+@limiter.limit("10/minute")
+async def project_events(public_token: str, request: Request, db: Session = Depends(get_db)):
     """
     Função/Método project_events.
 
     O que faz: Processa project_events recebendo os parâmetros (public_token, request) no contexto de o endpoint de API para webhooks.
     Impacto na regra de negócio: Assegura que o fluxo da operação project_events seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
-    queue = asyncio.Queue()
-    if public_token not in project_listeners:
-        project_listeners[public_token] = []
-    project_listeners[public_token].append(queue)
+    # Public project pages intentionally use a capability URL. Validate that the
+    # capability exists before allocating a long-lived listener for it.
+    from app.models.project import Project
+
+    project = db.query(Project.id).filter(Project.public_token == public_token).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Projeto público não encontrado.")
+
+    listeners = project_listeners.setdefault(public_token, [])
+    if len(listeners) >= MAX_PROJECT_SSE_LISTENERS_PER_TOKEN:
+        raise HTTPException(status_code=429, detail="Limite de conexões SSE do projeto atingido.")
+
+    queue = asyncio.Queue(maxsize=SSE_QUEUE_MAX_SIZE)
+    listeners.append(queue)
     
     async def event_generator():
         """
@@ -425,6 +471,7 @@ async def project_events(public_token: str, request: Request):
         Impacto na regra de negócio: Assegura que o fluxo da operação event_generator seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         try:
+            yield ": connected\n\n"
             while True:
                 if await request.is_disconnected():
                     break
@@ -442,9 +489,10 @@ async def project_events(public_token: str, request: Request):
                 if not project_listeners[public_token]:
                     del project_listeners[public_token]
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_RESPONSE_HEADERS)
 
 @router.get("/events")
+@limiter.limit("10/minute")
 async def all_projects_events(request: Request):
     """
     Função/Método all_projects_events.
@@ -452,7 +500,12 @@ async def all_projects_events(request: Request):
     O que faz: Processa all_projects_events recebendo os parâmetros (request) no contexto de o endpoint de API para webhooks.
     Impacto na regra de negócio: Assegura que o fluxo da operação all_projects_events seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
-    queue = asyncio.Queue()
+    _require_authenticated_sse_user(request)
+
+    if len(global_listeners) >= MAX_GLOBAL_SSE_LISTENERS:
+        raise HTTPException(status_code=429, detail="Limite de conexões SSE administrativas atingido.")
+
+    queue = asyncio.Queue(maxsize=SSE_QUEUE_MAX_SIZE)
     global_listeners.append(queue)
 
     async def event_generator():
@@ -463,6 +516,7 @@ async def all_projects_events(request: Request):
         Impacto na regra de negócio: Assegura que o fluxo da operação event_generator seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         try:
+            yield ": connected\n\n"
             while True:
                 if await request.is_disconnected():
                     break
@@ -477,7 +531,7 @@ async def all_projects_events(request: Request):
             if queue in global_listeners:
                 global_listeners.remove(queue)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_RESPONSE_HEADERS)
 
 async def get_payload(request: Request) -> dict:
     """
@@ -976,4 +1030,3 @@ async def n8n_outbound_whatsapp_send(
     )
 
     return JSONResponse(status_code=200, content=res)
-
