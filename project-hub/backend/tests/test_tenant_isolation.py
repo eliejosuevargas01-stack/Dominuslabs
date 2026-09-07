@@ -295,3 +295,64 @@ async def test_sse_lead_events_multi_tenant_isolation():
     assert q_alpha.empty()
     assert q_beta.empty()
 
+
+@pytest.mark.anyio
+async def test_crm_messages_and_inbound_isolation_between_tenants(monkeypatch):
+    """Valida que mensagens recebidas via inbound webhook e recuperadas pelo n8n_service não vazam entre tenants com o mesmo lead_id."""
+    from app.services.n8n_service import (
+        N8NService,
+        MOCK_CONVERSATIONS,
+        MOCK_ACTIVITIES,
+        RAW_LEADS_CACHE
+    )
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "CRM_GET_MESSAGES_WEBHOOK_URL", None)
+    monkeypatch.setattr(settings, "CRM_UPDATE_LEAD_WEBHOOK_URL", None)
+
+    lead_id = "shared_lead_xyz"
+    tenant_a = "tenant_alpha_crm"
+    tenant_b = "tenant_beta_crm"
+
+    # Limpa caches relevantes
+    MOCK_CONVERSATIONS.pop(f"{tenant_a}:{lead_id}", None)
+    MOCK_CONVERSATIONS.pop(f"{tenant_b}:{lead_id}", None)
+    MOCK_CONVERSATIONS.pop(lead_id, None)
+    MOCK_ACTIVITIES.pop(f"{tenant_a}:{lead_id}", None)
+    MOCK_ACTIVITIES.pop(f"{tenant_b}:{lead_id}", None)
+    MOCK_ACTIVITIES.pop(lead_id, None)
+
+    # 1. Simula inbound message recebida para Tenant A
+    key_a = f"{tenant_a}:{lead_id}"
+    MOCK_CONVERSATIONS[key_a] = [{
+        "id": "msg_alpha_1",
+        "sender": "lead",
+        "message": "Mensagem privada do Tenant Alpha",
+        "channel": "whatsapp",
+        "timestamp": "2026-09-06T20:00:00Z"
+    }]
+
+    # 2. Tenant A consulta histórico -> encontra a mensagem
+    msgs_a = await N8NService.get_messages(lead_id, tenant_id=tenant_a)
+    assert len(msgs_a) == 1
+    assert msgs_a[0]["message"] == "Mensagem privada do Tenant Alpha"
+
+    # 3. Tenant B consulta histórico do mesmo lead_id -> lista vazia, isolamento estrito
+    msgs_b = await N8NService.get_messages(lead_id, tenant_id=tenant_b)
+    assert len(msgs_b) == 0
+
+    # 4. Atividades criadas no Tenant A não vazam para Tenant B
+    await N8NService.create_activity(lead_id, "stage_change", {"stage": "proposta"}, tenant_id=tenant_a)
+    acts_a = await N8NService.get_activities(lead_id, tenant_id=tenant_a)
+    acts_b = await N8NService.get_activities(lead_id, tenant_id=tenant_b)
+    assert len(acts_a) == 1
+    assert acts_a[0]["event_type"] == "stage_change"
+    assert len(acts_b) == 0
+
+    # 5. Deleção no Tenant A limpa o cache de A sem afetar B
+    await N8NService.delete_lead(lead_id, tenant_id=tenant_a)
+    assert f"{tenant_a}:{lead_id}" not in MOCK_CONVERSATIONS
+    assert f"{tenant_a}:{lead_id}" not in MOCK_ACTIVITIES
+
+
+

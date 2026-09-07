@@ -67,16 +67,10 @@ def safe_parse_json(val: Any) -> dict:
             pass
     return {}
 
-def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
+def map_n8n_lead(lead: dict, conversations_map: dict = None, tenant_id: Optional[str] = None) -> dict:
     """
     Mapeia os dados do Lead provenientes do webhook N8N para a estrutura do sistema Dominus.
     Regra de Negócio: Mapeia um lead raw para garantir a consistência das entidades para o Frontend CRM e evitar dados corrompidos.
-    """
-    """
-    Função/Método map_n8n_lead.
-
-    O que faz: Processa map_n8n_lead recebendo os parâmetros (lead, conversations_map) no contexto de o serviço de domínio n8n_service.
-    Impacto na regra de negócio: Assegura que o fluxo da operação map_n8n_lead seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
     raw_id = str(lead.get("id") or lead.get("lead_id") or lead.get("_id") or "")
     c_jid = str(lead.get("contact_jid") or lead.get("jid") or "")
@@ -91,10 +85,14 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         lead_id = raw_id
     else:
         lead_id = "unknown_lead"
+
+    resolved_tenant = tenant_id or lead.get("tenant_id")
     if lead_id and lead_id.lower() != "none" and lead_id != "":
-        RAW_LEADS_CACHE[lead_id] = copy.deepcopy(lead)
-        if c_jid and c_jid != lead_id and c_jid not in RAW_LEADS_CACHE:
-            RAW_LEADS_CACHE[c_jid] = copy.deepcopy(lead)
+        if resolved_tenant:
+            cache_k = f"{resolved_tenant}:{lead_id}"
+            RAW_LEADS_CACHE[cache_k] = copy.deepcopy(lead)
+            if c_jid and c_jid != lead_id:
+                RAW_LEADS_CACHE[f"{resolved_tenant}:{c_jid}"] = copy.deepcopy(lead)
 
     raw_payload = lead.get("payload")
     payload_dict = safe_parse_json(raw_payload) if isinstance(raw_payload, str) else (raw_payload or {})
@@ -201,8 +199,9 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         clean_name = unicodedata.normalize('NFKD', company_name).encode('ASCII', 'ignore').decode('ASCII')
         instagram = re.sub(r'[^a-zA-Z0-9_.]', '', clean_name.replace(" ", "").lower())
 
+    conv_k = f"{resolved_tenant}:{lead_id}" if resolved_tenant else None
     has_messages = False
-    if lead_id in MOCK_CONVERSATIONS and len(MOCK_CONVERSATIONS[lead_id]) > 0:
+    if conv_k and conv_k in MOCK_CONVERSATIONS and len(MOCK_CONVERSATIONS[conv_k]) > 0:
         has_messages = True
     elif conversations_map and lead_id in conversations_map and len(conversations_map[lead_id]) > 0:
         has_messages = True
@@ -210,8 +209,8 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
         has_messages = True
 
     mensagem_enviada = False
-    if lead_id in MOCK_CONVERSATIONS:
-        if any(m.get("sender") == "user" for m in MOCK_CONVERSATIONS[lead_id]):
+    if conv_k and conv_k in MOCK_CONVERSATIONS:
+        if any(m.get("sender") == "user" for m in MOCK_CONVERSATIONS[conv_k]):
             mensagem_enviada = True
     if conversations_map and lead_id in conversations_map:
         if any(
@@ -290,6 +289,7 @@ def map_n8n_lead(lead: dict, conversations_map: dict = None) -> dict:
     mapped_lead = {
         **lead,
         "id": lead_id,
+        "tenant_id": resolved_tenant or lead.get("tenant_id"),
         "push_name": person_name,
         "nome": person_name,
         "company_name": person_name,
@@ -425,14 +425,12 @@ def extract_text_content(m: dict) -> str:
 
     return ""
 
-def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
+def map_n8n_message(msg: dict, lead_channel: str = "whatsapp", tenant_id: Optional[str] = None) -> List[dict]:
     """
-    Função/Método map_n8n_message.
-
-    O que faz: Processa map_n8n_message recebendo os parâmetros (msg, lead_channel) no contexto de o serviço de domínio n8n_service.
-    Impacto na regra de negócio: Assegura que o fluxo da operação map_n8n_message seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    Mapeia mensagens individuais ou aninhadas do n8n para a estrutura do Dominus.
     """
     mapped = []
+    resolved_tenant = msg.get("tenant_id") or tenant_id
 
     # 1. Support nested "mensagens" array format from n8n chat history payload
     if "mensagens" in msg and isinstance(msg["mensagens"], list):
@@ -462,6 +460,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
                 "id": msg_id,
                 "message_id": msg_id,
                 "session_id": m.get("session_id") or session_id,
+                "tenant_id": m.get("tenant_id") or resolved_tenant,
                 "contact_jid": contact_jid,
                 "is_from_me": is_from_me,
                 "sender": sender,
@@ -510,7 +509,7 @@ def map_n8n_message(msg: dict, lead_channel: str = "whatsapp") -> List[dict]:
             "id": msg_id,
             "message_id": msg_id,
             "session_id": msg.get("session_id"),
-            "tenant_id": msg.get("tenant_id") or "admin",
+            "tenant_id": resolved_tenant,
             "contact_jid": msg.get("contact_jid") or msg.get("jid"),
             "is_from_me": is_from_me,
             "sender": sender,
@@ -1197,7 +1196,7 @@ class N8NService:
 
         if not url:
             logger.info("CRM_GET_LEADS_WEBHOOK_URL not configured. Returning mock leads.")
-            mapped_mock = [map_n8n_lead({**l, "tenant_id": tenant_id}) for l in MOCK_LEADS]
+            mapped_mock = [map_n8n_lead({**l, "tenant_id": tenant_id}, tenant_id=tenant_id) for l in MOCK_LEADS]
             mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
             mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
             N8NService._leads_cache[tenant_id] = {
@@ -1227,7 +1226,7 @@ class N8NService:
             except Exception as e:
                 logger.error(f"Error calling POST leads webhook: {e}. Falling back to mock data.", exc_info=True)
         if not raw_leads:
-            mapped_mock = [map_n8n_lead({**l, "tenant_id": tenant_id}) for l in MOCK_LEADS]
+            mapped_mock = [map_n8n_lead({**l, "tenant_id": tenant_id}, tenant_id=tenant_id) for l in MOCK_LEADS]
             mapped_mock.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
             mapped_mock.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
             for m in mapped_mock:
@@ -1242,7 +1241,7 @@ class N8NService:
             return mapped_mock
 
         raw_leads = unpack_n8n_raw_leads(raw_leads)
-        mapped_leads = [map_n8n_lead(l) for l in raw_leads if isinstance(l, dict)]
+        mapped_leads = [map_n8n_lead(l, tenant_id=tenant_id) for l in raw_leads if isinstance(l, dict)]
         mapped_leads.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
         mapped_leads.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
         
@@ -1291,7 +1290,7 @@ class N8NService:
                     raw_convs = data.get("conversas") or data.get("conversations") or data.get("leads") or [data]
                 
                 unpacked = unpack_n8n_raw_leads(raw_convs)
-                mapped = [map_n8n_lead(l) for l in unpacked if isinstance(l, dict)]
+                mapped = [map_n8n_lead(l, tenant_id=tenant_id) for l in unpacked if isinstance(l, dict)]
                 
                 # Step 2: Append conversation inbox state to cached contact profile & compute last_message_preview
                 for m in mapped:
@@ -1325,63 +1324,6 @@ class N8NService:
         return await N8NService.get_messages(lead_id, user_id=user_id, tenant_id=tenant_id)
 
     @staticmethod
-    async def get_chat_history_response(lead_id: str) -> List[dict]:
-        """
-        Retorna o histórico formatado diretamente da resposta do n8n para action=get_chat_history.
-        """
-        messages = await N8NService.get_messages(lead_id)
-        target_jid = lead_id
-        target_session = "default"
-        if "___" in lead_id:
-            parts = lead_id.split("___", 1)
-            target_jid = parts[0]
-            target_session = parts[1]
-
-        formatted = []
-        for m in messages:
-            if not isinstance(m, dict):
-                continue
-            is_me = m.get("is_from_me") is True or m.get("sender") == "user" or m.get("fromMe") is True
-            msg_text = m.get("content") or m.get("message") or m.get("text") or ""
-            ts_val = m.get("timestamp") or m.get("message_timestamp") or m.get("created_at") or int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())
-            ts_iso = ts_val if isinstance(ts_val, str) and "T" in ts_val else (datetime.utcfromtimestamp(float(ts_val)).isoformat() + "Z")
-
-            formatted.append({
-                "id": m.get("id") or m.get("message_id") or f"msg_{ts_val}",
-                "message_id": m.get("message_id") or m.get("id") or f"msg_{ts_val}",
-                "contact_jid": target_jid,
-                "session_id": target_session,
-                "is_from_me": is_me,
-                "sender": "user" if is_me else "lead",
-                "chat_kind": m.get("chat_kind") or m.get("kind") or "private",
-                "message_type": m.get("message_type") or m.get("type") or "conversation",
-                "content": msg_text,
-                "message": msg_text,
-                "status": m.get("status") or "received",
-                "message_timestamp": ts_iso,
-                "timestamp": ts_iso,
-                "created_at": ts_iso,
-                "media_url": m.get("media_url") or m.get("image_url") or m.get("url") or m.get("file_url") or None,
-                "participant": m.get("participant") or m.get("participant_jid") or None,
-                "participant_pushname": m.get("participant_pushname") or m.get("participant_push_name") or m.get("push_name") or None,
-                "quoted_message_id": m.get("quoted_message_id") or m.get("quoted_id") or m.get("quotedId") or None,
-                "quoted_participant": m.get("quoted_participant") or m.get("quoted_sender") or m.get("quotedParticipant") or None,
-                "quoted_text": m.get("quoted_text") or m.get("quoted_content") or m.get("quotedText") or None,
-                "reaction_text": m.get("reaction_text") or m.get("reactionText") or None,
-                "reaction_target_message_id": m.get("reaction_target_message_id") or m.get("reactionTargetMessageId") or None,
-                "reaction_target_sender_jid": m.get("reaction_target_sender_jid") or m.get("reactionTargetSenderJid") or None,
-            })
-
-        return [
-            {
-                "contact_jid": target_jid,
-                "session_id": target_session,
-                "messages": formatted,
-                "mensagens": formatted
-            }
-        ]
-
-    @staticmethod
     async def update_lead(lead_id: str, payload: dict, current_user: Optional[str] = None, tenant_id: Optional[str] = None) -> dict:
         """
         Atualização de lead com Zero-Trust e isolamento estrito por tenant_id.
@@ -1390,12 +1332,10 @@ class N8NService:
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
 
         cache_k = f"{tenant_id}:{lead_id}" if tenant_id else str(lead_id)
-        # Try to find in cache
+        # Try to find in cache strictly partitioned by tenant
         raw_lead = None
         if cache_k in RAW_LEADS_CACHE:
             raw_lead = copy.deepcopy(RAW_LEADS_CACHE[cache_k])
-        elif lead_id in RAW_LEADS_CACHE:
-            raw_lead = copy.deepcopy(RAW_LEADS_CACHE[lead_id])
 
         if not raw_lead:
             # Fallback template with Portuguese keys if not in cache
@@ -1480,7 +1420,7 @@ class N8NService:
         if not url:
             logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead updated locally in-memory.")
             updated_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
-            mapped = map_n8n_lead(updated_lead) if updated_lead else map_n8n_lead({"id": lead_id, **payload, "tenant_id": tenant_id})
+            mapped = map_n8n_lead(updated_lead, tenant_id=tenant_id) if updated_lead else map_n8n_lead({"id": lead_id, **payload, "tenant_id": tenant_id}, tenant_id=tenant_id)
             if current_user:
                 mapped["alterado_por"] = current_user
                 mapped["updated_by"] = current_user
@@ -1502,13 +1442,13 @@ class N8NService:
                 if isinstance(res_data, dict) and res_data.get("_encrypted") is True:
                     res_data = decrypt_payload(res_data)
                 if isinstance(res_data, dict) and ("company_name" in res_data or "nome_empresa" in res_data or "empresa_nome" in res_data):
-                    mapped = map_n8n_lead(res_data)
+                    mapped = map_n8n_lead(res_data, tenant_id=tenant_id)
                 else:
                     fallback_lead = next((l for l in MOCK_LEADS if l["id"] == lead_id), None)
                     if fallback_lead:
-                        mapped = map_n8n_lead(fallback_lead)
+                        mapped = map_n8n_lead(fallback_lead, tenant_id=tenant_id)
                     else:
-                        mapped = map_n8n_lead({"id": lead_id, **payload, "tenant_id": tenant_id})
+                        mapped = map_n8n_lead({"id": lead_id, **payload, "tenant_id": tenant_id}, tenant_id=tenant_id)
                 if current_user:
                     mapped["alterado_por"] = current_user
                     mapped["updated_by"] = current_user
@@ -1525,18 +1465,15 @@ class N8NService:
         N8NService.invalidate_leads_cache(tenant_id=tenant_id)
         url = settings.CRM_UPDATE_LEAD_WEBHOOK_URL
 
-        # Remove from mock lists (MOCK_LEADS, RAW_LEADS_CACHE, MOCK_CONVERSATIONS, MOCK_ACTIVITIES)
+        # Remove from mock lists strictly partitioned by tenant
         for i, lead in enumerate(MOCK_LEADS):
-            if str(lead.get("id")) == str(lead_id):
+            if str(lead.get("id")) == str(lead_id) and (not tenant_id or lead.get("tenant_id") == tenant_id):
                 MOCK_LEADS.pop(i)
                 break
         cache_k = f"{tenant_id}:{lead_id}" if tenant_id else str(lead_id)
         RAW_LEADS_CACHE.pop(cache_k, None)
-        RAW_LEADS_CACHE.pop(lead_id, None)
         MOCK_CONVERSATIONS.pop(cache_k, None)
-        MOCK_CONVERSATIONS.pop(lead_id, None)
         MOCK_ACTIVITIES.pop(cache_k, None)
-        MOCK_ACTIVITIES.pop(lead_id, None)
 
         if not url:
             logger.info("CRM_UPDATE_LEAD_WEBHOOK_URL not configured. Lead deleted locally in-memory.")
@@ -1572,7 +1509,7 @@ class N8NService:
         Impacto na regra de negócio: Assegura que o fluxo da operação get_messages seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
         """
         cache_k = f"{tenant_id}:{lead_id}" if tenant_id else str(lead_id)
-        all_msgs = list(MOCK_CONVERSATIONS.get(cache_k, []) or MOCK_CONVERSATIONS.get(lead_id, []))
+        all_msgs = list(MOCK_CONVERSATIONS.get(cache_k, []))
         url = settings.CRM_GET_MESSAGES_WEBHOOK_URL
 
         target_id_str = str(lead_id).strip()
@@ -1583,9 +1520,9 @@ class N8NService:
             target_jid = parts[0]
             target_session = parts[1]
 
-        cached_lead = RAW_LEADS_CACHE.get(cache_k) or RAW_LEADS_CACHE.get(lead_id)
+        cached_lead = RAW_LEADS_CACHE.get(cache_k)
         if not cached_lead:
-            cached_lead = RAW_LEADS_CACHE.get(f"{tenant_id}:{target_jid}" if tenant_id else target_jid) or RAW_LEADS_CACHE.get(target_jid)
+            cached_lead = RAW_LEADS_CACHE.get(f"{tenant_id}:{target_jid}" if tenant_id else target_jid)
         if cached_lead and "mensagens" in cached_lead and isinstance(cached_lead["mensagens"], list):
             embedded_msgs = []
             seen_keys = set()
@@ -1593,7 +1530,7 @@ class N8NService:
             for m in cached_lead["mensagens"]:
                 if not isinstance(m, dict):
                     continue
-                mapped_list = map_n8n_message(m, lead_channel)
+                mapped_list = map_n8n_message(m, lead_channel, tenant_id=tenant_id)
                 for mapped_msg in mapped_list:
                     msg_id = str(mapped_msg.get("id") or mapped_msg.get("message_id") or "")
                     content = str(mapped_msg.get("content") or mapped_msg.get("message") or "").strip()
@@ -1664,7 +1601,7 @@ class N8NService:
                 seen_keys = set()
                 for m in raw_msgs:
                     if isinstance(m, dict):
-                        mapped_list = map_n8n_message(m, lead_channel)
+                        mapped_list = map_n8n_message(m, lead_channel, tenant_id=tenant_id)
                         for mapped_msg in mapped_list:
                             msg_session = str(mapped_msg.get("session_id") or m.get("session_id") or "")
                             if target_session and msg_session:
@@ -1736,169 +1673,6 @@ class N8NService:
         return None
 
     @staticmethod
-    async def send_whatsapp_message(payload: dict, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> dict:
-        """
-        Função/Método send_whatsapp_message.
-
-        O que faz: Processa send_whatsapp_message recebendo os parâmetros (payload, user_id, tenant_id) no contexto de o serviço de domínio n8n_service.
-        Impacto na regra de negócio: Assegura que o fluxo da operação send_whatsapp_message seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-        """
-        url = settings.CRM_SEND_WHATSAPP_WEBHOOK_URL
-        lead_id = payload.get("lead_id")
-        message_text = payload.get("message")
-        phone = payload.get("phone", "")
-
-        # Clean phone number to digits-only for standard whatsapp api gateways
-        cleaned_phone = "".join(c for c in phone if c.isdigit())
-
-        # Resolve lid from cache or lead list if present
-        lid = None
-        if lead_id in RAW_LEADS_CACHE:
-            cached = RAW_LEADS_CACHE[lead_id]
-            lid = cached.get("lid") or cached.get("LID") or cached.get("Lid")
-        if not lid:
-            try:
-                leads = await N8NService.get_leads(user_id=user_id, tenant_id=tenant_id)
-                lead_obj = next((l for l in leads if str(l.get("id")) == str(lead_id)), None)
-                if lead_obj:
-                    lid = lead_obj.get("lid")
-                    if not lid and lead_id in RAW_LEADS_CACHE:
-                        cached = RAW_LEADS_CACHE[lead_id]
-                        lid = cached.get("lid") or cached.get("LID") or cached.get("Lid")
-            except Exception:
-                pass
-
-        # Helper to update local mock lists upon successful send
-        def update_local_mock_state(msg_id: str, text: str, timestamp: str):
-            """
-            Função/Método update_local_mock_state.
-
-            O que faz: Atualização e modificação de informações para update_local_mock_state recebendo os parâmetros (msg_id, text, timestamp) no contexto de o serviço de domínio n8n_service.
-            Impacto na regra de negócio: Assegura que o fluxo da operação update_local_mock_state seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-            """
-            N8NService.invalidate_leads_cache(tenant_id=tenant_id)
-            msg = {
-                "id": msg_id,
-                "sender": "user",
-                "message": text,
-                "channel": "whatsapp",
-                "timestamp": timestamp
-            }
-            if lead_id not in MOCK_CONVERSATIONS:
-                MOCK_CONVERSATIONS[lead_id] = []
-            MOCK_CONVERSATIONS[lead_id].append(msg)
-
-            # Update last interaction timestamp on lead
-            for lead in MOCK_LEADS:
-                if lead["id"] == lead_id:
-                    lead["last_interaction"] = timestamp
-                    break
-
-            # Log event message_sent
-            act = {
-                "lead_id": lead_id,
-                "event_type": "message_sent",
-                "timestamp": timestamp,
-                "metadata": {"message": text, "channel": "whatsapp"}
-            }
-            if lead_id not in MOCK_ACTIVITIES:
-                MOCK_ACTIVITIES[lead_id] = []
-            MOCK_ACTIVITIES[lead_id].append(act)
-            return msg
-
-        default_id = f"msg_{int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())}"
-        default_ts = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
-        if not url:
-            logger.info("CRM_SEND_WHATSAPP_WEBHOOK_URL not configured. Message logged locally in-memory.")
-            return update_local_mock_state(default_id, message_text, default_ts)
-
-        # Match Evolution API payload structure as well as direct params
-        outgoing_payload = {
-            "action": "send_message",
-            "jid": cleaned_phone,
-            "text": message_text,
-            "number": cleaned_phone,
-            "body": message_text,
-            "phone": phone,
-            "message": message_text,
-            "lead_id": lead_id
-        }
-        if lid:
-            outgoing_payload["lid"] = lid
-        if payload.get("updated_by"):
-            outgoing_payload["updated_by"] = payload["updated_by"]
-            outgoing_payload["alterado_por"] = payload["updated_by"]
-        if payload.get("session_id"):
-            outgoing_payload["session_id"] = payload["session_id"]
-            public_url = getattr(settings, "WHATSAPP_PUBLIC_URL", "https://dominuslabs.online").rstrip("/")
-            if not public_url or public_url in ("http://localhost:3000", "https://localhost:3000"):
-                public_url = "https://dominuslabs.online"
-            outgoing_payload["whatsapp_api_url"] = public_url
-            outgoing_payload["whatsapp_send_url"] = f"{public_url}/api/sessions/{payload['session_id']}/messages/send"
-
-        outgoing_payload = N8NService._enrich_payload(outgoing_payload, user_id=user_id or payload.get("updated_by") or payload.get("user_id"), tenant_id=tenant_id or payload.get("tenant_id"))
-        encrypted_payload = encrypt_payload(outgoing_payload, "n8n")
-
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            try:
-                response = await client.post(url, json=encrypted_payload, timeout=30.0)
-                
-                # Check for the specific authentication error format returned by n8n
-                is_auth_error = False
-                try:
-                    if response.status_code == 401:
-                        is_auth_error = True
-                    else:
-                        resp_text = response.text
-                        if any(kw in resp_text.lower() for kw in ["401", "unauthorized", "invalid_token", "token verification failed", "missing token"]):
-                            is_auth_error = True
-                except Exception:
-                    pass
-                if is_auth_error:
-                    print("[M2M-AUTH-FLOW] >>> Detectado erro de autenticação n8n no corpo da resposta.", flush=True)
-                    raise ValueError("AUTH_ERROR_N8N_BAD_REQUEST")
-                if response.status_code >= 400:
-                    # Try to extract detailed error message from response body
-                    error_msg = f"HTTP {response.status_code}"
-                    try:
-                        resp_data = response.json()
-                        extracted_msg = N8NService._extract_n8n_error_message(resp_data)
-                        if extracted_msg:
-                            error_msg = extracted_msg
-                        elif isinstance(resp_data, dict):
-                            error_msg = resp_data.get("message") or resp_data.get("error") or response.text
-                    except Exception:
-                        error_msg = response.text or error_msg
-                    raise ValueError(error_msg)
-                
-                # Success path
-                N8NService.invalidate_leads_cache(tenant_id=tenant_id)
-                msg_id = default_id
-                msg_text = message_text
-                msg_ts = default_ts
-                try:
-                    res_json = clean_n8n_response(response.json())
-                    msg_data = res_json.get("message") if isinstance(res_json, dict) else None
-                    if isinstance(msg_data, dict):
-                        msg_id = msg_data.get("id") or msg_id
-                        msg_text = msg_data.get("text") or msg_data.get("message") or msg_text
-                        ts_val = msg_data.get("timestamp")
-                        if ts_val:
-                            try:
-                                msg_ts = datetime.fromtimestamp(float(ts_val)).isoformat() + "Z"
-                            except Exception:
-                                pass
-                except Exception:
-                    pass
-                
-                return update_local_mock_state(msg_id, msg_text, msg_ts)
-            except ValueError:
-                raise
-            except Exception as e:
-                logger.error(f"Error calling SEND whatsapp message webhook: {e}")
-                raise ValueError(f"Falha de conexão com a API do WhatsApp: {str(e)}")
-
-    @staticmethod
     async def create_activity(lead_id: str, event_type: str, metadata: dict, tenant_id: Optional[str] = None) -> dict:
         """
         Criação de novos registros e processamento para create_activity isolado por tenant_id.
@@ -1922,6 +1696,6 @@ class N8NService:
         Recuperação de atividades cadastrados para get_activities isolado por tenant_id.
         """
         cache_k = f"{tenant_id}:{lead_id}" if tenant_id else str(lead_id)
-        return MOCK_ACTIVITIES.get(cache_k, MOCK_ACTIVITIES.get(lead_id, []))
+        return MOCK_ACTIVITIES.get(cache_k, [])
 
 n8n_service = N8NService()

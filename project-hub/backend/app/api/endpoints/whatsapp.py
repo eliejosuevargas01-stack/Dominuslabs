@@ -95,6 +95,7 @@ async def list_sessions(
 
             for cand in candidates:
                 existing = db.query(WhatsappAccount).filter(
+                    WhatsappAccount.tenant_id == tenant_id,
                     WhatsappAccount.session_id == cand
                 ).first()
                 if not existing:
@@ -174,6 +175,7 @@ async def create_session(
 
     for cand in candidates:
         existing_acc = db.query(WhatsappAccount).filter(
+            WhatsappAccount.tenant_id == tenant_id,
             WhatsappAccount.session_id == cand
         ).first()
         if not existing_acc:

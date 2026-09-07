@@ -395,3 +395,41 @@ def test_crm_set_session_preference_rejects_unowned_session(client, db):
     assert res.status_code == 404
     assert "não encontrada" in res.json()["detail"]
 
+
+def test_resolve_owned_whatsapp_session_same_name_different_tenants(db):
+    """
+    Garante que dois tenants diferentes podem ter uma sessão com o mesmo session_id ('principal'),
+    e cada usuário resolve sua própria sessão sem colisão ou erro 403.
+    Garante também que se User C (tenant_c) tentar acessar 'principal', recebe 403 (pois pertence a outro tenant),
+    e se tentar acessar 'inexistente', recebe 404.
+    """
+    from app.services.whatsapp_service import resolve_owned_whatsapp_session
+
+    user_a = User(email="user_a_sess@tenant-a.com", hashed_password="pw", tenant_id="tenant_a_wa", role="custom")
+    user_b = User(email="user_b_sess@tenant-b.com", hashed_password="pw", tenant_id="tenant_b_wa", role="custom")
+    user_c = User(email="user_c_sess@tenant-c.com", hashed_password="pw", tenant_id="tenant_c_wa", role="custom")
+    db.add_all([user_a, user_b, user_c])
+    db.commit()
+
+    acc_a = WhatsappAccount(user_id=user_a.id, tenant_id="tenant_a_wa", session_id="principal")
+    acc_b = WhatsappAccount(user_id=user_b.id, tenant_id="tenant_b_wa", session_id="principal")
+    db.add_all([acc_a, acc_b])
+    db.commit()
+
+    # User A resolves "principal" -> ok
+    assert resolve_owned_whatsapp_session(user_a, "principal", db) == "principal"
+
+    # User B resolves "principal" -> ok
+    assert resolve_owned_whatsapp_session(user_b, "principal", db) == "principal"
+
+    # User C tries to resolve "principal" -> 403 Forbidden (cross-tenant)
+    with pytest.raises(HTTPException) as exc_403:
+        resolve_owned_whatsapp_session(user_c, "principal", db)
+    assert exc_403.value.status_code == 403
+
+    # User C tries to resolve unknown session -> 404 Not Found
+    with pytest.raises(HTTPException) as exc_404:
+        resolve_owned_whatsapp_session(user_c, "sessao_inexistente", db)
+    assert exc_404.value.status_code == 404
+
+

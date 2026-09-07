@@ -752,13 +752,14 @@ async def whatsapp_inbound_webhook(request: Request):
         "channel": "whatsapp",
         "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
     }
-    if lead_id not in MOCK_CONVERSATIONS:
-        MOCK_CONVERSATIONS[lead_id] = []
-    MOCK_CONVERSATIONS[lead_id].append(new_msg)
+    cache_k = f"{tenant_id}:{lead_id}"
+    if cache_k not in MOCK_CONVERSATIONS:
+        MOCK_CONVERSATIONS[cache_k] = []
+    MOCK_CONVERSATIONS[cache_k].append(new_msg)
 
     # Update last interaction timestamp on lead
     for lead in MOCK_LEADS:
-        if lead["id"] == lead_id:
+        if lead["id"] == lead_id and (lead.get("tenant_id") == tenant_id or not lead.get("tenant_id")):
             lead["last_interaction"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
             if sender == "lead":
                 lead["status"] = "RESPONDED"
@@ -804,13 +805,14 @@ async def instagram_inbound_webhook(request: Request):
         "channel": "instagram",
         "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
     }
-    if lead_id not in MOCK_CONVERSATIONS:
-        MOCK_CONVERSATIONS[lead_id] = []
-    MOCK_CONVERSATIONS[lead_id].append(new_msg)
+    cache_k = f"{tenant_id}:{lead_id}"
+    if cache_k not in MOCK_CONVERSATIONS:
+        MOCK_CONVERSATIONS[cache_k] = []
+    MOCK_CONVERSATIONS[cache_k].append(new_msg)
 
     # Update last interaction timestamp on lead
     for lead in MOCK_LEADS:
-        if lead["id"] == lead_id:
+        if lead["id"] == lead_id and (lead.get("tenant_id") == tenant_id or not lead.get("tenant_id")):
             lead["last_interaction"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
             if sender == "lead":
                 lead["status"] = "RESPONDED"

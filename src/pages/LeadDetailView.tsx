@@ -17,6 +17,7 @@ import {
   API_BASE, fetchWithAuth,
   fetchWhatsappSessions, fetchSessionPreference, setSessionPreference
 } from '../services/api';
+import { SSEClient } from '../services/sseClient';
 
 const InstagramIcon = ({ size = 16, ...props }: React.SVGProps<SVGSVGElement> & { size?: number }) => (
   <svg
@@ -176,47 +177,23 @@ export default function LeadDetailView() {
 
   useEffect(() => {
     if (!id) return;
-    let eventSource: EventSource | null = null;
-    let reconnectTimeout: any = null;
 
-    const connectSSE = () => {
-      const token = localStorage.getItem("admin_token");
-      if (!token) return;
-
-      const sseUrl = `${API_BASE}/webhooks/events/leads/${id}?token=${encodeURIComponent(token)}`;
-      eventSource = new EventSource(sseUrl);
-
-      eventSource.onmessage = (event) => {
-        if (event.data === 'reload') {
+    const sseClient = new SSEClient({
+      url: `${API_BASE}/webhooks/events/leads/${id}`,
+      onMessage: (data) => {
+        if (data === 'reload' || (typeof data === 'string' && data.includes('reload'))) {
           fetchLeadMessages(false);
         }
-      };
-
-      eventSource.onerror = (err) => {
-        console.warn('Lead SSE disconnected, retrying with fresh token in 5s...', err);
-        if (eventSource) {
-          eventSource.close();
-        }
-        reconnectTimeout = setTimeout(connectSSE, 5000);
-      };
-    };
-
-    connectSSE();
-
-    const handleTokenRefreshed = () => {
-      if (eventSource) {
-        eventSource.close();
+      },
+      onError: (err) => {
+        console.warn('Lead SSE disconnected or error:', err);
       }
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      connectSSE();
-    };
+    });
 
-    window.addEventListener("token_refreshed", handleTokenRefreshed);
+    sseClient.connect();
 
     return () => {
-      window.removeEventListener("token_refreshed", handleTokenRefreshed);
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (eventSource) eventSource.close();
+      sseClient.disconnect();
     };
   }, [id]);
 

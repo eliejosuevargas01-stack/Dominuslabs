@@ -53,25 +53,37 @@ def resolve_owned_whatsapp_session(user: User, session_id: Optional[str], db: Se
         clean_target.lower().replace(" ", "-")
     }
 
-    # 1. Prova positiva estrita via WhatsappAccount vinculado ao banco para o tenant
-    accounts = db.query(WhatsappAccount).filter(
+    # 1. Procura primeiro por vínculo positivo estrito no PRÓPRIO tenant do usuário
+    owned = db.query(WhatsappAccount).filter(
+        WhatsappAccount.tenant_id == user_tenant,
         WhatsappAccount.session_id.in_(variants)
-    ).all()
-    if accounts:
-        for account in accounts:
-            if account.tenant_id != user_tenant:
-                logger.warning(
-                    f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Conta '{account.session_id}' pertence ao tenant '{account.tenant_id}', "
-                    f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Acesso negado: a sessão informada pertence a outro tenant."
-                )
-        matching = next((a.session_id for a in accounts if a.tenant_id == user_tenant and a.session_id == target_session), None)
-        return matching or accounts[0].session_id
+    ).first()
 
-    # 2. Nenhuma prova de vínculo positivo em WhatsappAccount encontrada no tenant -> Rejeitar como desconhecida (fail-closed)
+    if owned:
+        # Prioriza correspondência exata se existir
+        exact = db.query(WhatsappAccount).filter(
+            WhatsappAccount.tenant_id == user_tenant,
+            WhatsappAccount.session_id == target_session
+        ).first()
+        return exact.session_id if exact else owned.session_id
+
+    # 2. Se não pertence ao tenant do usuário, verifica se pertence a outro tenant para diferenciar 403 de 404
+    foreign = db.query(WhatsappAccount).filter(
+        WhatsappAccount.tenant_id != user_tenant,
+        WhatsappAccount.session_id.in_(variants)
+    ).first()
+
+    if foreign:
+        logger.warning(
+            f"[WA-OWNERSHIP] Tentativa de acesso cross-tenant! Conta '{foreign.session_id}' pertence ao tenant '{foreign.tenant_id}', "
+            f"mas foi solicitada pelo tenant '{user_tenant}' (user={user.email}). Bloqueando antes da Whats API."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: a sessão informada pertence a outro tenant."
+        )
+
+    # 3. Nenhuma prova de vínculo encontrada em qualquer tenant -> Rejeitar como desconhecida (fail-closed)
     logger.warning(
         f"[WA-OWNERSHIP] Sessão '{target_session}' desconhecida para o tenant '{user_tenant}' (user={user.email})."
     )

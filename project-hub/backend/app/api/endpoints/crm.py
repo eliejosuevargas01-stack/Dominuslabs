@@ -50,7 +50,7 @@ async def read_leads(
 
     from app.services.n8n_service import map_n8n_lead
     raw_contacts = await get_contacts_action(db=db, current_user=current_user)
-    return [map_n8n_lead(c) for c in raw_contacts if isinstance(c, dict)]
+    return [map_n8n_lead(c, tenant_id=tenant_id) for c in raw_contacts if isinstance(c, dict)]
 
 @router.get("/leads/{lead_id}", response_model=Lead)
 async def read_lead(
@@ -541,10 +541,10 @@ async def get_dashboard_metrics(
     negociacoes = sum(1 for l in leads if l.get("status") == "Negociando/Objeção")
     clientes_fechados = sum(1 for l in leads if l.get("status") == "Fechado (Win)")
     
-    # Calculate sent/received from our conversations scoped by tenant
+    # Calculate sent/received from our conversations scoped strictly by tenant
     tenant_msgs_list = [
         msgs for k, msgs in MOCK_CONVERSATIONS.items()
-        if k.startswith(f"{tenant_id}:") or (":" not in k and tenant_id == "admin")
+        if k.startswith(f"{tenant_id}:")
     ]
     mensagens_enviadas = sum(sum(1 for m in msgs if m.get("sender") == "user") for msgs in tenant_msgs_list)
     mensagens_recebidas = sum(sum(1 for m in msgs if m.get("sender") == "lead") for msgs in tenant_msgs_list)
@@ -554,7 +554,7 @@ async def get_dashboard_metrics(
     for lead in leads:
         l_id = lead.get("id")
         cache_k = f"{tenant_id}:{l_id}"
-        conv = MOCK_CONVERSATIONS.get(cache_k) or MOCK_CONVERSATIONS.get(l_id)
+        conv = MOCK_CONVERSATIONS.get(cache_k)
         if lead.get("status") == "RESPONDED":
             respostas_pendentes += 1
         elif conv:
