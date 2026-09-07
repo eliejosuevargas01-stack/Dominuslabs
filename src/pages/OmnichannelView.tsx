@@ -1124,6 +1124,7 @@ function playOutgoingSound() {
   const selectedChatRef = useRef<any>(null);
   const knownMessageIds = useRef<Set<string>>(new Set());
   const lastSoundPlayedAt = useRef<number>(0);
+  const [realtimeReloadVersion, setRealtimeReloadVersion] = useState(0);
   useEffect(() => {
     selectedChatRef.current = selectedChat;
   }, [selectedChat]);
@@ -1160,6 +1161,12 @@ function playOutgoingSound() {
 
           for (const parsed of rawEvents) {
             if (!parsed) continue;
+
+            if (parsed.action === 'reload') {
+              void loadConversations();
+              setRealtimeReloadVersion(version => version + 1);
+              continue;
+            }
 
             if (parsed.action === 'session_disconnected') {
               setDisconnectedSessionInfo({
@@ -1594,7 +1601,7 @@ function playOutgoingSound() {
         })
         .finally(() => setLoadingHistory(false));
     }
-  }, [selectedChat?.contact_jid, selectedChat?.session_id]);
+  }, [selectedChat?.contact_jid, selectedChat?.session_id, realtimeReloadVersion]);
 
   // Fetch Action 3: get_chat_history when chat selected
   const handleSelectChat = (chat: any) => {

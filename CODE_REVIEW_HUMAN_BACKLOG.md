@@ -14,3 +14,10 @@ Itens e melhorias não-bloqueantes apontados pelo Code Review (Dominus-MCP) para
 - **Evidência:** As rotas processam payloads externos sem validar uma assinatura criptográfica do provedor.
 - **Ação sugerida:** Definir segredos por integração e validar HMAC (por exemplo, `X-Hub-Signature-256` do GitHub) antes de processar ou persistir o payload.
 - **Prioridade:** Follow-up humano não bloqueante; requer provisionamento seguro dos segredos dos provedores.
+
+## 3. Restabelecer a asserção interna do webhook GitHub
+- **Fonte:** Code Review Dominus-MCP do commit `57624bbf`.
+- **Arquivo:** `project-hub/backend/tests/test_webhooks.py` (teste `test_github_webhook`).
+- **Evidência:** A asserção `mock_process.assert_called_once()` permanece comentada após um problema anterior de injeção de mock.
+- **Ação sugerida:** Corrigir o ponto de patch do mock e reativar a asserção para validar o efeito interno, não apenas a resposta HTTP.
+- **Prioridade:** Follow-up humano não bloqueante; não há defeito funcional confirmado na rota.

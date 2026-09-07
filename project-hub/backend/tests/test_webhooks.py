@@ -646,3 +646,135 @@ async def test_project_sse_accepts_known_public_capability_and_releases_listener
     assert project.public_token not in project_listeners
 
 
+def test_crm_chat_queue_overflow_coalesces_to_a_resync_event():
+    import asyncio
+    import json
+    from app.api.endpoints.webhooks import CRM_CHAT_RESYNC_EVENT, _enqueue_crm_chat_event
+
+    queue = asyncio.Queue(maxsize=1)
+    _enqueue_crm_chat_event(queue, '{"action":"new_message","messages":[{"id":"first"}]}')
+    _enqueue_crm_chat_event(queue, '{"action":"new_message","messages":[{"id":"second"}]}')
+
+    assert queue.get_nowait() == CRM_CHAT_RESYNC_EVENT
+    assert json.loads(CRM_CHAT_RESYNC_EVENT)["action"] == "reload"
+
+
+def test_waha_session_status_does_not_block_on_a_full_crm_sse_queue(client):
+    import asyncio
+    import json
+    import time
+    from app.api.endpoints.webhooks import CRM_CHAT_RESYNC_EVENT, crm_chat_listeners
+
+    queue = asyncio.Queue(maxsize=1)
+    queue.put_nowait("pending-event")
+    listener_entry = ("operator@dominus.online", "tenant-a", queue)
+    crm_chat_listeners.append(listener_entry)
+
+    payload = {
+        "session": "session-a",
+        "event": "session.status",
+        "tenant_id": "tenant-a",
+        "payload": {"status": "DISCONNECTED"},
+    }
+    raw_body = json.dumps(payload).encode()
+    timestamp = str(int(time.time()))
+    event_id = "evt-waha-full-queue"
+    headers = {
+        "Content-Type": "application/json",
+        "X-N8N-Signature": make_canonical_hmac(raw_body, timestamp, event_id),
+        "X-N8N-Timestamp": timestamp,
+        "X-N8N-Event-Id": event_id,
+    }
+
+    try:
+        response = client.post("/api/v1/webhooks/waha/session-status", content=raw_body, headers=headers)
+        assert response.status_code == 200
+        assert queue.get_nowait() == CRM_CHAT_RESYNC_EVENT
+    finally:
+        if listener_entry in crm_chat_listeners:
+            crm_chat_listeners.remove(listener_entry)
+
+
+@pytest.mark.asyncio
+async def test_crm_chat_sse_limits_connections_per_authenticated_user(monkeypatch):
+    from fastapi import HTTPException
+    from starlette.requests import Request
+    import app.api.endpoints.webhooks as webhooks
+    from app.core.auth import create_access_token
+
+    webhooks.crm_chat_listeners.clear()
+    monkeypatch.setattr(webhooks, "MAX_CRM_CHAT_SSE_LISTENERS_PER_USER", 1)
+    token = create_access_token({"sub": "operator@dominus.online", "tenant_id": "tenant-a", "role": "operator"})
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/api/v1/webhooks/events/crm-chats",
+        "headers": [(b"authorization", f"Bearer {token}".encode())],
+        "client": ("127.0.0.1", 12345),
+    })
+
+    response = await webhooks.crm_chats_events(request=request)
+    try:
+        assert await response.body_iterator.__anext__() == ": connected\n\n"
+        with pytest.raises(HTTPException) as exc_info:
+            await webhooks.crm_chats_events(request=request)
+        assert exc_info.value.status_code == 429
+    finally:
+        await response.body_iterator.aclose()
+
+
+@pytest.mark.asyncio
+async def test_lead_sse_limits_connections_per_authenticated_user(db, monkeypatch):
+    from fastapi import HTTPException
+    from starlette.requests import Request
+    import app.api.endpoints.webhooks as webhooks
+    from app.core.auth import create_access_token
+    from app.services.n8n_service import RAW_LEADS_CACHE
+
+    webhooks.lead_listeners.clear()
+    RAW_LEADS_CACHE["tenant-a:lead-a"] = {"id": "lead-a", "tenant_id": "tenant-a"}
+    monkeypatch.setattr(webhooks, "MAX_LEAD_SSE_LISTENERS_PER_USER", 1)
+    token = create_access_token({"sub": "operator@dominus.online", "tenant_id": "tenant-a", "role": "operator"})
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/api/v1/webhooks/events/leads/lead-a",
+        "headers": [(b"authorization", f"Bearer {token}".encode())],
+        "client": ("127.0.0.1", 12345),
+    })
+
+    response = await webhooks.lead_events(lead_id="lead-a", request=request, db=db)
+    try:
+        assert await response.body_iterator.__anext__() == ": connected\n\n"
+        with pytest.raises(HTTPException) as exc_info:
+            await webhooks.lead_events(lead_id="lead-a", request=request, db=db)
+        assert exc_info.value.status_code == 429
+    finally:
+        await response.body_iterator.aclose()
+
+
+@pytest.mark.asyncio
+async def test_rejected_lead_sse_connection_does_not_allocate_a_listener_key(db, monkeypatch):
+    from fastapi import HTTPException
+    from starlette.requests import Request
+    import app.api.endpoints.webhooks as webhooks
+    from app.core.auth import create_access_token
+    from app.services.n8n_service import RAW_LEADS_CACHE
+
+    webhooks.lead_listeners.clear()
+    RAW_LEADS_CACHE["tenant-a:lead-unallocated"] = {"id": "lead-unallocated", "tenant_id": "tenant-a"}
+    monkeypatch.setattr(webhooks, "MAX_LEAD_SSE_LISTENERS", 0)
+    token = create_access_token({"sub": "operator@dominus.online", "tenant_id": "tenant-a", "role": "operator"})
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/api/v1/webhooks/events/leads/lead-unallocated",
+        "headers": [(b"authorization", f"Bearer {token}".encode())],
+        "client": ("127.0.0.1", 12345),
+    })
+
+    with pytest.raises(HTTPException) as exc_info:
+        await webhooks.lead_events(lead_id="lead-unallocated", request=request, db=db)
+
+    assert exc_info.value.status_code == 429
+    assert ("tenant-a", "lead-unallocated") not in webhooks.lead_listeners

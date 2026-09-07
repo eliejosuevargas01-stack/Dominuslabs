@@ -37,10 +37,18 @@ class LeadChatUpdateRequest(BaseModel):
 # In-memory queues for Server-Sent Events (SSE)
 # A single pending reload is sufficient. Bounding queues prevents a slow or
 # disconnected browser from turning an inbound webhook into an unbounded-memory
-# producer.
-SSE_QUEUE_MAX_SIZE = 1
+# producer. CRM chat payloads carry message data, so they receive a separate
+# burst buffer and a resync signal when that buffer is saturated.
+SSE_RELOAD_QUEUE_MAX_SIZE = 1
+CRM_CHAT_QUEUE_MAX_SIZE = 100
 MAX_PROJECT_SSE_LISTENERS_PER_TOKEN = 10
 MAX_GLOBAL_SSE_LISTENERS = 20
+MAX_LEAD_SSE_LISTENERS = 100
+MAX_LEAD_SSE_LISTENERS_PER_USER = 10
+MAX_LEAD_SSE_LISTENERS_PER_LEAD = 5
+MAX_CRM_CHAT_SSE_LISTENERS = 100
+MAX_CRM_CHAT_SSE_LISTENERS_PER_TENANT = 20
+MAX_CRM_CHAT_SSE_LISTENERS_PER_USER = 3
 SSE_RESPONSE_HEADERS = {
     "Cache-Control": "no-cache, no-transform",
     "X-Accel-Buffering": "no",
@@ -59,6 +67,33 @@ def _enqueue_sse_event(queue: asyncio.Queue, event: str) -> None:
     except asyncio.QueueFull:
         # A pending reload already tells the client to refetch, so duplicates can
         # safely be discarded until it catches up.
+        pass
+
+
+CRM_CHAT_RESYNC_EVENT = json.dumps({"action": "reload", "event": "reload"})
+
+
+def _enqueue_crm_chat_event(queue: asyncio.Queue, event: str) -> None:
+    """Publish chat data without blocking webhooks and request a safe resync on overflow."""
+    try:
+        queue.put_nowait(event)
+        return
+    except asyncio.QueueFull:
+        pass
+
+    # A full data queue means that delivering a partial tail would leave the UI
+    # inconsistent. Coalesce the stale burst into one explicit resync signal.
+    while True:
+        try:
+            queue.get_nowait()
+        except asyncio.QueueEmpty:
+            break
+
+    try:
+        queue.put_nowait(CRM_CHAT_RESYNC_EVENT)
+    except asyncio.QueueFull:
+        # The loop above is synchronous, but fail closed if a non-standard queue
+        # implementation reports full again rather than blocking a webhook.
         pass
 
 
@@ -135,9 +170,10 @@ async def notify_crm_chat_listeners(
     })
     for user_email, listener_tenant_id, queue in list(crm_chat_listeners):
         if listener_tenant_id == tenant_id:
-            _enqueue_sse_event(queue, payload)
+            _enqueue_crm_chat_event(queue, payload)
 
 @router.get("/events/leads/{lead_id}")
+@limiter.limit("10/minute")
 async def lead_events(
     lead_id: str,
     request: Request,
@@ -201,10 +237,26 @@ async def lead_events(
         )
 
     listener_key = (user_tenant_id, lead_id)
-    queue = asyncio.Queue(maxsize=SSE_QUEUE_MAX_SIZE)
+    active_lead_listener_count = sum(len(entries) for entries in lead_listeners.values())
+    active_user_lead_listener_count = sum(
+        1
+        for entries in lead_listeners.values()
+        for listener_email, _ in entries
+        if listener_email == user_email
+    )
+    listeners = lead_listeners.get(listener_key, [])
+
+    if active_lead_listener_count >= MAX_LEAD_SSE_LISTENERS:
+        raise HTTPException(status_code=429, detail="Limite global de conexões SSE de leads atingido.")
+    if active_user_lead_listener_count >= MAX_LEAD_SSE_LISTENERS_PER_USER:
+        raise HTTPException(status_code=429, detail="Limite de conexões SSE de leads por usuário atingido.")
+    if len(listeners) >= MAX_LEAD_SSE_LISTENERS_PER_LEAD:
+        raise HTTPException(status_code=429, detail="Limite de conexões SSE deste lead atingido.")
+
+    queue = asyncio.Queue(maxsize=SSE_RELOAD_QUEUE_MAX_SIZE)
     if listener_key not in lead_listeners:
-        lead_listeners[listener_key] = []
-    lead_listeners[listener_key].append((user_email, queue))
+        lead_listeners[listener_key] = listeners
+    listeners.append((user_email, queue))
     
     async def event_generator():
         """
@@ -231,6 +283,7 @@ async def lead_events(
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_RESPONSE_HEADERS)
 
 @router.get("/events/crm-chats")
+@limiter.limit("10/minute")
 async def crm_chats_events(request: Request):
     """
     Processa crm_chats_events com autenticação JWT obrigatória via cabeçalho Authorization: Bearer e isolamento multi-tenant. Rejeita requisições anônimas.
@@ -250,7 +303,22 @@ async def crm_chats_events(request: Request):
     if not tenant_id:
         raise HTTPException(status_code=403, detail="Acesso negado: token sem tenant_id associado.")
 
-    queue = asyncio.Queue(maxsize=SSE_QUEUE_MAX_SIZE)
+    active_tenant_chat_listener_count = sum(
+        1 for _, listener_tenant_id, _ in crm_chat_listeners if listener_tenant_id == tenant_id
+    )
+    active_user_chat_listener_count = sum(
+        1
+        for listener_email, listener_tenant_id, _ in crm_chat_listeners
+        if listener_email == user_email and listener_tenant_id == tenant_id
+    )
+    if len(crm_chat_listeners) >= MAX_CRM_CHAT_SSE_LISTENERS:
+        raise HTTPException(status_code=429, detail="Limite global de conexões SSE do CRM atingido.")
+    if active_tenant_chat_listener_count >= MAX_CRM_CHAT_SSE_LISTENERS_PER_TENANT:
+        raise HTTPException(status_code=429, detail="Limite de conexões SSE do CRM por tenant atingido.")
+    if active_user_chat_listener_count >= MAX_CRM_CHAT_SSE_LISTENERS_PER_USER:
+        raise HTTPException(status_code=429, detail="Limite de conexões SSE do CRM por usuário atingido.")
+
+    queue = asyncio.Queue(maxsize=CRM_CHAT_QUEUE_MAX_SIZE)
     listener_entry = (user_email, tenant_id, queue)
     crm_chat_listeners.append(listener_entry)
     
@@ -460,7 +528,7 @@ async def project_events(public_token: str, request: Request, db: Session = Depe
     if len(listeners) >= MAX_PROJECT_SSE_LISTENERS_PER_TOKEN:
         raise HTTPException(status_code=429, detail="Limite de conexões SSE do projeto atingido.")
 
-    queue = asyncio.Queue(maxsize=SSE_QUEUE_MAX_SIZE)
+    queue = asyncio.Queue(maxsize=SSE_RELOAD_QUEUE_MAX_SIZE)
     listeners.append(queue)
     
     async def event_generator():
@@ -505,7 +573,7 @@ async def all_projects_events(request: Request):
     if len(global_listeners) >= MAX_GLOBAL_SSE_LISTENERS:
         raise HTTPException(status_code=429, detail="Limite de conexões SSE administrativas atingido.")
 
-    queue = asyncio.Queue(maxsize=SSE_QUEUE_MAX_SIZE)
+    queue = asyncio.Queue(maxsize=SSE_RELOAD_QUEUE_MAX_SIZE)
     global_listeners.append(queue)
 
     async def event_generator():
@@ -937,7 +1005,7 @@ async def waha_session_status_webhook(request: Request):
         })
         for user_email, listener_tenant_id, queue in list(crm_chat_listeners):
             if listener_tenant_id == event_tenant_id:
-                await queue.put(msg)
+                _enqueue_crm_chat_event(queue, msg)
 
     return {"status": "success"}
 
