@@ -1,6 +1,10 @@
 import pytest
+import uuid
 from fastapi.testclient import TestClient
 from app.main import app
+from app.core.auth import create_access_token
+from app.core.config import settings
+from app.models.product import Product
 
 client = TestClient(app)
 
@@ -163,3 +167,35 @@ def test_delete_product_not_found(mock_auth, mocker):
     
     response = client.delete("/api/v1/products/prod-1")
     assert response.status_code == 404
+
+
+def test_create_product_persists_native_uuid(client: TestClient, db):
+    from app.repositories.user_repo import user_repo
+
+    admin_email = settings.ADMIN_USERNAME
+    if "@" not in admin_email:
+        admin_email = f"{settings.ADMIN_USERNAME}@dominuslabs.online"
+    user = user_repo.get_by_email(db, admin_email)
+    token = create_access_token({
+        "sub": user.email,
+        "role": user.role,
+        "permissions": user.permissions,
+        "tenant_id": user.tenant_id,
+    })
+
+    response = client.post(
+        "/api/v1/products",
+        json={
+            "name": "Produto persistido",
+            "price": 19.9,
+            "available": True,
+            "stock": 2,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    product_id = uuid.UUID(response.json()["id"])
+    product = db.query(Product).filter(Product.id == product_id).one()
+    assert product.nome == "Produto persistido"
+    assert product.tenant_id == user.tenant_id

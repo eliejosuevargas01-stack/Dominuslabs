@@ -86,7 +86,7 @@ async def create_product(
     tenant_id = await get_tenant_id_for_user(user, db)
     
     new_product = Product(
-        id=str(uuid.uuid4()),
+        id=uuid.uuid4(),
         tenant_id=tenant_id,
         nome=product_in.name,
         codigo_slug=generate_slug(product_in.name),

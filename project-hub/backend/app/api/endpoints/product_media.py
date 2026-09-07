@@ -13,8 +13,9 @@ from datetime import datetime, timezone
 
 from app.core.database import get_db
 from app.core.config import settings
-from app.core.auth import check_crm_permission
+from app.core.auth import check_product_update_permission, resolve_tenant_from_user
 from app.models.user import User
+from app.models.product import Product
 from app.models.product_media import ProductMedia
 from app.schemas.product_media import ProductMediaResponse
 
@@ -22,11 +23,11 @@ router = APIRouter()
 
 @router.post("/", response_model=ProductMediaResponse)
 def upload_product_media(
-    product_id: str = Form(...),
+    product_id: uuid.UUID = Form(...),
     tenant_id: str = Form("default"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(check_crm_permission)
+    current_user: str = Depends(check_product_update_permission)
 ):
     """
     Função/Método upload_product_media.
@@ -34,6 +35,18 @@ def upload_product_media(
     O que faz: Processa upload_product_media recebendo os parâmetros (product_id, tenant_id, file, db, current_user) no contexto de o endpoint de API para product_media.
     Impacto na regra de negócio: Assegura que o fluxo da operação upload_product_media seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
     """
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuário não encontrado")
+
+    authorized_tenant_id = resolve_tenant_from_user(user)
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.tenant_id == authorized_tenant_id,
+    ).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+
     file_type = file.content_type or "application/octet-stream"
     if file_type.startswith("image/"):
         media_type = "image"
@@ -56,15 +69,24 @@ def upload_product_media(
         shutil.copyfileobj(file.file, buffer)
 
     db_media = ProductMedia(
-        tenant_id=tenant_id,
+        tenant_id=authorized_tenant_id,
         product_id=product_id,
         media_type=media_type,
         media_url=relative_url,
         created_at=datetime.now(timezone.utc).replace(tzinfo=None)
     )
-    
+
+    product.imagem_url = relative_url
     db.add(db_media)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
+        raise
     db.refresh(db_media)
 
     return db_media

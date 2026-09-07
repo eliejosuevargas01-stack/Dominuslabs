@@ -1,13 +1,18 @@
+import uuid
+
 import pytest
-from unittest.mock import patch, mock_open, MagicMock
 from fastapi.testclient import TestClient
+
+from app.core.auth import create_access_token
 from app.core.config import settings
-from app.core.auth import create_access_token, check_crm_permission
+from app.models.product import Product
 from app.models.product_media import ProductMedia
+
 
 @pytest.fixture
 def auth_headers(db):
     from app.repositories.user_repo import user_repo
+
     admin_email = settings.ADMIN_USERNAME
     if "@" not in admin_email:
         admin_email = f"{settings.ADMIN_USERNAME}@dominuslabs.online"
@@ -18,89 +23,155 @@ def auth_headers(db):
         "user_id": str(user.id),
         "role": user.role,
         "permissions": user.permissions,
-        "tenant_id": user.tenant_id
+        "tenant_id": user.tenant_id,
     })
     return {"Authorization": f"Bearer {token}"}
 
-def override_get_db(mock_db_session):
-    def _override():
-        yield mock_db_session
-    return _override
 
-@patch("app.api.endpoints.product_media.os.makedirs")
-@patch("app.api.endpoints.product_media.shutil.copyfileobj")
-def test_upload_product_media_image(mock_copy, mock_makedirs, client: TestClient, auth_headers: dict):
-    # Mock database session
-    mock_db = MagicMock()
-    # When db.refresh is called, it assigns id = 1
-    def mock_refresh(obj):
-        obj.id = 1
-    mock_db.refresh.side_effect = mock_refresh
+def create_product(db, tenant_id: str | None = None) -> Product:
+    product = Product(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id or settings.ADMIN_TENANT_ID,
+        codigo_slug=f"produto-{uuid.uuid4()}",
+        nome="Produto de teste",
+        preco=10.0,
+        disponivel=True,
+        estoque=1,
+    )
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    return product
 
-    from app.main import app
-    from app.core.database import get_db
-    app.dependency_overrides[get_db] = override_get_db(mock_db)
-    app.dependency_overrides[check_crm_permission] = lambda: True
 
-    file_content = b"fake image data"
-    files = {"file": ("product.png", file_content, "image/png")}
-    data = {"product_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", "tenant_id": "test_tenant"}
+def test_upload_product_media_image(
+    client: TestClient,
+    db,
+    auth_headers: dict,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
+    product = create_product(db)
 
-    with patch("builtins.open", mock_open()):
-        response = client.post(f"{settings.API_V1_STR}/product-media/", files=files, data=data, headers=auth_headers)
-
-    app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    res_data = response.json()
-    assert res_data["product_id"] == "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
-    assert res_data["media_type"] == "image"
-    assert "media_url" in res_data
-
-    mock_makedirs.assert_called_once()
-    mock_copy.assert_called_once()
-    mock_db.add.assert_called_once()
-    mock_db.commit.assert_called_once()
-    mock_db.refresh.assert_called_once()
-
-@patch("app.api.endpoints.product_media.os.makedirs")
-@patch("app.api.endpoints.product_media.shutil.copyfileobj")
-def test_upload_product_media_video(mock_copy, mock_makedirs, client: TestClient, auth_headers: dict):
-    mock_db = MagicMock()
-    def mock_refresh(obj):
-        obj.id = 2
-    mock_db.refresh.side_effect = mock_refresh
-
-    from app.main import app
-    from app.core.database import get_db
-    app.dependency_overrides[get_db] = override_get_db(mock_db)
-    app.dependency_overrides[check_crm_permission] = lambda: True
-
-    file_content = b"fake video data"
-    files = {"file": ("product.mp4", file_content, "video/mp4")}
-    data = {"product_id": "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22", "tenant_id": "test_tenant"}
-
-    with patch("builtins.open", mock_open()):
-        response = client.post(f"{settings.API_V1_STR}/product-media/", files=files, data=data, headers=auth_headers)
-
-    app.dependency_overrides.clear()
+    response = client.post(
+        f"{settings.API_V1_STR}/product-media/",
+        files={"file": ("product.png", b"fake image data", "image/png")},
+        data={"product_id": str(product.id), "tenant_id": "untrusted-tenant"},
+        headers=auth_headers,
+    )
 
     assert response.status_code == 200
-    res_data = response.json()
-    assert res_data["product_id"] == "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22"
-    assert res_data["media_type"] == "video"
+    data = response.json()
+    assert data["product_id"] == str(product.id)
+    assert data["tenant_id"] == settings.ADMIN_TENANT_ID
+    assert data["media_type"] == "image"
+    assert data["media_url"].startswith("/uploads/products/prod_")
 
-    mock_makedirs.assert_called_once()
-    mock_copy.assert_called_once()
-    mock_db.add.assert_called_once()
-    mock_db.commit.assert_called_once()
+    media = db.query(ProductMedia).filter(ProductMedia.product_id == product.id).one()
+    db.refresh(product)
+    assert media.media_url == data["media_url"]
+    assert product.imagem_url == data["media_url"]
+    assert (tmp_path / "products" / data["media_url"].rsplit("/", 1)[-1]).is_file()
 
-def test_upload_product_media_invalid_type(client: TestClient, auth_headers: dict):
-    file_content = b"fake pdf data"
-    files = {"file": ("product.pdf", file_content, "application/pdf")}
-    data = {"product_id": "c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a33", "tenant_id": "test_tenant"}
 
-    response = client.post(f"{settings.API_V1_STR}/product-media/", files=files, data=data, headers=auth_headers)
+def test_upload_product_media_video(
+    client: TestClient,
+    db,
+    auth_headers: dict,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
+    product = create_product(db)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/product-media/",
+        files={"file": ("product.mp4", b"fake video data", "video/mp4")},
+        data={"product_id": str(product.id)},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["media_type"] == "video"
+
+
+def test_upload_product_media_invalid_type(
+    client: TestClient,
+    db,
+    auth_headers: dict,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
+    product = create_product(db)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/product-media/",
+        files={"file": ("product.pdf", b"fake pdf data", "application/pdf")},
+        data={"product_id": str(product.id)},
+        headers=auth_headers,
+    )
 
     assert response.status_code == 400
     assert "supported" in response.json()["detail"].lower()
+
+
+def test_upload_product_media_rejects_temporary_product_id(
+    client: TestClient,
+    auth_headers: dict,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
+
+    response = client.post(
+        f"{settings.API_V1_STR}/product-media/",
+        files={"file": ("product.png", b"fake image data", "image/png")},
+        data={"product_id": "item-123456"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    assert not (tmp_path / "products").exists()
+
+
+def test_upload_product_media_requires_existing_product(
+    client: TestClient,
+    auth_headers: dict,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
+
+    response = client.post(
+        f"{settings.API_V1_STR}/product-media/",
+        files={"file": ("product.png", b"fake image data", "image/png")},
+        data={"product_id": str(uuid.uuid4())},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Produto não encontrado"
+    assert not (tmp_path / "products").exists()
+
+
+def test_upload_product_media_rejects_cross_tenant_product(
+    client: TestClient,
+    db,
+    auth_headers: dict,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
+    foreign_product = create_product(db, tenant_id="foreign-tenant")
+
+    response = client.post(
+        f"{settings.API_V1_STR}/product-media/",
+        files={"file": ("product.png", b"fake image data", "image/png")},
+        data={"product_id": str(foreign_product.id), "tenant_id": "foreign-tenant"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404
+    assert not (tmp_path / "products").exists()

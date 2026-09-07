@@ -97,6 +97,10 @@ export default function CompanySettingsView() {
     description: '',
     available: true, stock: 0
   });
+  const [savingProduct, setSavingProduct] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [pendingMediaFile, setPendingMediaFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -148,23 +152,61 @@ export default function CompanySettingsView() {
       return;
     }
 
+    setSavingProduct(true);
     try {
+      const tenantId = getUserTenant();
+      let savedProduct: MenuItem;
+      let savedIndex: number;
+
       if (editingIndex !== null) {
-        const prodId = products[editingIndex].id!;
-        const updated = await updateProduct(prodId, newItem, getUserTenant());
-        const newProds = [...products];
-        newProds[editingIndex] = updated;
-        setProducts(newProds);
+        const prodId = products[editingIndex]?.id;
+        if (!prodId) {
+          throw new Error('Produto inválido: identificador não encontrado.');
+        }
+        savedProduct = await updateProduct(prodId, newItem, tenantId);
+        savedIndex = editingIndex;
       } else {
-        const created = await createProduct(newItem, getUserTenant());
-        setProducts([...products, created]);
+        const { id: _discardedId, ...productPayload } = newItem;
+        savedProduct = await createProduct(productPayload, tenantId);
+        savedIndex = products.length;
       }
+
+      if (pendingMediaFile) {
+        if (!savedProduct.id) {
+          throw new Error('Produto salvo sem um identificador válido para a mídia.');
+        }
+
+        setUploadingMedia(true);
+        try {
+          const media = await uploadProductMedia(pendingMediaFile, savedProduct.id, tenantId);
+          savedProduct = { ...savedProduct, image_url: media.media_url };
+          setPendingMediaFile(null);
+        } catch (error: unknown) {
+          const productsAfterSave = [...products];
+          productsAfterSave[savedIndex] = savedProduct;
+          setProducts(productsAfterSave);
+          setNewItem(savedProduct);
+          setEditingIndex(savedIndex);
+          const message = error instanceof Error ? error.message : 'Falha ao enviar mídia do produto.';
+          toast.error(`Produto salvo, mas a mídia não foi enviada: ${message}`);
+          return;
+        } finally {
+          setUploadingMedia(false);
+        }
+      }
+
+      const newProds = [...products];
+      newProds[savedIndex] = savedProduct;
+      setProducts(newProds);
       setIsMenuModalOpen(false);
       setNewItem({ name: '', category: '', price: 0, description: '', available: true, stock: 0 });
       setEditingIndex(null);
+      setPendingMediaFile(null);
       toast.success('Item salvo no banco de produtos!');
-    } catch (e: any) {
-      toast.error(e.message || 'Erro ao salvar produto');
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Erro ao salvar produto');
+    } finally {
+      setSavingProduct(false);
     }
   };
 
@@ -187,55 +229,28 @@ export default function CompanySettingsView() {
     const item = products[index];
     setNewItem(item);
     setEditingIndex(index);
+    setPendingMediaFile(null);
     setIsMenuModalOpen(true);
   };
 
-  const [uploadingMedia, setUploadingMedia] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  
-  const handleDrop = async (e: React.DragEvent<HTMLLabelElement>) => {
+  const selectProductMedia = (file: File) => {
+    setPendingMediaFile(file);
+    toast.info('Mídia selecionada. O envio será concluído ao salvar o produto.');
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
-    
-    const productId = editingIndex !== null ? products[editingIndex].id || `item-${Date.now()}` : `item-${Date.now()}`;
-    if (editingIndex === null && !newItem.id) setNewItem(prev => ({ ...prev, id: productId }));
-
-    setUploadingMedia(true);
-    try {
-      const result = await uploadProductMedia(file, productId);
-      setNewItem(prev => ({ ...prev, image_url: result.media_url }));
-      toast.success('Mídia enviada com sucesso!');
-    } catch (err: any) {
-      toast.error('Erro ao enviar mídia.');
-    } finally {
-      setUploadingMedia(false);
-    }
+    selectProductMedia(file);
   };
 
-  const handleProductMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleProductMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    // Use an existing item ID or create a temp one for uploading
-    const productId = editingIndex !== null ? products[editingIndex].id || `item-${Date.now()}` : `item-${Date.now()}`;
-    
-    // Ensure the newItem has the ID so it matches the upload
-    if (editingIndex === null && !newItem.id) {
-      setNewItem(prev => ({ ...prev, id: productId }));
-    }
-
-    setUploadingMedia(true);
-    try {
-      const result = await uploadProductMedia(file, productId);
-      setNewItem(prev => ({ ...prev, image_url: result.media_url }));
-      toast.success('Mídia enviada com sucesso!');
-    } catch (err: any) {
-      toast.error('Erro ao enviar mídia.');
-    } finally {
-      setUploadingMedia(false);
-    }
+    selectProductMedia(file);
+    e.target.value = '';
   };
 
   // Promotion Modal State
@@ -808,6 +823,7 @@ export default function CompanySettingsView() {
                 onClick={() => {
                   setNewItem({ name: '', category: '', price: 0, description: '', available: true, stock: 0 });
                   setEditingIndex(null);
+                  setPendingMediaFile(null);
                   setIsMenuModalOpen(true);
                 }}
                 className="inline-flex items-center gap-1.5 bg-purple-100 hover:bg-purple-200 text-purple-800 font-semibold text-xs px-3.5 py-2 rounded-xl transition-all cursor-pointer self-start sm:self-auto"
@@ -1096,8 +1112,12 @@ export default function CompanySettingsView() {
                       <div className="bg-white p-3 rounded-full shadow-sm mb-3">
                         <UploadCloud className="w-6 h-6 text-purple-600" />
                       </div>
-                      <span className="text-zinc-700 font-bold mb-1 text-sm">Clique ou arraste um arquivo</span>
-                      <span className="text-zinc-400 text-xs">Suporta JPG, PNG e MP4 (máx. 10MB)</span>
+                      <span className="text-zinc-700 font-bold mb-1 text-sm">
+                        {pendingMediaFile ? pendingMediaFile.name : 'Clique ou arraste um arquivo'}
+                      </span>
+                      <span className="text-zinc-400 text-xs">
+                        {pendingMediaFile ? 'A mídia será enviada ao homologar a solução' : 'Suporta JPG, PNG e MP4 (máx. 10MB)'}
+                      </span>
                     </>
                   )}
                   <input
@@ -1105,7 +1125,7 @@ export default function CompanySettingsView() {
                     accept="image/*,video/*"
                     className="hidden"
                     onChange={handleProductMediaUpload}
-                    disabled={uploadingMedia}
+                    disabled={uploadingMedia || savingProduct}
                   />
                 </label>
               </div>
@@ -1134,16 +1154,22 @@ export default function CompanySettingsView() {
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
-                onClick={() => setIsMenuModalOpen(false)}
+                onClick={() => {
+                  setIsMenuModalOpen(false);
+                  setPendingMediaFile(null);
+                }}
+                disabled={savingProduct}
                 className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-500 hover:bg-zinc-100 cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSaveMenuItem}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-sm cursor-pointer"
+                disabled={savingProduct}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Homologar Solução
+                {savingProduct && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {savingProduct ? 'Salvando...' : 'Homologar Solução'}
               </button>
             </div>
           </div>
