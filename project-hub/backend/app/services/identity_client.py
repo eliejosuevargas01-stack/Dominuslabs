@@ -67,15 +67,24 @@ class IdentityClient:
         Apenas parâmetros de autorização legítimos são transmitidos.
         Não envia role=admin, client_id confiável, user_id, whatsapp_token, etc.
         """
-        if not tenant_id:
+        if (
+            not isinstance(tenant_id, str)
+            or not tenant_id.strip()
+            or tenant_id != tenant_id.strip()
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="tenant_id é obrigatório para solicitação de token M2M."
             )
-        if not scope:
+        if not isinstance(scope, str) or not scope.strip() or scope != scope.strip():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="scope explícito é obrigatório para solicitação de token M2M."
+            )
+        if not isinstance(aud, str) or not aud.strip() or aud != aud.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="aud é obrigatório para solicitação de token M2M."
             )
 
         cache_key = (tenant_id, scope, aud)
@@ -152,7 +161,7 @@ class IdentityClient:
 
         for attempt in range(max_retries):
             try:
-                async with get_async_client(timeout=10.0, service_name="identity") as client:
+                async with get_async_client(timeout=10.0) as client:
                     resp = await client.post(url, json=encrypted_body, headers=headers)
 
                 if resp.status_code in (502, 503, 504, 408) and attempt < max_retries - 1:
@@ -180,10 +189,23 @@ class IdentityClient:
                             detail="Falha ao decriptografar credencial emitida pelo Identity Worker."
                         )
 
+                    if not isinstance(data, dict):
+                        logger.error("[IDENTITY-CLIENT] Resposta decriptada do IDPW não é um objeto.")
+                        raise HTTPException(
+                            status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail="Identity Worker retornou credencial incompleta."
+                        )
+
                     token = data.get("access_token")
-                    expires_in = data.get("expires_in", 300)
-                    if not token:
-                        logger.error("[IDENTITY-CLIENT] Resposta do IDPW sem access_token.")
+                    expires_in = data.get("expires_in")
+                    if (
+                        not isinstance(token, str)
+                        or not token.strip()
+                        or not isinstance(expires_in, int)
+                        or isinstance(expires_in, bool)
+                        or expires_in <= 0
+                    ):
+                        logger.error("[IDENTITY-CLIENT] Resposta do IDPW sem access_token/expires_in válidos.")
                         raise HTTPException(
                             status_code=status.HTTP_502_BAD_GATEWAY,
                             detail="Identity Worker retornou credencial incompleta."

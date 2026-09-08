@@ -28,3 +28,17 @@ Itens e melhorias não-bloqueantes apontados pelo Code Review (Dominus-MCP) para
 - **Evidência:** A função possui `import json` local embora o módulo já seja importado no topo do arquivo.
 - **Ação sugerida:** Remover o import local em uma limpeza futura, mantendo a importação de módulo única.
 - **Prioridade:** Follow-up humano não bloqueante; sem impacto funcional ou de segurança.
+
+## 5. Invalidar cache M2M quando o proxy de mídia receber 401/403
+- **Fonte:** revisão local de segurança do GOAL de limpeza legada.
+- **Arquivo:** `project-hub/backend/app/services/whatsapp_client.py` (`get_session_media`).
+- **Evidência:** o caminho de mídia fecha a resposta e devolve erro, mas não chama `identity_client.invalidate_token()` como o executor HTTP comum faz após rejeição `401` ou `403`.
+- **Ação sugerida:** alinhar o caminho de streaming à política de invalidação em um GOAL funcional próprio, com teste de regressão específico.
+- **Prioridade:** P2 preexistente e fora do escopo desta limpeza; não bloqueia este GOAL.
+
+## 6. Sanitizar corpo textual de erros do IDPW antes de registrar ou propagar
+- **Fonte:** revisão local de segurança do GOAL de limpeza legada.
+- **Arquivo:** `project-hub/backend/app/services/identity_client.py` (tratamento de `401`/`403`).
+- **Evidência:** `resp.text` é registrado e incluído no detalhe devolvido; um IDPW divergente poderia ecoar material sensível no corpo de erro.
+- **Ação sugerida:** substituir o corpo bruto por uma mensagem sanitizada e manter apenas status/request ID em logs, coordenando a alteração de contrato em tarefa própria.
+- **Prioridade:** P2 de defesa em profundidade, preexistente e fora do escopo desta limpeza; não bloqueia este GOAL.

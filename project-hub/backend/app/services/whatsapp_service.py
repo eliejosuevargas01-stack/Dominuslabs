@@ -14,7 +14,6 @@ from fastapi import HTTPException, status
 
 from app.models.user import User
 from app.models.whatsapp_account import WhatsappAccount
-from app.services.identity_client import identity_client
 from app.services.whatsapp_client import whatsapp_client
 
 logger = logging.getLogger("whatsapp_service")
@@ -105,27 +104,6 @@ async def get_tenant_id_for_user(user: User, db: Session) -> str:
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Acesso negado: usuário não possui tenant_id configurado."
     )
-
-
-async def get_oauth_token(user: User, db: Session, scope: str = "whatsapp:sessions:read") -> str:
-    """
-    Obtém o JWT M2M do Identity Provider (IDPW) para o tenant do usuário via IdentityClient.
-    """
-    tenant_id = await get_tenant_id_for_user(user, db)
-    return await identity_client.get_token(tenant_id=tenant_id, scope=scope, aud="whatsapp-api")
-
-
-async def check_token_validity(token: str) -> bool:
-    """
-    Verifica se o token M2M/JWT é válido.
-    """
-    return identity_client.is_token_still_valid(token)
-
-
-def invalidate_token(user_id: int) -> None:
-    """Função legada para compatibilidade de chamadas."""
-    logger.info(f"[WA-SERVICE] invalidate_token chamado para user_id={user_id}")
-
 
 
 async def send_whatsapp_message(

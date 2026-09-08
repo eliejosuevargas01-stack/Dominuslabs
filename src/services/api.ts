@@ -111,9 +111,6 @@ export async function refreshAuthTokenSilently(): Promise<string | null> {
   return activeRefreshPromise;
 }
 
-// Alias para compatibilidade retroativa
-export const refreshAuthTokenPreventively = refreshAuthTokenSilently;
-
 export function getStoredAccessToken(): string | null {
   const token = localStorage.getItem("admin_token");
   if (!token || token === "null" || token === "undefined") return null;
@@ -591,29 +588,6 @@ export async function deleteWhatsappSession(sessionId: string) {
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
     throw new Error(errData.detail || "Falha ao excluir sessão.");
-  }
-  return res.json();
-}
-
-export async function loginInstagramProxy(payload: { username: string; password: string }) {
-  const res = await fetchWithAuth(`${API_BASE}/whatsapp/instagram/login`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.detail || "Falha ao conectar Instagram.");
-  }
-  return res.json();
-}
-
-export async function logoutInstagramProxy(username: string) {
-  const res = await fetchWithAuth(`${API_BASE}/whatsapp/instagram/sessions/${username}/logout`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.detail || "Falha ao desconectar Instagram.");
   }
   return res.json();
 }

@@ -10,18 +10,16 @@ Princípios:
 5. O browser nunca conhece credenciais M2M ou o endereço interno da Whats API.
 """
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.database import get_db
 from app.core.auth import get_current_user, check_crm_permission, decode_access_token
 from app.models.user import User
 from app.models.whatsapp_account import WhatsappAccount
 from app.services.whatsapp_client import whatsapp_client
-from app.services.identity_client import identity_client
 from app.services.whatsapp_service import resolve_owned_whatsapp_session, get_tenant_id_for_user
 
 logger = logging.getLogger("whatsapp_endpoints")
@@ -528,48 +526,3 @@ async def get_session_media(
             "Vary": "Authorization"
         }
     )
-
-
-# =============================================================================
-# Instagram Proxy
-# =============================================================================
-
-@router.post("/instagram/login")
-async def login_instagram_proxy(
-    payload: Dict[str, Any] = Body(...),
-    db: Session = Depends(get_db),
-    current_user: str = Depends(check_crm_permission)
-):
-    """Autentica conta Instagram."""
-    user = db.query(User).filter(User.email == current_user).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-
-    username = payload.get("username")
-    password = payload.get("password")
-    if not username or not password:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Usuário e senha do Instagram são obrigatórios."
-        )
-
-    tenant_id = await get_tenant_id_for_user(user, db)
-    return await whatsapp_client.instagram_login(
-        tenant_id=tenant_id,
-        login_data={"username": username, "password": password}
-    )
-
-
-@router.post("/instagram/sessions/{username}/logout")
-async def logout_instagram_proxy(
-    username: str,
-    db: Session = Depends(get_db),
-    current_user: str = Depends(check_crm_permission)
-):
-    """Encerra sessão Instagram."""
-    user = db.query(User).filter(User.email == current_user).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-
-    tenant_id = await get_tenant_id_for_user(user, db)
-    return await whatsapp_client.instagram_logout(tenant_id=tenant_id, username=username)

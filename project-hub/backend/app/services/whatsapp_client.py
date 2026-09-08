@@ -118,7 +118,7 @@ class WhatsAppClient:
 
         for attempt in range(max_retries):
             try:
-                async with get_async_client(timeout=timeout, service_name="whatsapp") as client:
+                async with get_async_client(timeout=timeout) as client:
                     response = await client.request(
                         method=method,
                         url=url,
@@ -381,34 +381,6 @@ class WhatsAppClient:
             )
 
         return response
-
-    async def instagram_login(self, tenant_id: str, login_data: Dict[str, Any]) -> Any:
-        """
-        Autentica sessão Instagram na Whats API.
-        Escopo explícito: whatsapp:sessions:write
-        """
-        return await self._execute_request(
-            method="POST",
-            path="/api/instagram/login",
-            tenant_id=tenant_id,
-            scope="whatsapp:sessions:write",
-            json_data=login_data,
-            timeout=30.0
-        )
-
-    async def instagram_logout(self, tenant_id: str, username: str) -> Any:
-        """
-        Encerra sessão Instagram.
-        Escopo explícito: whatsapp:sessions:write
-        """
-        return await self._execute_request(
-            method="POST",
-            path=f"/api/instagram/sessions/{username}/logout",
-            tenant_id=tenant_id,
-            scope="whatsapp:sessions:write",
-            timeout=15.0
-        )
-
 
 # Instância singleton do WhatsAppClient
 whatsapp_client = WhatsAppClient()
