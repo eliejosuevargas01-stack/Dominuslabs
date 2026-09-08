@@ -161,3 +161,10 @@ Itens e melhorias não-bloqueantes apontados pelo Code Review (Dominus-MCP) para
 - **Evidência:** pendências mantidas apenas em Markdown podem perder visibilidade de planejamento conforme o repositório evolui.
 - **Ação sugerida:** converter os itens priorizados em issues/cards no rastreador adotado pela equipe e manter links bidirecionais.
 - **Prioridade:** P3 de processo; não bloqueante.
+
+## 24. Reutilizar o resolvedor de imports relativos na guarda do módulo legado
+- **Fonte:** Code Review Dominus-MCP do commit `e81c141d71affe0a8267742cd43f900616ca30c7`.
+- **Arquivo:** `project-hub/backend/tests/test_legacy_cleanup.py` (`test_removed_compatibility_layers_and_helpers_stay_absent`).
+- **Evidência:** a verificação de imports de `identity_service` ainda possui lógica própria e não reconhece todas as formas relativas, embora o teste também confirme que o arquivo físico foi removido e um import residual falharia em runtime.
+- **Ação sugerida:** generalizar `_resolved_import_from_module` para um detector reutilizável de módulos e aplicar a mesma varredura aos dois guardrails em uma limpeza futura dos testes.
+- **Prioridade:** P3 de consistência de teste; sem regressão funcional e não bloqueante.
