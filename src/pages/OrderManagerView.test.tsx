@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { toastError, MockSSEClient } = vi.hoisted(() => {
@@ -108,8 +108,16 @@ describe('OrderManagerView', () => {
 
     act(() => sse.message({ event: 'new_order', order }));
     expect(screen.getAllByText('Pedido #PEDIDO')[0]).toBeInTheDocument();
-    expect(screen.getAllByText('Aceito')[0]).toBeInTheDocument();
-    const wazeUrl = new URL(screen.getAllByText('Abrir no Waze')[0].getAttribute('href')!);
+    
+    const acceptedBadge = screen.getAllByText('Aceito')[0];
+    expect(acceptedBadge).toBeInTheDocument();
+    expect(acceptedBadge).toHaveClass('bg-blue-50', 'text-blue-700', 'border-blue-200');
+
+    // Monetary formatting check
+    expect(screen.getByText('R$ 74,97')).toBeInTheDocument();
+
+    const wazeLink = screen.getByRole('link', { name: /abrir no waze/i });
+    const wazeUrl = new URL(wazeLink.getAttribute('href')!);
     expect(wazeUrl.origin).toBe('https://waze.com');
     expect(wazeUrl.pathname).toBe('/ul');
     expect(wazeUrl.searchParams.get('q')).toBe('Rua A, 10');
@@ -117,7 +125,54 @@ describe('OrderManagerView', () => {
     expect(wazeUrl.searchParams.get('utm_source')).toBe('dominuslabs_order_manager');
 
     act(() => sse.message({ event: 'order_updated', order: { ...order, status: 'delivered' } }));
-    expect(screen.getAllByText('Entregue')[0]).toBeInTheDocument();
+    const deliveredBadge = screen.getAllByText('Entregue')[0];
+    expect(deliveredBadge).toBeInTheDocument();
+    expect(deliveredBadge).toHaveClass('bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
+  });
+
+  it('renders order with total_amount formatted as BRL currency and semantic pending badge', async () => {
+    await act(async () => { render(<OrderManagerView />); });
+    const sse = MockSSEClient.instances[0];
+    const orderWithTotalAmount = {
+      id: 'pedido-valor-total',
+      customerName: 'Cliente Teste',
+      total: 50.00,
+      total_amount: 129.90,
+      address: 'Av Paulista, 1000',
+      items: [{ name: 'Combo Premium', quantity: 2 }],
+      status: 'pending',
+      createdAt: '2026-08-31T14:48:07.915Z',
+    };
+
+    act(() => sse.message({ event: 'new_order', order: orderWithTotalAmount }));
+
+    const pendingBadge = screen.getAllByText('Pendente')[0];
+    expect(pendingBadge).toBeInTheDocument();
+    expect(pendingBadge).toHaveClass('bg-amber-50', 'text-amber-700', 'border-amber-200');
+
+    // Prioritizes total_amount over total
+    expect(screen.getByText('R$ 129,90')).toBeInTheDocument();
+  });
+
+  it('applies semantic badge style for cancelled/rejected status', async () => {
+    await act(async () => { render(<OrderManagerView />); });
+    const sse = MockSSEClient.instances[0];
+    const rejectedOrder = {
+      id: 'pedido-recusado',
+      customerName: 'Cliente Recusa',
+      total: 35.50,
+      address: 'Rua B, 20',
+      items: [{ name: 'Item', quantity: 1 }],
+      status: 'rejected',
+      createdAt: '2026-08-31T14:48:07.915Z',
+    };
+
+    act(() => sse.message({ event: 'new_order', order: rejectedOrder }));
+
+    const rejectedBadge = screen.getAllByText('Recusado')[0];
+    expect(rejectedBadge).toBeInTheDocument();
+    expect(rejectedBadge).toHaveClass('bg-rose-50', 'text-rose-700', 'border-rose-200');
+    expect(screen.getByText('R$ 35,50')).toBeInTheDocument();
   });
 
   it('closes the SSE connection when the screen is unmounted', async () => {

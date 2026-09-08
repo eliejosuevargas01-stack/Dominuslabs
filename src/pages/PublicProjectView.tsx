@@ -167,7 +167,8 @@ export default function PublicProjectView() {
       <div className="max-w-4xl mx-auto w-full p-4 sm:p-8 space-y-8 animate-[fade-in_0.3s_ease-out] flex-1">
       
       {/* Decorative Brand Header */}
-      <div className="text-center space-y-2 pb-2">
+      <div className="text-center space-y-2.5 pb-2 flex flex-col items-center">
+        <img src="/logo.png" alt="Dominus Labs" className="w-8 h-8 rounded-lg object-contain shadow-sm" />
         <div className="inline-flex items-center gap-1 bg-purple-100/80 border border-purple-200/30 text-purple-800 text-xs font-bold px-3 py-1 rounded-full">
           <Sparkles className="w-3.5 h-3.5 text-amber-500" />
           Portal de Acompanhamento Dominuslabs
@@ -398,7 +399,7 @@ export default function PublicProjectView() {
                 {commits.length === 0 ? (
                   <p className="text-xs text-zinc-400 italic">Nenhuma atualização registrada ainda.</p>
                 ) : (
-                  <ul className="space-y-2.5 max-h-[160px] overflow-y-auto pr-1">
+                  <ul className="space-y-2.5 max-h-[260px] overflow-y-auto pr-2 pb-2">
                     {commits.map((c: any) => (
                       <li key={c.id} className="p-3  border border-zinc-100/60 rounded-xl text-xs space-y-1">
                         <div className="flex justify-between text-zinc-400 font-semibold text-[10px]">

@@ -88,4 +88,39 @@ describe('CompanySettingsView product media', () => {
     expect(await screen.findByRole('img', { name: 'Produto com foto' }))
       .toHaveAttribute('src', 'http://api.test/uploads/products/prod_test.png');
   });
+
+  it('renders products list with BRL currency formatting, category badge, and fallback icon when no media', async () => {
+    apiMocks.fetchProducts.mockResolvedValue([
+      {
+        id: 'prod-1',
+        name: 'Plataforma Omnichannel',
+        category: 'Software',
+        price: 1490.50,
+        available: true,
+        stock: 5,
+        description: 'Solução completa para atendimento multicanal.',
+      },
+    ]);
+
+    const user = userEvent.setup();
+    render(<CompanySettingsView />);
+
+    await user.click(await screen.findByRole('button', { name: 'Portfólio & Catálogo' }));
+
+    expect(await screen.findByText('Plataforma Omnichannel')).toBeInTheDocument();
+    
+    // Monetary formatting check
+    const priceElement = screen.getByText('R$ 1.490,50');
+    expect(priceElement).toBeInTheDocument();
+    expect(priceElement).toHaveClass('font-bold', 'text-emerald-700', 'bg-emerald-50');
+
+    // Category badge check
+    const categoryBadge = screen.getByText('Software');
+    expect(categoryBadge).toBeInTheDocument();
+    expect(categoryBadge).toHaveClass('text-zinc-500', 'bg-zinc-100');
+
+    // Fallback icon package when no media
+    expect(screen.queryByRole('img', { name: 'Plataforma Omnichannel' })).not.toBeInTheDocument();
+  });
 });
+

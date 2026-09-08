@@ -354,11 +354,20 @@ export default function ConnectionsView() {
         </div>
       </div>
 
-      {/* Error Alert */}
-      {error && (
-        <div className="flex items-center gap-2.5 p-3.5 rounded-xl bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
+      {/* Consolidated Error Alert (displayed only if sessions are already loaded to prevent duplicate error banners) */}
+      {error && sessions.length > 0 && (
+        <div className="flex items-center justify-between gap-2.5 p-3.5 rounded-xl bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={() => setError(null)}
+            className="p-1 text-rose-400 hover:text-rose-700 transition-colors cursor-pointer rounded-lg hover:bg-rose-100/50"
+            title="Dispensar aviso"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 

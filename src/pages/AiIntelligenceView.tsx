@@ -16,7 +16,8 @@ import {
   AlertCircle,
   X,
   Calendar,
-  Search
+  Search,
+  Loader2
 } from 'lucide-react';
 
 export interface FranchiseQuota {
@@ -146,8 +147,9 @@ export default function AiIntelligenceView({
             </div>
           </div>
         ) : (
-          <div className="py-6 text-center text-xs font-semibold text-zinc-400 bg-zinc-50 rounded-xl border border-dashed border-zinc-200">
-            Aguardando carregamento da franquia via GET /api/v1/ai/quota...
+          <div className="py-6 flex items-center justify-center gap-2.5 text-xs font-semibold text-zinc-500 bg-zinc-50/70 rounded-xl border border-dashed border-zinc-200">
+            <Loader2 className="w-4 h-4 text-purple-600 animate-spin" />
+            <span>Sincronizando métricas e consumo da franquia de IA...</span>
           </div>
         )}
 
@@ -216,9 +218,10 @@ export default function AiIntelligenceView({
                   );
                 })
               ) : (
-                <div className="p-8 text-center text-xs text-zinc-400">
-                  Nenhum registro de auditoria carregado no momento.
-                  {/* Conectar via GET /api/v1/ai/audit-logs */}
+                <div className="p-8 text-center flex flex-col items-center justify-center gap-2 text-zinc-400">
+                  <MessageSquare className="w-8 h-8 text-zinc-300 stroke-[1.5]" />
+                  <p className="text-xs font-semibold text-zinc-600">Nenhum registro de auditoria encontrado</p>
+                  <p className="text-[11px] text-zinc-400">As novas conversas e interações com IA aparecerão listadas aqui automaticamente.</p>
                 </div>
               )}
             </div>

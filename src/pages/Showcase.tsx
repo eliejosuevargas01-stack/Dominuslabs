@@ -25,7 +25,8 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  ExternalLink
+  ExternalLink,
+  Cpu
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -156,8 +157,8 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
 
         {/* Hero Section */}
         <section className="text-center max-w-3xl mx-auto space-y-4 pb-16">
-          <div className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-800 border border-amber-200/50 text-[10px] font-extrabold uppercase tracking-wider px-3.5 py-1 rounded-full shadow-sm">
-            <Award className="w-3.5 h-3.5" />
+          <div className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-extrabold uppercase tracking-wider px-3.5 py-1 rounded-full shadow-sm">
+            <Award className="w-3.5 h-3.5 text-amber-700" />
             Portfólio & Depoimentos
           </div>
           <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-zinc-900 leading-tight">
@@ -231,7 +232,7 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
                           isVideo ? (
                             <div className="w-full h-full relative">
                               <video src={coverUrl || undefined} muted className="w-full h-full object-cover opacity-85" />
-                              <div className="absolute inset-0  flex items-center justify-center group-hover: transition-all">
+                              <div className="absolute inset-0  flex items-center justify-center group-hover:scale-110 transition-all">
                                 <Play className="w-9 h-9 text-white fill-white/80 drop-shadow-md" />
                               </div>
                               <span className="absolute top-3 left-3 text-[9px] font-bold px-2 py-0.5 rounded bg-purple-600 text-white flex items-center gap-1 uppercase tracking-wide">
@@ -251,10 +252,19 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
                           )
                         ) : (
                           // Premium default gradient preview if no assets
-                          <div className="w-full h-full bg-gradient-to-br from-purple-600/15 via-indigo-600/10 to-emerald-500/10 flex items-center justify-center relative">
-                            <div className="absolute -top-10 -left-10 w-24 h-24 bg-purple-500/10 rounded-full blur-xl"></div>
-                            <div className="absolute -bottom-10 -right-10 w-24 h-24 bg-emerald-500/15 rounded-full blur-xl"></div>
-                            <FolderCheck className="w-12 h-12 text-purple-500/30" />
+                          <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-purple-950 to-zinc-950 flex flex-col items-center justify-center relative overflow-hidden group-hover:scale-105 transition-transform duration-500">
+                            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-500/20 via-transparent to-transparent"></div>
+                            <div className="absolute -top-8 -left-8 w-28 h-28 bg-indigo-500/20 rounded-full blur-xl"></div>
+                            <div className="absolute -bottom-8 -right-8 w-28 h-28 bg-purple-500/20 rounded-full blur-xl"></div>
+                            
+                            <div className="relative z-10 flex flex-col items-center gap-2">
+                              <div className="p-3 rounded-2xl bg-purple-500/20 border border-purple-400/40 text-purple-200 shadow-[0_0_20px_rgba(168,85,247,0.35)] backdrop-blur-sm">
+                                <Cpu className="w-7 h-7 text-purple-300 animate-pulse" />
+                              </div>
+                              <span className="text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-purple-900/60 text-purple-200 border border-purple-400/30 backdrop-blur">
+                                Inovação & IA
+                              </span>
+                            </div>
                           </div>
                         )}
                         {/* Status Badge */}
@@ -361,10 +371,19 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
                           )
                         ) : (
                           // Premium default gradient preview if no assets
-                          <div className="w-full h-full bg-gradient-to-br from-purple-600/15 via-indigo-600/10 to-emerald-500/10 flex items-center justify-center relative">
-                            <div className="absolute -top-10 -left-10 w-24 h-24 bg-purple-500/10 rounded-full blur-xl"></div>
-                            <div className="absolute -bottom-10 -right-10 w-24 h-24 bg-emerald-500/15 rounded-full blur-xl"></div>
-                            <FolderCheck className="w-12 h-12 text-purple-500/30" />
+                          <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-purple-950 to-zinc-950 flex flex-col items-center justify-center relative overflow-hidden group-hover:scale-105 transition-transform duration-500">
+                            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-500/20 via-transparent to-transparent"></div>
+                            <div className="absolute -top-8 -left-8 w-28 h-28 bg-indigo-500/20 rounded-full blur-xl"></div>
+                            <div className="absolute -bottom-8 -right-8 w-28 h-28 bg-purple-500/20 rounded-full blur-xl"></div>
+                            
+                            <div className="relative z-10 flex flex-col items-center gap-2">
+                              <div className="p-3 rounded-2xl bg-purple-500/20 border border-purple-400/40 text-purple-200 shadow-[0_0_20px_rgba(168,85,247,0.35)] backdrop-blur-sm">
+                                <Cpu className="w-7 h-7 text-purple-300 animate-pulse" />
+                              </div>
+                              <span className="text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-purple-900/60 text-purple-200 border border-purple-400/30 backdrop-blur">
+                                Inovação & IA
+                              </span>
+                            </div>
                           </div>
                         )}
                         {/* Status Badge */}
@@ -484,22 +503,24 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
         {/* Dynamic CTA Footer Section */}
         {!isDashboard && (
           <section className="pt-24 text-center">
-            <div className="surface-card p-8 sm:p-12 max-w-4xl mx-auto bg-gradient-to-br from-purple-700 to-indigo-900 text-white border-purple-600/30 flex flex-col items-center space-y-6 shadow-xl relative overflow-hidden">
-              <div className="absolute -top-10 -left-10 w-40 h-40  rounded-full blur-xl"></div>
-              <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-xl"></div>
+            <div className="p-8 sm:p-12 max-w-4xl mx-auto rounded-3xl bg-gradient-to-br from-purple-800 via-indigo-900 to-zinc-950 text-white border border-purple-500/30 flex flex-col items-center space-y-6 shadow-2xl relative overflow-hidden">
+              <div className="absolute -top-10 -left-10 w-48 h-48 bg-purple-500/20 rounded-full blur-2xl pointer-events-none"></div>
+              <div className="absolute -bottom-10 -right-10 w-48 h-48 bg-emerald-500/15 rounded-full blur-2xl pointer-events-none"></div>
 
-              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Quer automatizar e escalar seu negócio?</h2>
-              <p className="text-purple-200 text-sm sm:text-base max-w-xl font-medium">
+              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white relative z-10">
+                Quer automatizar e escalar seu negócio?
+              </h2>
+              <p className="text-purple-100 font-medium sm:text-base text-sm max-w-xl relative z-10 leading-relaxed">
                 Entre em contato conosco hoje mesmo para desenharmos juntos a solução perfeita de landing pages, integrações, CRMs ou automações.
               </p>
               <a
                 href="https://wa.me/5547991362164"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 bg-white text-purple-800 hover:bg-purple-50 px-6 py-3 rounded-2xl font-extrabold text-sm shadow-md transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                className="relative z-10 inline-flex items-center gap-2 bg-white text-purple-900 hover:bg-purple-50 px-7 py-3.5 rounded-2xl font-extrabold text-sm shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
               >
-                Falar com Eliezer
-                <ArrowRight className="w-4 h-4 text-purple-800" />
+                <span>Falar com Eliezer</span>
+                <ArrowRight className="w-4 h-4 text-purple-900" />
               </a>
             </div>
           </section>
@@ -574,7 +595,7 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
                             key={idx}
                             onClick={() => setCurrentMediaIndex(idx)}
                             className={`w-2 h-2 rounded-full transition-all cursor-pointer ${
-                              idx === currentMediaIndex ? 'bg-white w-4' : ' hover:'
+                              idx === currentMediaIndex ? 'bg-white w-4' : 'bg-white/40 hover:bg-white/70'
                             }`}
                           />
                         ))}
@@ -586,11 +607,20 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
                   )}
                 </>
               ) : (
-                // Gradient placeholder if no assets
-                <div className="flex-1 flex flex-col items-center justify-center text-zinc-400 gap-4 bg-gradient-to-br from-zinc-900 to-zinc-950 w-full h-full relative">
-                  <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
-                  <FolderCheck className="w-16 h-16 text-purple-500/35" />
-                  <p className="text-xs text-zinc-500 italic">Nenhuma mídia anexada a este projeto.</p>
+                // Modern tech gradient placeholder if no assets
+                <div className="flex-1 flex flex-col items-center justify-center text-zinc-400 gap-3 bg-gradient-to-br from-indigo-950 via-purple-950 to-zinc-950 w-full h-full relative overflow-hidden p-6 text-center">
+                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-500/20 via-transparent to-transparent"></div>
+                  <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e1b4b_1px,transparent_1px),linear-gradient(to_bottom,#1e1b4b_1px,transparent_1px)] bg-[size:3rem_3rem] opacity-30"></div>
+                  
+                  <div className="p-4 rounded-2xl bg-purple-500/20 border border-purple-400/30 text-purple-300 shadow-[0_0_30px_rgba(168,85,247,0.35)] relative z-10 backdrop-blur-sm">
+                    <Cpu className="w-10 h-10 text-purple-300 animate-pulse" />
+                  </div>
+                  <span className="text-[10px] font-extrabold text-purple-200 tracking-widest uppercase px-3 py-1 rounded-full bg-purple-900/60 border border-purple-400/30 relative z-10 backdrop-blur">
+                    Arquitetura & Engenharia de IA
+                  </span>
+                  <p className="text-xs text-zinc-400 italic relative z-10 max-w-xs">
+                    Projeto desenvolvido com foco em regras de negócio, APIs e backend sem dependência de mídia visual.
+                  </p>
                 </div>
               )}
             </div>

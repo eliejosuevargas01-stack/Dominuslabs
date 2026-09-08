@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ShoppingBag, Check, MapPin, DollarSign, Clock } from 'lucide-react';
+import { ShoppingBag, Check, MapPin, Clock, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
 /**
@@ -28,9 +28,10 @@ interface Order {
   id: string;
   customerName: string;
   total: number;
+  total_amount?: number;
   address: string;
   items: OrderItem[];
-  status: 'pending' | 'accepted' | 'ready_for_delivery' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled';
+  status: 'pending' | 'accepted' | 'ready_for_delivery' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled' | 'rejected';
   createdAt: string;
 }
 
@@ -64,6 +65,23 @@ const statusLabels: Record<string, string> = {
   rejected: 'Recusado',
   cancelled: 'Cancelado',
 };
+
+function getOrderStatusBadgeClass(status: string): string {
+  const normalized = (status || '').toLowerCase();
+  if (['delivered', 'completed', 'entregue', 'concluido'].includes(normalized)) {
+    return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+  }
+  if (['rejected', 'cancelled', 'recusado', 'cancelado'].includes(normalized)) {
+    return 'bg-rose-50 text-rose-700 border border-rose-200';
+  }
+  if (['pending', 'em_preparo', 'aberto', 'pendente'].includes(normalized)) {
+    return 'bg-amber-50 text-amber-700 border border-amber-200';
+  }
+  if (['accepted', 'aceito', 'ready_for_delivery', 'out_for_delivery'].includes(normalized)) {
+    return 'bg-blue-50 text-blue-700 border border-blue-200';
+  }
+  return 'bg-zinc-100 text-zinc-600 border border-zinc-200';
+}
 
 // Custom Hook for real-time Orders
 function useOrdersWebSocket() {
@@ -381,11 +399,7 @@ export default function OrderManagerView() {
                      {new Date(order.createdAt).toLocaleTimeString()}
                    </div>
                  </div>
-                 <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
-                    order.status === 'pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                    order.status === 'accepted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                    'bg-zinc-100 text-zinc-600 border-zinc-200'
-                 }`}>
+                 <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${getOrderStatusBadgeClass(order.status)}`}>
                    {statusLabels[order.status] || order.status}
                  </span>
               </div>
@@ -407,9 +421,10 @@ export default function OrderManagerView() {
                      href={wazeUrl}
                      target="_blank"
                      rel="noopener noreferrer"
-                     className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 mt-2 hover:underline"
+                     className="text-blue-600 hover:text-blue-800 font-medium hover:underline flex items-center gap-1 text-xs mt-2"
                    >
-                     Abrir no Waze
+                     <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                     <span>Abrir no Waze</span>
                    </a>}
                      </>;
                    })()}
@@ -428,7 +443,9 @@ export default function OrderManagerView() {
 
                 <div className="pt-3 border-t border-zinc-100 flex justify-between items-center">
                    <span className="text-sm font-medium text-zinc-500">Total</span>
-                   <span className="text-lg font-bold text-zinc-900 flex items-center"><DollarSign className="w-4 h-4"/>{order.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                   <span className="text-lg font-bold text-zinc-900">
+                     R$ {Number(order.total_amount || order.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                   </span>
                 </div>
               </div>
 

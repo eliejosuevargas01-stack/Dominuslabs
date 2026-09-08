@@ -52,4 +52,22 @@ describe('Footer Component', () => {
     const casesLinks = screen.getAllByRole('link', { name: /Cases de Sucesso|Cases Concluídos|Em Progresso/i });
     expect(casesLinks.length).toBeGreaterThan(0);
   });
+
+  it('renders styled column headers with updated high-contrast class', () => {
+    renderWithRouter(<Footer />);
+    const solucaoHeader = screen.getByRole('heading', { name: /Soluções/i });
+    const navegacaoHeader = screen.getByRole('heading', { name: /Navegação/i });
+    const contatoHeader = screen.getByRole('heading', { name: /Contato/i });
+
+    expect(solucaoHeader).toHaveClass('text-slate-100');
+    expect(navegacaoHeader).toHaveClass('text-slate-100');
+    expect(contatoHeader).toHaveClass('text-slate-100');
+  });
+
+  it('renders contact information with direct email and WhatsApp link', () => {
+    renderWithRouter(<Footer />);
+    expect(screen.getByText('contato@dominuslabs.online')).toBeInTheDocument();
+    const whatsappLink = screen.getByRole('link', { name: /Falar no WhatsApp/i });
+    expect(whatsappLink).toHaveAttribute('href', 'https://wa.me/5547991362164');
+  });
 });

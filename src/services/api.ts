@@ -300,6 +300,7 @@ export interface MenuItem {
   available?: boolean;
   stock?: number;
   image_url?: string;
+  media_url?: string;
 }
 
 export interface Promotion {

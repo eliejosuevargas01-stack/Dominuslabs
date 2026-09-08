@@ -26,7 +26,8 @@ import {
   Phone,
   Mail,
   Award,
-  UploadCloud
+  UploadCloud,
+  Package
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchCompanySettings, updateCompanySettings, fetchProducts, createProduct, updateProduct, deleteProduct, uploadProductMedia, getUserTenant, resolveApiAssetUrl, type CompanySettings, type MenuItem } from '../services/api';
@@ -331,7 +332,7 @@ export default function CompanySettingsView() {
       </div>
 
       {/* Tabs Navigation */}
-      <div className="flex border-b border-zinc-200  p-1.5 rounded-xl overflow-x-auto gap-1">
+      <div className="flex border-b border-zinc-200 p-1.5 rounded-xl overflow-x-auto scrollbar-none flex-nowrap gap-1">
         {[
           { id: 'general', label: 'Dados Institucionais & Cultura', icon: Building2 },
           { id: 'tone', label: 'Persona, Tom de Voz & IA', icon: Bot },
@@ -835,34 +836,53 @@ export default function CompanySettingsView() {
 
             {products && products.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {products.map((item, index) => (
-                  <div
-                    key={index}
-                    className="p-4 rounded-xl border border-zinc-200 hover:border-purple-200  flex flex-col justify-between gap-3 transition-all"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <div className="flex items-center gap-3">
-                          {item.image_url && (
-                            <img src={resolveApiAssetUrl(item.image_url)} alt={item.name} className="w-10 h-10 rounded-md object-cover border border-zinc-200" />
-                          )}
-                          <span className="font-bold text-zinc-900 text-base">{item.name}</span>
+                {products.map((item, index) => {
+                  const mediaUrl = item.media_url || item.image_url;
+                  return (
+                    <div
+                      key={index}
+                      className="p-4 rounded-xl border border-zinc-200 hover:border-purple-200 flex flex-col justify-between gap-3 transition-all bg-white"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <div className="flex items-center gap-3 min-w-0">
+                            {mediaUrl ? (
+                              <img 
+                                src={resolveApiAssetUrl(mediaUrl)} 
+                                alt={item.name} 
+                                className="w-10 h-10 rounded-lg object-cover border border-zinc-200 shrink-0 shadow-sm"
+                                onError={(e) => {
+                                  const target = e.currentTarget;
+                                  target.style.display = 'none';
+                                  const fallback = target.nextElementSibling as HTMLElement;
+                                  if (fallback) fallback.style.display = 'flex';
+                                }}
+                              />
+                            ) : null}
+                            <div 
+                              className={`w-10 h-10 rounded-lg bg-purple-50 text-purple-600 border border-purple-200/60 items-center justify-center shrink-0 shadow-sm ${mediaUrl ? 'hidden' : 'flex'}`}
+                              aria-hidden="true"
+                            >
+                              <Package className="w-5 h-5 text-purple-600" />
+                            </div>
+                            <div className="min-w-0">
+                              <span className="font-bold text-zinc-900 text-base truncate block">{item.name}</span>
+                              {item.category && (
+                                <span className="inline-block text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-md mt-0.5">
+                                  {item.category}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 text-xs whitespace-nowrap">
+                            R$ {Number(item.price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
                         </div>
-                        <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 text-xs whitespace-nowrap">
-                          R$ {Number(item.price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
+
+                        {item.description && (
+                          <p className="text-xs text-zinc-600 line-clamp-2 mt-2">{item.description}</p>
+                        )}
                       </div>
-
-                      {item.category && (
-                        <span className="inline-block text-[11px] font-semibold text-zinc-600  px-2.5 py-0.5 rounded-full mb-2">
-                          {item.category}
-                        </span>
-                      )}
-
-                      {item.description && (
-                        <p className="text-xs text-zinc-600 line-clamp-2">{item.description}</p>
-                      )}
-                    </div>
 
                     <div className="flex items-center justify-between border-t border-zinc-200/60 pt-2 text-xs">
                       <div className="flex items-center gap-3">
@@ -891,7 +911,8 @@ export default function CompanySettingsView() {
                       </div>
                     </div>
                   </div>
-                ))}
+                );
+              })}
               </div>
             ) : (
               <div className="text-center py-12 bg-zinc-50 rounded-2xl border border-dashed border-zinc-200">

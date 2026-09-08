@@ -7,7 +7,7 @@
  */
 
 import { Link, useLocation } from 'react-router-dom';
-import { Users, Folder, LogOut, Menu, X, PanelLeftClose, PanelLeftOpen, Briefcase, Radio, MessageSquare, Building2, BarChart2, Cpu, Workflow, Megaphone } from 'lucide-react';
+import { Users, Folder, LogOut, Menu, X, PanelLeftClose, PanelLeftOpen, Briefcase, Radio, MessageSquare, Building2, BarChart2, Cpu, Workflow, Megaphone, ShoppingBag } from 'lucide-react';
 import { useState } from 'react';
 
 interface SidebarProps {
@@ -22,7 +22,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
 
   const menuItems = [
     { name: 'Resumo Operacional', path: '/dashboard-operacional', icon: BarChart2 },
-    { name: 'Order Manager (PDV)', path: '/order-manager', icon: BarChart2 },
+    { name: 'Order Manager (PDV)', path: '/order-manager', icon: ShoppingBag },
     { name: 'Central Omnichannel', path: '/omnichannel', icon: MessageSquare },
     { name: 'CRM & Pipeline Pedidos', path: '/crm', icon: Users },
     { name: 'Consumo & IA', path: '/ia-inteligencia', icon: Cpu },
@@ -49,7 +49,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
         <button
           onClick={() => setIsOpen(!isOpen)}
           aria-label={isOpen ? "Fechar menu" : "Abrir menu"}
-          className="p-2 rounded-xl   border border-zinc-200 shadow-sm text-slate-700 hover:text-purple-700 transition-all cursor-pointer flex items-center justify-center"
+          className="p-2 rounded-xl bg-white border border-zinc-200 shadow-sm text-slate-700 hover:text-purple-700 transition-all cursor-pointer flex items-center justify-center"
         >
           {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
@@ -101,7 +101,7 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
                       : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-purple-600' : 'text-zinc-400 group-hover:text-zinc-600'}`} />
+                  <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-purple-600' : 'text-zinc-500 group-hover:text-zinc-800'}`} />
                   <span className={`font-medium text-sm whitespace-nowrap transition-all duration-200 ${isCollapsed ? 'lg:hidden' : 'block'}`}>
                     {item.name}
                   </span>

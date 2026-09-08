@@ -125,7 +125,7 @@ export default function Footer({ onTabSelect }: FooterProps) {
 
           {/* Solutions Column */}
           <div className="md:col-span-2.5 md:col-start-7 space-y-4">
-            <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest flex items-center gap-1.5">
+            <h4 className="text-xs font-bold text-slate-100 uppercase tracking-widest flex items-center gap-1.5">
               <Laptop className="w-3.5 h-3.5 text-purple-500" />
               Soluções
             </h4>
@@ -173,7 +173,7 @@ export default function Footer({ onTabSelect }: FooterProps) {
 
           {/* Navigation Column */}
           <div className="md:col-span-2 space-y-4">
-            <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest flex items-center gap-1.5">
+            <h4 className="text-xs font-bold text-slate-100 uppercase tracking-widest flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
               Navegação
             </h4>
@@ -225,7 +225,7 @@ export default function Footer({ onTabSelect }: FooterProps) {
 
           {/* Contact Column */}
           <div className="md:col-span-2 space-y-4">
-            <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest flex items-center gap-1.5">
+            <h4 className="text-xs font-bold text-slate-100 uppercase tracking-widest flex items-center gap-1.5">
               <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />
               Contato
             </h4>
@@ -243,7 +243,7 @@ export default function Footer({ onTabSelect }: FooterProps) {
               </li>
               <li className="flex items-center gap-1.5 text-slate-400">
                 <Mail className="w-3.5 h-3.5 text-slate-500" />
-                <span className="truncate">contato@dominuslabs.online</span>
+                <span>contato@dominuslabs.online</span>
               </li>
             </ul>
           </div>
