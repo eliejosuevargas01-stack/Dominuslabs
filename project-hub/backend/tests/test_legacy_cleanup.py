@@ -57,6 +57,43 @@ def _executable_python_strings(path: Path) -> set[str]:
     }
 
 
+def _resolved_import_from_module(path: Path, node: ast.ImportFrom) -> str:
+    if node.level == 0:
+        return node.module or ""
+
+    package_parts = list(path.parent.relative_to(BACKEND_APP.parent).parts)
+    parent_levels = node.level - 1
+    if parent_levels > len(package_parts):
+        return ""
+    if parent_levels:
+        package_parts = package_parts[:-parent_levels]
+    if node.module:
+        package_parts.extend(node.module.split("."))
+    return ".".join(package_parts)
+
+
+def _imports_identity_client(path: Path, tree: ast.AST) -> bool:
+    identity_module = "app.services.identity_client"
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import) and any(
+            alias.name == identity_module or alias.name.startswith(f"{identity_module}.")
+            for alias in node.names
+        ):
+            return True
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        imported_module = _resolved_import_from_module(path, node)
+        if imported_module == identity_module or imported_module.startswith(
+            f"{identity_module}."
+        ):
+            return True
+        if imported_module == "app.services" and any(
+            alias.name == "identity_client" for alias in node.names
+        ):
+            return True
+    return False
+
+
 def test_removed_compatibility_layers_and_helpers_stay_absent():
     assert not (BACKEND_APP / "services" / "identity_service.py").exists()
 
@@ -164,34 +201,7 @@ def test_identity_client_is_the_only_m2m_authority_and_has_no_persistence_import
         if path == identity_path:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        imports_identity_client = False
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import) and any(
-                alias.name == "app.services.identity_client" for alias in node.names
-            ):
-                imports_identity_client = True
-            elif isinstance(node, ast.ImportFrom) and (
-                node.module == "app.services.identity_client"
-                or (
-                    node.module == "app.services"
-                    and any(alias.name == "identity_client" for alias in node.names)
-                )
-                or (
-                    path.parent == BACKEND_APP / "services"
-                    and node.level == 1
-                    and (
-                        node.module == "identity_client"
-                        or (
-                            node.module is None
-                            and any(
-                                alias.name == "identity_client" for alias in node.names
-                            )
-                        )
-                    )
-                )
-            ):
-                imports_identity_client = True
-        if imports_identity_client:
+        if _imports_identity_client(path, tree):
             production_importers.add(path.relative_to(BACKEND_APP).as_posix())
     assert production_importers == {"services/whatsapp_client.py"}
 
@@ -207,6 +217,45 @@ def test_identity_client_is_the_only_m2m_authority_and_has_no_persistence_import
     }
     assert whatsapp_account_fields.isdisjoint(
         {"token", "jwt", "m2m_token", "access_token", "refresh_token"}
+    )
+
+
+def test_identity_client_import_detector_covers_absolute_and_relative_syntaxes():
+    samples = (
+        (
+            BACKEND_APP / "services" / "consumer.py",
+            "from app.services.identity_client import identity_client",
+        ),
+        (
+            BACKEND_APP / "services" / "consumer.py",
+            "import app.services.identity_client as identity_module",
+        ),
+        (
+            BACKEND_APP / "services" / "consumer.py",
+            "from app.services import identity_client",
+        ),
+        (
+            BACKEND_APP / "services" / "consumer.py",
+            "from .identity_client import identity_client",
+        ),
+        (
+            BACKEND_APP / "api" / "endpoints" / "consumer.py",
+            "from ...services.identity_client import identity_client",
+        ),
+        (
+            BACKEND_APP / "api" / "endpoints" / "consumer.py",
+            "from ...services import identity_client",
+        ),
+    )
+    for path, source in samples:
+        assert _imports_identity_client(path, ast.parse(source))
+
+    unrelated_tree = ast.parse(
+        "from app.services.whatsapp_client import whatsapp_client"
+    )
+    assert not _imports_identity_client(
+        BACKEND_APP / "api" / "endpoints" / "consumer.py",
+        unrelated_tree,
     )
 
 
