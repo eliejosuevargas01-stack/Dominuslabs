@@ -3,3 +3,5 @@ pytest-mock
 pytest-cov
 bandit
 pyjwt
+# Starlette 1.2+ TestClient prefers the official Pydantic-maintained client.
+httpx2>=2.0.0

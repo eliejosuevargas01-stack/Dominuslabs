@@ -1,7 +1,7 @@
 /**
  * Documentation-Driven Testing:
  * O comportamento esperado para ConnectionsView.tsx:
- * - Botões 'Conectar/Desconectar': Modificam os links com integrações via API (WhatsApp, etc).
+ * - Botões 'Conectar/Desconectar': Modificam os links com a integração do WhatsApp via API.
  * - Modal QR Code: Abre com a imagem ou renderização de conexão.
  * - Tratamento de Loading e status dinâmico nos cards (Conectado/Desconectado).
  */
@@ -13,25 +13,6 @@ import {
   AlertCircle, X, CheckCircle2, QrCode, ShieldAlert, Settings
 } from 'lucide-react';
 
-const Instagram = ({ size = 24, ...props }: React.SVGProps<SVGSVGElement> & { size?: number }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    {...props}
-  >
-    <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
-    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-    <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
-  </svg>
-);
-
 import { 
   fetchWhatsappSessions, 
   createWhatsappSession, 
@@ -39,8 +20,6 @@ import {
   getWhatsappSessionStatus, 
   disconnectWhatsappSession, 
   deleteWhatsappSession,
-  loginInstagramProxy,
-  logoutInstagramProxy,
   getWhatsappSessionSettings,
   updateWhatsappSessionSettings,
 } from '../services/api';
@@ -48,7 +27,6 @@ import {
 interface Session {
   id: string;
   name: string;
-  platform: 'whatsapp' | 'instagram';
   snapshot?: {
     status?: string;
     qrAvailable?: boolean;
@@ -71,12 +49,6 @@ export default function ConnectionsView() {
   const [waSessionName, setWaSessionName] = useState('');
   const [waCreating, setWaCreating] = useState(false);
 
-  // Instagram Modal States
-  const [isIgModalOpen, setIsIgModalOpen] = useState(false);
-  const [igUsername, setIgUsername] = useState('');
-  const [igPassword, setIgPassword] = useState('');
-  const [igLoggingIn, setIgLoggingIn] = useState(false);
-
   // QR Code Modal States (Pairing)
   const [pairingSession, setPairingSession] = useState<Session | null>(null);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
@@ -97,8 +69,6 @@ export default function ConnectionsView() {
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
 
-  // Credentials State
-                      
   const loadSessions = useCallback(async () => {
     try {
       setLoading(true);
@@ -274,29 +244,6 @@ export default function ConnectionsView() {
     }
   };
 
-  // Instagram Connection Form Submit
-  const handleInstagramLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!igUsername.trim() || !igPassword.trim()) return;
-
-    try {
-      setIgLoggingIn(true);
-      setError(null);
-      await loginInstagramProxy({
-        username: igUsername.trim(),
-        password: igPassword
-      });
-      setIsIgModalOpen(false);
-      setIgUsername('');
-      setIgPassword('');
-      loadSessions();
-    } catch (err: any) {
-      setError('Falha ao autenticar no Instagram. Verifique as credenciais.');
-    } finally {
-      setIgLoggingIn(false);
-    }
-  };
-
   // Webhook Settings Handlers
   const handleOpenSettings = async (session: Session) => {
     try {
@@ -357,23 +304,6 @@ export default function ConnectionsView() {
     }
   };
 
-  // Instagram Disconnect
-  const handleDisconnectInstagram = async (session: Session) => {
-    if (!window.confirm(`Tem certeza que deseja desconectar a conta do Instagram @${session.name}?`)) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      await logoutInstagramProxy(session.id);
-      loadSessions();
-    } catch (err: any) {
-      setError(`Erro ao desconectar conta do Instagram: @${session.name}`);
-      setLoading(false);
-    }
-  };
-
   const getStatusBadge = (status: string | undefined) => {
     const s = status?.toLowerCase() || 'disconnected';
     if (s === 'connected') {
@@ -409,18 +339,11 @@ export default function ConnectionsView() {
             Canais & Conexões
           </h1>
           <p className="text-sm text-zinc-500 mt-1">
-            Gerencie suas instâncias de WhatsApp e contas de Instagram utilizadas para disparos automáticos e conversação.
+            Gerencie suas instâncias de WhatsApp utilizadas para disparos automáticos e conversação.
           </p>
         </div>
 
         <div className="flex gap-2">
-          <button
-            onClick={() => setIsIgModalOpen(true)}
-            className="flex items-center justify-center gap-2 text-xs font-bold text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50 px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer"
-          >
-            <Instagram className="w-4 h-4 text-pink-600" />
-            Instagram
-          </button>
           <button
             onClick={() => setIsWaModalOpen(true)}
             className="flex items-center justify-center gap-2 text-xs font-bold text-white bg-gradient-to-r from-purple-700 to-indigo-600 hover:scale-[1.01] active:scale-[0.99] px-4 py-2.5 rounded-xl shadow-md cursor-pointer transition-all"
@@ -497,7 +420,6 @@ export default function ConnectionsView() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {sessions.map((session) => {
-            const isWa = session.platform === 'whatsapp' || !session.platform;
             const status = extractStatus(session);
             
             return (
@@ -505,15 +427,13 @@ export default function ConnectionsView() {
                 {/* Platform Indicator Header */}
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${
-                      isWa ? 'bg-emerald-50 text-emerald-600' : 'bg-pink-50 text-pink-600'
-                    }`}>
-                      {isWa ? <MessageSquare className="w-5 h-5" /> : <Instagram className="w-5 h-5" />}
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm bg-emerald-50 text-emerald-600">
+                      <MessageSquare className="w-5 h-5" />
                     </div>
                     <div>
                       <h4 className="font-bold text-zinc-800 text-sm">{session.name}</h4>
                       <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">
-                        {isWa ? 'WhatsApp' : 'Instagram'}
+                        WhatsApp
                       </p>
                     </div>
                   </div>
@@ -526,7 +446,7 @@ export default function ConnectionsView() {
                     <span>ID da Instância:</span>
                     <span className="font-mono text-zinc-700 font-bold">{session.id}</span>
                   </div>
-                  {isWa && session.stats && (
+                  {session.stats && (
                     <div className="grid grid-cols-3 gap-2 pt-2 text-center  rounded-xl p-2.5 border border-zinc-100">
                       <div>
                         <div className="text-xs font-black text-zinc-800">{session.stats.conversationCount}</div>
@@ -546,7 +466,7 @@ export default function ConnectionsView() {
 
                 {/* Actions footer */}
                 <div className="flex items-center gap-2 pt-4 border-t border-zinc-100 mt-2">
-                  {isWa && status !== 'connected' && (
+                  {status !== 'connected' && (
                     <button
                       onClick={() => handleConnectWa(session)}
                       className="flex-1 flex items-center justify-center gap-1 text-[11px] font-extrabold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/50 py-2 rounded-lg cursor-pointer transition-colors"
@@ -556,7 +476,7 @@ export default function ConnectionsView() {
                     </button>
                   )}
 
-                  {isWa && status === 'connected' && (
+                  {status === 'connected' && (
                     <button
                       onClick={() => handleDisconnectWa(session)}
                       className="flex-1 flex items-center justify-center gap-1 text-[11px] font-extrabold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/50 py-2 rounded-lg cursor-pointer transition-colors"
@@ -566,27 +486,16 @@ export default function ConnectionsView() {
                     </button>
                   )}
 
-                  {!isWa && (
-                    <button
-                      onClick={() => handleDisconnectInstagram(session)}
-                      className="flex-1 flex items-center justify-center gap-1 text-[11px] font-extrabold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/50 py-2 rounded-lg cursor-pointer transition-colors"
-                    >
-                      <LogOutInstagram />
-                    </button>
-                  )}
-
-                  {isWa && (
-                    <button
-                      onClick={() => handleOpenSettings(session)}
-                      className="p-2 text-zinc-400 hover:text-purple-600 bg-zinc-100 hover:bg-purple-50 border border-zinc-200/50 hover:border-zinc-200 rounded-lg cursor-pointer transition-all"
-                      title="Configurações de Webhook"
-                    >
-                      <Settings className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleOpenSettings(session)}
+                    className="p-2 text-zinc-400 hover:text-purple-600 bg-zinc-100 hover:bg-purple-50 border border-zinc-200/50 hover:border-zinc-200 rounded-lg cursor-pointer transition-all"
+                    title="Configurações de Webhook"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                  </button>
 
                   <button
-                    onClick={() => isWa ? handleDeleteWa(session) : handleDisconnectInstagram(session)}
+                    onClick={() => handleDeleteWa(session)}
                     className="p-2 text-zinc-400 hover:text-rose-600 bg-zinc-100 hover:bg-rose-50 border border-zinc-200/50 hover:border-rose-100 rounded-lg cursor-pointer transition-all"
                     title="Excluir Conexão"
                   >
@@ -638,64 +547,6 @@ export default function ConnectionsView() {
                 >
                   {waCreating && <Loader2 className="w-3 h-3 animate-spin" />}
                   Criar e Conectar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Instagram Connection */}
-      {isIgModalOpen && (
-        <div className="fixed inset-0 z-50   flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-zinc-100 animate-[fade-in_0.2s_ease-out]">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-zinc-800">Conectar Instagram</h3>
-              <button onClick={() => setIsIgModalOpen(false)} className="text-zinc-400 hover:text-zinc-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleInstagramLogin} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Usuário (Username)</label>
-                <input
-                  type="text"
-                  placeholder="ex: dominuslabs"
-                  className="w-full text-sm border border-zinc-200 rounded-xl px-3.5 py-2.5  focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                  value={igUsername}
-                  onChange={(e) => setIgUsername(e.target.value)}
-                  disabled={igLoggingIn}
-                  required
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Senha</label>
-                <input
-                  type="password"
-                  placeholder="Senha do Instagram"
-                  className="w-full text-sm border border-zinc-200 rounded-xl px-3.5 py-2.5  focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                  value={igPassword}
-                  onChange={(e) => setIgPassword(e.target.value)}
-                  disabled={igLoggingIn}
-                  required
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsIgModalOpen(false)}
-                  className="px-4 py-2 border border-zinc-200 text-zinc-600 rounded-xl text-xs font-bold hover:bg-zinc-50 cursor-pointer"
-                  disabled={igLoggingIn}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-gradient-to-r from-purple-700 to-indigo-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
-                  disabled={igLoggingIn}
-                >
-                  {igLoggingIn && <Loader2 className="w-3 h-3 animate-spin" />}
-                  Conectar Conta
                 </button>
               </div>
             </form>
@@ -913,15 +764,5 @@ export default function ConnectionsView() {
         </div>
       )}
     </div>
-  );
-}
-
-// Subcomponent to format Instagram Logout text
-function LogOutInstagram() {
-  return (
-    <>
-      <WifiOff className="w-3.5 h-3.5" />
-      Sair do Instagram
-    </>
   );
 }

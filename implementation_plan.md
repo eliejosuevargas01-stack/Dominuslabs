@@ -1,93 +1,28 @@
-# Plano de Implementação: Resiliência de Proxy, Avatares sob Demanda e Estabilidade Contínua
+# Plano de implementação — Limpeza do Dominus sem regressão
 
-Plano técnico estruturado com base nas descobertas do **Deep Research do Dominus-MCP** (ID: `1788470538351`) para resolver em definitivo o incidente de sobrecarga do servidor ("no início carrega, mas depois cai tudo").
+## Contratos congelados
 
----
+- `IdentityClient` continua emitindo `POST /v1/tokens` com uma única criptografia híbrida e envelope lógico assinado por RSA PKCS#1 v1.5 + SHA-256 (`RS256`).
+- `WhatsAppClient` continua emitindo apenas Bearer M2M, `X-Request-ID` e `Idempotency-Key` quando aplicável, invalidando o cache após 401/403.
+- Autenticação humana, permissões, ownership, CRM/n8n, Omnichannel, SSE, pedidos, mídia, upload e schemas consumidos permanecem funcionalmente idênticos.
 
-## User Review Required
+## Implementação
 
-> [!IMPORTANT]
-> **Alteração de Comportamento na Renderização de Avatares:**
-> Para eliminar o ataque acidental de negação de serviço (50 requisições simultâneas de avatares com latência de 90s cada que derrubavam a VPS), a sidebar de conversas do Omnichannel passará a exibir as fotos diretas da CDN da Meta e, nos contatos sem URL direta, exibirá o componente elegante com as iniciais do contato. A tentativa de proxy dinâmico será restrita ao chat ativamente aberto pelo usuário.
+1. Substituir imports/chamadas delegadas por suas autoridades atuais e então remover `identity_service.py` e os no-ops de `whatsapp_service.py`.
+2. Remover o proxy Instagram inexistente de ponta a ponta: métodos do cliente, rotas FastAPI, funções da API frontend, estados/handlers/modal/cartão da tela de conexões e testes exclusivos dessas rotas.
+3. Remover wrappers sem responsabilidade própria comprovadamente internos, migrando previamente seus consumidores para os símbolos canônicos. Não tocar em compatibilidade ainda consumida ou cujo produtor externo não possa ser provado obsoleto.
+4. Atualizar `INTEGRATION_GUIDE.md` para o contrato atual e manter referências a mecanismos proibidos apenas em deny-lists/testes negativos, nunca como instrução operacional.
 
-> [!TIP]
-> Essa mudança reduz a carga de I/O sobre a VPS em mais de **95%** durante a abertura do Omnichannel, permitindo que a aplicação responda a pedidos e dashboards em menos de 50ms.
+## Interfaces e limites
 
----
+- Interfaces removidas: módulo interno `app.services.identity_service`; helpers internos M2M de `whatsapp_service`; rotas `/api/v1/whatsapp/instagram/login` e `/api/v1/whatsapp/instagram/sessions/{username}/logout`; helpers frontend correspondentes.
+- Nenhuma rota WhatsApp funcional, schema de banco, migration, scope, formato criptográfico ou resposta válida será adicionada ou alterada.
+- O webhook `/api/v1/webhooks/inbound/instagram`, os campos Instagram de CRM e links sociais não fazem parte do proxy morto e serão preservados.
+- `x-tenant-id` dos produtos e autenticação especial de pedidos estão fora do caminho Dominus→Whats API/M2M e não serão redesenhados nesta limpeza.
 
-## Proposed Changes
+## Testes e aceite
 
-### Frontend (React / TypeScript)
-
-#### [MODIFY] [src/pages/OmnichannelView.tsx](file:///home/eliezer/Escritorio/dominuslabs/src/pages/OmnichannelView.tsx)
-- Refatorar a função `getAvatarSrc(url, session_id, jid, allowProxy = false)`:
-  - Se a URL for direta (`pps.whatsapp.net`, `fbcdn.net`, `data:image` ou URL absoluta HTTP), retorna a imagem diretamente.
-  - Se `allowProxy === false` (modo padrão da sidebar), retorna `null` para permitir a renderização das iniciais coloridas, eliminando requisições contra o backend.
-  - Se `allowProxy === true` (cabeçalho da conversa aberta), constrói uma URL sem credenciais e a consome com Bearer via `fetchWithAuth`, convertendo a resposta em Blob URL com cleanup.
-- Assegurar fechamento de socket no `onerror` do stream `crm-chats`.
-
-#### [MODIFY] [src/pages/OrderManagerView.tsx](file:///home/eliezer/Escritorio/dominuslabs/src/pages/OrderManagerView.tsx)
-- Assegurar que ao disparar as mutações de **Aceitar Pedido** ou **Rejeitar Pedido**, a função `stopAlarm()` seja imediatamente executada, silenciando o áudio no ato do clique do operador.
-
----
-
-### Backend (FastAPI Core)
-
-#### [MODIFY] [test-integration/project-hub/backend/app/main.py](file:///home/eliezer/Escritorio/dominuslabs/test-integration/project-hub/backend/app/main.py)
-- Em `root_avatar_proxy`:
-  - Substituir o loop lento de 6 caminhos pelo caminho canônico da sessão.
-  - Adicionar timeout rígido de `3.0` segundos na chamada a `make_whatsapp_api_request`.
-- Em `root_media_proxy`:
-  - Garantir timeout de `3.0` segundos e resposta 404 imediata quando a mídia não estiver presente.
-
-#### [MODIFY] [test-integration/project-hub/backend/app/api/endpoints/whatsapp.py](file:///home/eliezer/Escritorio/dominuslabs/test-integration/project-hub/backend/app/api/endpoints/whatsapp.py)
-- Em `get_session_avatar`: adicionar `timeout=3.0` na invocação de `make_whatsapp_api_request`.
-- Em `get_session_media`: adicionar `timeout=3.0` na invocação de `make_whatsapp_api_request`.
-
----
-
-## Verification Plan
-
-### Automated Tests
-- Executar suíte de testes Vitest:
-  ```bash
-  npm test
-  ```
-- Compilar o build de produção do frontend:
-  ```bash
-  npm run build
-  ```
-
-### Manual Verification
-- **Teste de Estabilidade e Concorrência:**
-  - Navegar para `https://dominuslabs.onrender.com/omnichannel` e alternar entre diferentes chats do WhatsApp.
-  - Monitorar em tempo real a latência de `/api/v1/orders` com `curl` para certificar que o tempo de resposta permanece abaixo de 100ms.
-- **Auditoria de Console no DevTools:**
-  - Inspecionar `get_console_message` no Chrome DevTools MCP para atestar ausência de erros de CORS ou desconexões.
-- **Validação de Áudio no Order Manager:**
-  - Simular ou alterar o status de um pedido para pendente e verificar que ao clicar em Aceitar ou Rejeitar, o alarme é silenciado na hora.
-
----
-
-## Fechamento da sessão atual
-
-### Backend
-
-- `project-hub/backend/app/api/endpoints/product_media.py`: validação por assinatura real, limite configurável, extensão canônica e ausência de `tenant_id` no formulário.
-- proxies de avatar/mídia em `main.py`, `crm.py` e `whatsapp.py`: apenas `Authorization: Bearer`, com cache privado.
-- `n8n_service.py`: cache de leads somente após validação por tenant e erro controlado quando o n8n não estiver disponível.
-- `webhooks.py`: ownership positivo do próprio tenant antes da busca de colisões entre tenants.
-- testes async marcados com AnyIO e backend validado também com o plugin `pytest-asyncio` desabilitado.
-
-### Frontend
-
-- `uploadProductMedia` usa `fetchWithAuth(..., null)` e envia somente arquivo + UUID persistido do produto.
-- URLs relativas retornadas pelo upload são resolvidas contra o origin da API antes da renderização no catálogo.
-- recursos privados do Omnichannel são buscados sob demanda, transformados em Blob URL e revogados no cleanup; URLs públicas continuam diretas.
-
-### Gates locais
-
-- `npm run lint`, `npm test`, `npm run build`;
-- suíte completa do pytest com `-p no:asyncio`;
-- Bandit e verificação de diff;
-- fluxo visual local de cadastro + upload na página Governança e Empresa.
+- Teste do `IdentityClient` descriptografa o request uma vez, compara conjuntos exatos de campos interno/externo, verifica igualdade dos duplicados e valida a assinatura canônica com a chave pública de teste.
+- Testes cobrem campos obrigatórios não vazios, `algorithm == "RS256"`, headers exatos, rejeição de resposta plaintext/incompleta, cache apenas em memória e invalidação em 401/403.
+- Testes/checagens impedem reintrodução das rotas Instagram mortas, do módulo delegador, de headers proibidos no `WhatsAppClient` e de credencial M2M no frontend.
+- Aceite final: pytest completo, Bandit `-ll -ii`, ESLint, Vitest e build verdes; busca estática sem consumidores quebrados; Code Review sem P0/P1; QA Jules concluído com evidências; nenhum merge/deploy.

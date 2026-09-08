@@ -1,58 +1,75 @@
 # Guia de Integração: Dominus Backend ⇄ Sistemas Externos
 
-Este documento detalha como os sistemas externos devem se comunicar com o backend do Dominus para garantir latência e fricção mínimas, de acordo com as regras de negócio estabelecidas.
+Este guia descreve os contratos operacionais atuais. O backend é a fronteira de confiança para identidade humana, tenant e credenciais de serviço; o frontend nunca recebe credenciais M2M.
 
 ## 1. Identity Worker (IDPW)
-**Objetivo:** Prover autenticação e provisionamento de sessões M2M (Machine-to-Machine) via JWT para instâncias do sistema.
 
-### Provisionamento e Autenticação
-- **Endpoint:** `/api/v1/auth/provision` (ou no Identity Worker equivalente)
-- **Fluxo:**
-  1. O backend Dominus envia uma solicitação assinada.
-  2. O IDPW responde com um `access_token` JWT contendo as claims necessárias (`tenant_id`, `scope`).
-  3. O backend valida a assinatura e expiração sem chamadas síncronas extras.
-- **Payload Esperado (JWT):**
-  ```json
-  {
-    "iss": "https://identity.dominus.online",
-    "aud": "whatsapp-api",
-    "sub": "dominus-prod",
-    "tenant_id": "tenant_123",
-    "scope": "whatsapp:messages:send",
-    "exp": 1900000000
-  }
-  ```
+**Objetivo:** emitir JWT M2M de curta duração para as chamadas internas do Dominus à Whats API.
 
-## 2. N8N (Automação de Fluxos de Trabalho)
-**Objetivo:** Orquestrar integrações de CRM, notificações e campanhas.
+### Solicitação de token
 
-### Webhooks de Recepção (Inbound)
-- **Cabeçalhos Exigidos:** Assinatura HMAC-SHA256 (`X-N8N-Signature`), Timestamp (`X-N8N-Timestamp`) e ID único de evento (`X-N8N-Event-Id`). A assinatura é calculada sobre `timestamp.event_id.body`.
-- **Payload Esperado (Exemplo de Mensagem Recebida):**
-  O N8N deve enviar dados estritos que correspondam aos schemas Pydantic, garantindo consistência com o frontend.
-  ```json
-  {
-    "event": "new_message",
-    "lead_id": "lead_123",
-    "message": {
-      "id": "msg_456",
-      "sender": "client",
-      "content": "Gostaria de mais informações",
-      "timestamp": "2023-10-25T12:00:00Z"
-    }
-  }
-  ```
+- **Endpoint do IDPW:** `POST /v1/tokens`.
+- **Cliente responsável:** somente `app/services/identity_client.py`.
+- **Headers definidos pela aplicação:** somente `Content-Type: application/json` e `X-Request-ID: <request_id>`; o cliente HTTP acrescenta os headers normais de transporte.
+- **Cache:** exclusivamente em memória, indexado por `(tenant_id, scope, aud)`; no executor HTTP comum, uma rejeição `401` ou `403` da Whats API invalida a entrada correspondente.
 
-## 3. WhatsApp API
-**Objetivo:** Envio e recebimento de mensagens e mídias no modelo Omnichannel.
+O payload lógico assinado contém exatamente:
 
-### Padrão de Comunicação
-- **Envio de Mensagem:** `/api/v1/crm/messages/send`
-  O backend atua como proxy, repassando o payload formatado corretamente para a API do WhatsApp.
-- **Tratamento de Mídias:**
-  As mídias são enviadas via base64 ou URL (dependendo do suporte configurado), utilizando o payload `OmnichannelMessage` validado em ambos os lados.
+```json
+{
+  "aud": "whatsapp-api",
+  "tenant_id": "tenant_123",
+  "scope": "whatsapp:messages:send",
+  "request_id": "<uuid>",
+  "timestamp": 1900000000,
+  "nonce": "<hex-aleatorio>",
+  "jti": "<uuid>"
+}
+```
 
-## Boas Práticas para Integração
-- **Latência:** Chamadas externas do FastAPI devem ser feitas via `httpx.AsyncClient` para não bloquear o event loop.
-- **Tratamento de Erros:** O backend deve sempre retornar JSONs claros para erros, que serão renderizados de forma amigável no frontend (via `sonner` toast).
-- **Consistência:** Os payloads de resposta do backend (`schemas/crm.py`) mapeiam exatamente os tipos TypeScript do frontend. Não introduza novos campos no fluxo do N8N ou WhatsApp sem antes atualizar a interface TypeScript e o schema Pydantic.
+O Dominus serializa esse objeto em UTF-8 com chaves ordenadas e separadores compactos, assina-o com `DOMINUS_PRIVATE_KEY` usando RSA PKCS#1 v1.5 e SHA-256 e codifica a assinatura em Base64. O envelope lógico contém os sete campos acima, cópias idênticas em `payload`, mais `signature` e `algorithm: "RS256"`.
+
+O envelope é cifrado uma única vez para o IDPW por criptografia híbrida AES-256-GCM + RSA-OAEP/SHA-256. O transporte recebe `_encrypted: true` e os campos `encryptedKey`, `iv`, `authTag` e `payload` em Base64. Uma resposta HTTP `200` também deve ser cifrada para a chave pública do Dominus e, após descriptografada, conter `access_token` não vazio e `expires_in` inteiro positivo. Plaintext, campo ausente ou validade inválida são rejeitados sem fallback.
+
+### Scopes aceitos nesta integração
+
+- `whatsapp:sessions:read`
+- `whatsapp:sessions:create`
+- `whatsapp:sessions:write`
+- `whatsapp:sessions:delete`
+- `whatsapp:messages:send`
+
+## 2. Whats API
+
+**Objetivo:** gerenciar sessões WhatsApp e enviar/receber mensagens e mídias no modelo Omnichannel.
+
+- Todo tráfego interno passa por `app/services/whatsapp_client.py`.
+- O backend resolve e valida positivamente o `tenant_id` e o ownership da sessão antes de delegar a operação.
+- As chamadas usam `Authorization: Bearer <JWT_M2M>` e `X-Request-ID`; operações mutáveis também usam `Idempotency-Key`.
+- Corpos JSON são cifrados uma vez para a Whats API. O JWT M2M não é salvo em banco, entidade, log, URL ou storage do browser.
+- Rotas funcionais do Dominus incluem `/api/v1/whatsapp/sessions` e `/api/v1/whatsapp/sessions/{session_id}/messages/send`; o CRM também compõe envios por `/api/v1/crm/messages/send`.
+
+## 3. n8n (automação de fluxos)
+
+**Objetivo:** orquestrar integrações de CRM, notificações e campanhas.
+
+Webhooks inbound exigem `X-N8N-Signature`, `X-N8N-Timestamp` e `X-N8N-Event-Id`. A assinatura é o HMAC-SHA256 de `timestamp.event_id.body`, usando o corpo bruto. Timestamp fora da tolerância, evento repetido, segredo bruto, credencial em query string ou JWT de usuário humano são rejeitados.
+
+Exemplo de corpo para `POST /api/v1/webhooks/inbound/instagram`:
+
+```json
+{
+  "tenant_id": "tenant_123",
+  "lead_id": "lead_123",
+  "sender": "lead",
+  "message": "Gostaria de mais informações"
+}
+```
+
+## Boas práticas
+
+- Faça chamadas externas de forma assíncrona e mantenha timeout explícito.
+- Preserve `X-Request-ID` somente para correlação; ele não concede identidade, tenant ou autorização.
+- Trate erros de serviços sem expor tokens, chaves ou payloads sensíveis.
+- Mantenha schemas Pydantic e tipos TypeScript sincronizados antes de alterar payloads funcionais.
+- Mudanças em criptografia, scopes ou rotas válidas exigem um objetivo coordenado separado; não use mecanismos de compatibilidade como fallback.

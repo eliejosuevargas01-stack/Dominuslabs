@@ -18,7 +18,7 @@ from app.repositories.task_repo import task_repo
 from app.repositories.asset_repo import asset_repo
 from app.repositories.log_repo import log_repo
 from app.services.project_service import project_service
-from app.core.auth import get_current_user, check_project_create_permission, check_project_edit_permission, check_admin_role
+from app.core.auth import get_current_user, check_write_permission, check_update_permission, check_admin_role
 from pydantic import BaseModel
 
 class PublicProjectDetail(BaseModel):
@@ -57,7 +57,7 @@ def read_projects(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
     return project_repo.get_all(db, skip=skip, limit=limit)
 
 @router.post("/", response_model=Project)
-def create_project(project_in: ProjectCreate, db: Session = Depends(get_db), current_user: str = Depends(check_project_create_permission)):
+def create_project(project_in: ProjectCreate, db: Session = Depends(get_db), current_user: str = Depends(check_write_permission)):
     """
     Função/Método create_project.
 
@@ -80,7 +80,7 @@ def read_project(project_id: int, db: Session = Depends(get_db), current_user: s
     return project
 
 @router.put("/{project_id}", response_model=Project)
-def update_project(project_id: int, project_in: ProjectUpdate, db: Session = Depends(get_db), current_user: str = Depends(check_project_edit_permission)):
+def update_project(project_id: int, project_in: ProjectUpdate, db: Session = Depends(get_db), current_user: str = Depends(check_update_permission)):
     """
     Função/Método update_project.
 
@@ -145,7 +145,7 @@ def read_tasks(project_id: int, skip: int = 0, limit: int = 100, db: Session = D
     return task_repo.get_by_project(db, project_id, skip=skip, limit=limit)
 
 @router.post("/{project_id}/tasks", response_model=ProjectTask)
-def create_task(project_id: int, task_in: ProjectTaskCreate, db: Session = Depends(get_db), current_user: str = Depends(check_project_edit_permission)):
+def create_task(project_id: int, task_in: ProjectTaskCreate, db: Session = Depends(get_db), current_user: str = Depends(check_update_permission)):
     """
     Função/Método create_task.
 
@@ -157,7 +157,7 @@ def create_task(project_id: int, task_in: ProjectTaskCreate, db: Session = Depen
     return task_repo.create(db, obj_in=task_in)
 
 @router.put("/tasks/{task_id}", response_model=ProjectTask)
-def update_task(task_id: int, task_in: ProjectTaskUpdate, db: Session = Depends(get_db), current_user: str = Depends(check_project_edit_permission)):
+def update_task(task_id: int, task_in: ProjectTaskUpdate, db: Session = Depends(get_db), current_user: str = Depends(check_update_permission)):
     """
     Função/Método update_task.
 

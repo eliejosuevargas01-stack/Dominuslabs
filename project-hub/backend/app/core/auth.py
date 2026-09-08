@@ -229,25 +229,6 @@ def check_product_update_permission(credentials: HTTPAuthorizationCredentials = 
 def check_product_delete_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
     return check_permission("product.delete", credentials, db)
 
-# Compatibility aliases for existing endpoint dependencies
-def check_project_create_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
-    """
-    Função/Método check_project_create_permission.
-
-    O que faz: Processa check_project_create_permission recebendo os parâmetros (credentials, db) no contexto de o módulo core/base auth.
-    Impacto na regra de negócio: Assegura que o fluxo da operação check_project_create_permission seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-    """
-    return check_write_permission(credentials, db)
-
-def check_project_edit_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
-    """
-    Função/Método check_project_edit_permission.
-
-    O que faz: Processa check_project_edit_permission recebendo os parâmetros (credentials, db) no contexto de o módulo core/base auth.
-    Impacto na regra de negócio: Assegura que o fluxo da operação check_project_edit_permission seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-    """
-    return check_update_permission(credentials, db)
-
 def check_crm_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
     """
     Função/Método check_crm_permission.

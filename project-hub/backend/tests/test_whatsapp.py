@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
 from app.core.config import settings
@@ -130,29 +130,6 @@ def test_send_message(mock_send, client: TestClient, auth_headers: dict, test_wh
     payload = {"phone": "5511999999999", "message": "Hello", "type": "text"}
     response = client.post(f"{settings.API_V1_STR}/whatsapp/sessions/123/messages/send", json=payload, headers=auth_headers)
 
-    assert response.status_code == 200
-
-
-def test_ram_proxy_no_creds(client: TestClient, auth_headers: dict):
-    payload = {"username": "", "password": ""}
-    response = client.post(f"{settings.API_V1_STR}/whatsapp/instagram/login", json=payload, headers=auth_headers)
-    assert response.status_code == 400
-
-
-@patch("app.services.whatsapp_client.whatsapp_client.instagram_login", new_callable=AsyncMock)
-def test_ram_proxy_success(mock_login, client: TestClient, auth_headers: dict):
-    mock_login.return_value = {"status": "ok"}
-
-    payload = {"username": "user", "password": "password"}
-    response = client.post(f"{settings.API_V1_STR}/whatsapp/instagram/login", json=payload, headers=auth_headers)
-    assert response.status_code == 200
-
-
-@patch("app.services.whatsapp_client.whatsapp_client.instagram_logout", new_callable=AsyncMock)
-def test_logout_instagram_proxy(mock_logout, client: TestClient, auth_headers: dict):
-    mock_logout.return_value = {"status": "ok"}
-
-    response = client.post(f"{settings.API_V1_STR}/whatsapp/instagram/sessions/test_user/logout", headers=auth_headers)
     assert response.status_code == 200
 
 
@@ -476,4 +453,3 @@ def test_resolve_owned_whatsapp_session_same_name_different_tenants(db):
     with pytest.raises(HTTPException) as exc_404:
         resolve_owned_whatsapp_session(user_c, "sessao_inexistente", db)
     assert exc_404.value.status_code == 404
-

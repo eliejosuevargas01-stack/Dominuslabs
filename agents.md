@@ -1,24 +1,29 @@
-# 👥 Agents: Papéis, Responsabilidades e Restrições
+# Agentes — Limpeza de legado sem regressão
 
-## 1. Rabibi-Maestro (Arquiteto e Orquestrador)
-- **Papel:** Planejamento arquitetural, governança de código, garantia das diretrizes SOLID e desacoplamento (Node.js BFF vs FastAPI Core).
-- **Restrições:** Não realiza codificação pesada na máquina de desenvolvimento; delega tarefas através de branches isoladas e valida a conformidade com Code Review e QA.
+## Rabibi-Maestro
 
-## 2. Worker-Frontend (Especialista em React/TypeScript & UX)
-- **Papel:** Otimização de performance de interface, carregamento seletivo de avatares, áudio sob demanda (`preload="none"`), tratamento de reconexão de SSE e controle do alarme sonoro do PDV.
-- **Escopo de Arquivos:** `src/pages/OmnichannelView.tsx`, `src/pages/OrderManagerView.tsx`, `index.html`.
-- **Restrições:** Não alterar contratos de autenticação ou schemas de dados sem validação prévia.
+- Orquestra a branch `codex/dominus-legacy-cleanup-goal`, mantém o escopo preso ao `goal.md`, integra os resultados e executa as buscas de consumidores antes e depois de cada remoção.
+- Pode ajustar artefatos de contexto e fazer correções pequenas de integração, mas não promove para `main` nem executa deploy.
 
-## 3. Worker-Backend (Especialista em FastAPI, Concorrência e Resiliência)
-- **Papel:** Implementação de timeouts estritos em rotas de proxy, verificação de `request.is_disconnected()` em streams SSE, configuração de múltiplos workers ASGI e isolamento de integrações externas.
-- **Escopo de Arquivos:** `test-integration/project-hub/backend/app/main.py`, `test-integration/project-hub/backend/app/api/endpoints/whatsapp.py`, `test-integration/project-hub/backend/app/api/endpoints/webhooks.py`.
-- **Restrições:** Jamais utilizar chamadas síncronas bloqueantes dentro de rotas `async def`.
+## Worker Backend
 
-## 4. Jules QA & Code Reviewer (Gatekeepers de Qualidade)
-- **Papel:** Execução de testes de regressão, análise estática de segurança e verificação de bloqueadores P0/P1 antes de qualquer autorização de deploy.
-- **Restrições:** Travamento absoluto contra deploys automáticos em produção sem consentimento explícito do usuário.
+- Remove apenas camadas, imports, aliases e rotas comprovadamente redundantes no backend FastAPI.
+- Preserva integralmente `IdentityClient`, `WhatsAppClient`, ownership por tenant, autenticação humana, CRM, webhooks, SSE, pedidos, mídia e upload.
+- Não altera criptografia, scopes, contratos HTTP válidos, modelos persistidos ou migrations.
 
-## Fechamento desta sessão
+## Worker Frontend e Documentação
 
-- A implementação e o QA serão executados localmente pelo agente principal, conforme solicitação do usuário.
-- Não haverá delegação nem deploy. Caso uma delegação se torne indispensável, o único canal autorizado é o Antigravity CLI.
+- Remove somente a UI e os helpers de autenticação Instagram ligados às rotas mortas do domínio WhatsApp.
+- Mantém Instagram como dado/canal do CRM e integração n8n, bem como tokens humanos e todos os fluxos funcionais existentes.
+- Atualiza a documentação operacional para descrever apenas o contrato atual congelado no `goal.md`.
+
+## Code Review e QA Jules
+
+- Revisam exclusivamente o commit enviado e tratam regressão funcional, segurança, contrato e falha de testes como bloqueadores P0/P1.
+- Validam a suíte completa em uma branch não produtiva. Deploy e merge em `main` permanecem proibidos sem autorização explícita do usuário.
+
+## Regras comuns
+
+- Toda exclusão exige busca estática prévia e prova automatizada posterior.
+- Nenhum segredo pode aparecer em prompt, commit, log ou relatório.
+- Achados fora do caminho de limpeza são preservados e, se necessário, registrados para trabalho futuro; não são corrigidos nesta entrega.

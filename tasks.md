@@ -1,47 +1,34 @@
-# 📋 Tasks: Plano de Execução e Distribuição
+# Tasks — Limpeza de legado sem regressão
 
-## Tarefa 1: Proteção e Blindagem de Avatares no Frontend (Omnichannel)
-- **Responsável:** Worker-Frontend
-- **Ações:**
-  - Atualizar `getAvatarSrc` em `src/pages/OmnichannelView.tsx` adicionando a flag `allowProxy=false` para itens da lista na sidebar.
-  - Assegurar que imagens diretas da CDN (`pps.whatsapp.net`, `fbcdn.net`, `data:image`) continuem sendo exibidas.
-  - Para contatos sem imagem direta, renderizar exclusivamente o fallback de iniciais com cores dinâmicas, sem efetuar requisições HTTP contra o backend.
-  - No cabeçalho da conversa aberta, permitir a tentativa sob demanda via proxy (`allowProxy=true`).
+## 1. Baseline e inventário
 
-## Tarefa 2: Timeouts Rígidos e Circuit Breaker no Backend (FastAPI)
-- **Responsável:** Worker-Backend
-- **Ações:**
-  - Reduzir timeout de `make_whatsapp_api_request` nas rotas `/avatar` e `/media` para 3.0 segundos.
-  - Eliminar o loop de 6 caminhos sequenciais em `root_avatar_proxy`, focando exclusivamente na rota canônica da sessão.
-  - Garantir resposta rápida `404 Not Found` em falha ou timeout, sem segurar conexões dos workers ASGI.
+- Registrar consumidores reais das camadas candidatas no backend, frontend e testes.
+- Executar pytest, Bandit, lint, Vitest e build antes das mudanças para separar falhas preexistentes de regressões.
 
-## Tarefa 3: Governança de Conexões SSE e Tratamento de Desconexão
-- **Responsável:** Worker-Backend & Worker-Frontend
-- **Ações:**
-  - Validar e garantir `await request.is_disconnected()` em todas as rotas SSE (`/webhooks/events`, `/webhooks/events/crm-chats`).
-  - No frontend, assegurar o encerramento imediato via `eventSource.close()` no evento `onerror` em todos os dashboards e visualizadores.
+## 2. Consolidar o fluxo M2M
 
-## Tarefa 4: Controle de Áudio e Alarme no Order Manager
-- **Responsável:** Worker-Frontend
-- **Ações:**
-  - Garantir que o alarme sonoro pare instantaneamente quando qualquer pedido for Aceito ou Rejeitado no PDV.
-  - Validar renderização dos dados do novo payload de pedidos e links de navegação para o Waze.
+- Migrar o único consumidor de `identity_service.py` para `identity_client` e remover a camada delegadora.
+- Remover `get_oauth_token`, `check_token_validity` e `invalidate_token` de `whatsapp_service.py`, junto com imports sem uso.
+- Manter `IdentityClient` como única autoridade de token e `WhatsAppClient` como único cliente interno da Whats API.
 
-## Tarefa 5: Homologação e Gates de Qualidade
-- **Responsável:** Jules QA & Rabibi-Maestro
-- **Ações:**
-  - Executar suíte de testes unitários (`npm test` / Vitest).
-  - Validar build de produção (`npm run build`).
-  - Executar auditoria de rotas e console via Chrome DevTools MCP.
+## 3. Remover Instagram residual do domínio WhatsApp
 
-## Tarefa 6: Fechamento do Upload e Achados Derivados
+- Excluir os métodos `instagram_login`/`instagram_logout`, as duas rotas proxy e seus testes de perpetuação.
+- Excluir os helpers e a interface de conexão Instagram em `ConnectionsView`, preservando campos de lead, webhook inbound n8n e demais recursos CRM/Instagram independentes.
 
-- **Responsável:** agente principal local.
-- **Ações:**
-  - validar conteúdo e tamanho de uploads de produto antes da persistência;
-  - remover `tenant_id` do formulário de mídia e usar o cliente autenticado compartilhado;
-  - resolver URLs relativas de mídia pelo origin da API para impedir imagens quebradas em frontend e backend separados;
-  - eliminar JWT de URLs de avatar/mídia e consumir proxies privados via Bearer + Blob;
-  - corrigir colisão multi-tenant do SSE e marcadores assíncronos do CI;
-  - substituir fallback `MOCK_LEADS` por cache previamente validado ou erro 503;
-  - executar testes backend sem `pytest-asyncio`, suíte frontend, lint, build, SAST e QA visual local.
+## 4. Remover compatibilidade comprovadamente inútil
+
+- Eliminar aliases/wrappers de uma linha somente após migrar consumidores internos: factory HTTP compatível, permissões de projeto, alias preventivo de refresh e alias não usado de histórico n8n.
+- Preservar aliases de permissões, schemas e payloads que possuem consumidores atuais ou contrato externo não comprovadamente obsoleto.
+
+## 5. Congelar contrato e documentação
+
+- Tornar determinísticos os testes do envelope assinado/cifrado do `IdentityClient`, incluindo campos exatos, assinatura RS256, camada única, headers, resposta cifrada e falha fechada.
+- Impedir reintrodução de headers/credenciais legados no transporte Whats API e exposição de M2M ao frontend.
+- Corrigir o guia operacional para `POST /v1/tokens` e o contrato descrito no `goal.md`.
+
+## 6. Gates de entrega
+
+- Reexecutar toda a matriz local e buscas estáticas; o diff deve ser predominantemente deleções/simplificações.
+- Commitar e enviar somente arquivos do GOAL, executar Code Review no SHA exato e QA Jules na branch.
+- Corrigir bloqueadores e repetir os gates. Não fazer merge em `main` nem deploy.

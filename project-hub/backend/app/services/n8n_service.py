@@ -1393,13 +1393,6 @@ class N8NService:
                 return []
 
     @staticmethod
-    async def get_chat_history(lead_id: str, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> List[dict]:
-        """
-        Alias para get_messages utilizando action=get_chat_history.
-        """
-        return await N8NService.get_messages(lead_id, user_id=user_id, tenant_id=tenant_id)
-
-    @staticmethod
     async def update_lead(lead_id: str, payload: dict, current_user: Optional[str] = None, tenant_id: Optional[str] = None) -> dict:
         """
         Atualização de lead com Zero-Trust e isolamento estrito por tenant_id.

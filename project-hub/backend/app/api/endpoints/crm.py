@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.user import User
-from app.services.whatsapp_service import send_whatsapp_message, get_oauth_token, invalidate_token, check_token_validity
+from app.services.whatsapp_service import send_whatsapp_message
 
 router = APIRouter()
 
