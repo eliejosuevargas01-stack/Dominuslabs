@@ -17,6 +17,7 @@ FRONTEND_SRC = REPO_ROOT / "src"
 
 
 def _frontend_runtime_source() -> str:
+    assert FRONTEND_SRC.is_dir(), f"Frontend source directory not found: {FRONTEND_SRC}"
     sources = []
     for path in sorted(FRONTEND_SRC.rglob("*")):
         if path.suffix not in {".js", ".jsx", ".ts", ".tsx"}:
@@ -28,6 +29,7 @@ def _frontend_runtime_source() -> str:
             continue
         # Conteúdo bruto evita que um parser manual incompleto esconda código executável.
         sources.append(path.read_text(encoding="utf-8"))
+    assert sources, f"No frontend runtime source found under: {FRONTEND_SRC}"
     return "\n".join(sources)
 
 
@@ -162,11 +164,34 @@ def test_identity_client_is_the_only_m2m_authority_and_has_no_persistence_import
         if path == identity_path:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        if any(
-            isinstance(node, ast.ImportFrom)
-            and node.module == "app.services.identity_client"
-            for node in ast.walk(tree)
-        ):
+        imports_identity_client = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import) and any(
+                alias.name == "app.services.identity_client" for alias in node.names
+            ):
+                imports_identity_client = True
+            elif isinstance(node, ast.ImportFrom) and (
+                node.module == "app.services.identity_client"
+                or (
+                    node.module == "app.services"
+                    and any(alias.name == "identity_client" for alias in node.names)
+                )
+                or (
+                    path.parent == BACKEND_APP / "services"
+                    and node.level == 1
+                    and (
+                        node.module == "identity_client"
+                        or (
+                            node.module is None
+                            and any(
+                                alias.name == "identity_client" for alias in node.names
+                            )
+                        )
+                    )
+                )
+            ):
+                imports_identity_client = True
+        if imports_identity_client:
             production_importers.add(path.relative_to(BACKEND_APP).as_posix())
     assert production_importers == {"services/whatsapp_client.py"}
 
