@@ -55,6 +55,15 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
         </button>
       </div>
 
+      {/* Backdrop Mobile */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs z-30 lg:hidden animate-[fade-in_0.2s_ease-out]"
+          onClick={() => setIsOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Persistent Sidebar */}
       <aside
         className={`fixed lg:sticky top-0 left-0 h-screen z-40 bg-white border-r border-zinc-200 flex flex-col justify-between transition-all duration-300 lg:transform-none overflow-x-hidden ${
@@ -139,14 +148,6 @@ export default function Sidebar({ handleLogout, isCollapsed, setIsCollapsed }: S
           </button>
         </div>
       </aside>
-
-      {/* Mobile Drawer Overlay */}
-      {isOpen && (
-        <div
-          onClick={() => setIsOpen(false)}
-          className="md:hidden fixed inset-0 z-30 bg-slate-900/20 "
-        />
-      )}
     </>
   );
 }

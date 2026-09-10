@@ -351,7 +351,7 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
                           isVideo ? (
                             <div className="w-full h-full relative">
                               <video src={coverUrl || undefined} muted className="w-full h-full object-cover opacity-85" />
-                              <div className="absolute inset-0  flex items-center justify-center group-hover: transition-all">
+                              <div className="absolute inset-0 flex items-center justify-center group-hover:scale-105 transition-all">
                                 <Play className="w-9 h-9 text-white fill-white/80 drop-shadow-md" />
                               </div>
                               <span className="absolute top-3 left-3 text-[9px] font-bold px-2 py-0.5 rounded bg-purple-600 text-white flex items-center gap-1 uppercase tracking-wide">
@@ -531,7 +531,7 @@ export default function Showcase({ isDashboard = false }: { isDashboard?: boolea
       {/* Detailed Case Modal */}
       {selectedProject && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4   animate-[fade-in_0.2s_ease-out]"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-[fade-in_0.2s_ease-out]"
           onClick={() => setSelectedProject(null)}
         >
           <div 

@@ -53,6 +53,27 @@ describe('Sidebar Component', () => {
     expect(closeMenuBtn).toBeInTheDocument();
   });
 
+  it('renders mobile backdrop overlay when open and closes menu on backdrop click', () => {
+    const { container } = renderSidebar();
+
+    // Backdrop should not be present initially
+    expect(container.querySelector('.bg-black\\/50')).not.toBeInTheDocument();
+
+    // Open mobile menu
+    const openMenuBtn = screen.getByRole('button', { name: /Abrir menu/i });
+    fireEvent.click(openMenuBtn);
+
+    // Backdrop should be rendered
+    const backdrop = container.querySelector('.bg-black\\/50');
+    expect(backdrop).toBeInTheDocument();
+    expect(backdrop).toHaveClass('fixed', 'inset-0', 'z-30');
+
+    // Clicking backdrop closes the menu
+    fireEvent.click(backdrop!);
+    expect(container.querySelector('.bg-black\\/50')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Abrir menu/i })).toBeInTheDocument();
+  });
+
   it('calls setIsCollapsed when clicking collapse toggle button', () => {
     const setIsCollapsed = vi.fn();
     renderSidebar({ ...defaultProps, setIsCollapsed });

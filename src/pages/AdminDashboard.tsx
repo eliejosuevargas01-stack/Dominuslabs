@@ -281,7 +281,7 @@ export default function AdminDashboard() {
                   };
 
                   return (
-                    <tr key={p.id} className="hover: transition-colors group">
+                    <tr key={p.id} className="hover:bg-zinc-50 transition-colors group">
                       <td className="p-4 pl-6">
                         <Link to={`/project-hub/project/${p.id}`} className="font-semibold text-zinc-900 hover:text-purple-600 transition-colors">
                           {p.name}
@@ -347,7 +347,7 @@ export default function AdminDashboard() {
 
       {/* Creation Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4   animate-[fade-in_0.2s_ease-out]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-[fade-in_0.2s_ease-out]">
           <div className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl border border-zinc-200 flex flex-col max-h-[90vh] animate-[scale-up_0.25s_cubic-bezier(0.34,1.56,0.64,1)]">
             
             {/* Modal Header */}

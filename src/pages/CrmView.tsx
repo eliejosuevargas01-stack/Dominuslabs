@@ -359,7 +359,7 @@ export default function CrmView() {
             </div>
           ) : (
             <>
-              <table className="w-full text-left border-collapse">
+              <table className="w-full min-w-[640px] text-left border-collapse">
                 <thead>
                   <tr className="border-b border-zinc-200/50 text-xs font-bold text-zinc-400 uppercase tracking-wider">
                     <th className="py-3 px-3 max-w-[140px]">ID Contato</th>
@@ -412,7 +412,7 @@ export default function CrmView() {
                       type="button"
                       onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                       disabled={currentPage === 1}
-                      className="p-2 rounded-xl border border-zinc-200  hover:bg-purple-50 text-zinc-600 disabled:opacity-40 disabled:hover: transition-all cursor-pointer flex items-center justify-center"
+                      className="p-2 rounded-xl border border-zinc-200 hover:bg-purple-50 text-zinc-600 disabled:opacity-40 transition-all cursor-pointer flex items-center justify-center"
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
@@ -452,7 +452,7 @@ export default function CrmView() {
                       type="button"
                       onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                       disabled={currentPage === totalPages}
-                      className="p-2 rounded-xl border border-zinc-200  hover:bg-purple-50 text-zinc-600 disabled:opacity-40 disabled:hover: transition-all cursor-pointer flex items-center justify-center"
+                      className="p-2 rounded-xl border border-zinc-200 hover:bg-purple-50 text-zinc-600 disabled:opacity-40 transition-all cursor-pointer flex items-center justify-center"
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>

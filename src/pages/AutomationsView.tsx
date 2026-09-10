@@ -97,7 +97,7 @@ export default function AutomationsView({
               return (
                 <div
                   key={rule.id}
-                  className="p-6 flex items-center justify-between gap-4 hover: transition-colors"
+                  className="p-6 flex items-center justify-between gap-4 hover:bg-zinc-50 transition-colors"
                 >
                   <div className="space-y-1 max-w-3xl">
                     <div className="flex items-center gap-2">

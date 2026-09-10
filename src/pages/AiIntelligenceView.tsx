@@ -239,7 +239,7 @@ export default function AiIntelligenceView({
               </div>
               <button
                 onClick={() => setSelectedLog(null)}
-                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-700 hover: cursor-pointer"
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
