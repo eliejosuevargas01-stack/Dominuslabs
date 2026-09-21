@@ -611,7 +611,7 @@ export default function AdminProjectView() {
 
       {/* Edit Form Modal */}
       {editOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4   animate-[fade-in_0.2s_ease-out]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-[fade-in_0.2s_ease-out]">
           <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-zinc-100 flex flex-col max-h-[90vh] animate-[scale-up_0.25s_cubic-bezier(0.34,1.56,0.64,1)]">
             
             {/* Modal Header */}
@@ -622,7 +622,7 @@ export default function AdminProjectView() {
               </div>
               <button 
                 onClick={() => setEditOpen(false)}
-                className="p-1.5 rounded-xl hover: text-zinc-400 hover:text-zinc-700 transition-colors cursor-pointer"
+                className="p-1.5 rounded-xl hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>

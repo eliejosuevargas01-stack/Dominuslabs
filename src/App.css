@@ -45,7 +45,7 @@ body {
 /* Base Card Styles */
 .glass-card,
 .surface-card {
-  background: var(--bg-surface);
+  background-color: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   box-shadow: var(--shadow-sm);
@@ -62,8 +62,11 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
   font-weight: 600;
-  color: var(--text-primary);
   letter-spacing: -0.01em;
+}
+
+:where(h1, h2, h3, h4, h5, h6):not([class*="text-"]) {
+  color: var(--text-primary);
 }
 
 /* Clean Scrollbars */

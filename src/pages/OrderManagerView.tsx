@@ -1,15 +1,31 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ShoppingBag, Check, MapPin, DollarSign, Clock } from 'lucide-react';
+import { 
+  ShoppingBag, 
+  Check, 
+  MapPin, 
+  Clock, 
+  ExternalLink,
+  Flame,
+  Archive,
+  CheckCircle2,
+  XCircle,
+  TrendingUp,
+  Search,
+  ArrowRight,
+  ChefHat,
+  AlertCircle
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 /**
  * Documentation-Driven Testing:
  * O comportamento esperado para OrderManagerView.tsx:
- * - `useOrdersWebSocket`: Conecta via WebSocket à `/api/v1/orders/ws`. Recebe eventos `new_order` e `order_updated`.
+ * - `useOrdersWebSocket`: Conecta via WebSocket / SSE à `/api/v1/orders/events`. Recebe eventos `new_order` e `order_updated`.
  * - `Card de Pedido`: Exibe detalhes do pedido (nome, valor, endereço, itens).
  * - `Botão Aceitar`: Para o loop de áudio e atualiza o status do pedido localmente ou via API.
  * - `Link Waze`: Abre uma rota de navegação HTTPS com endereço codificado.
  * - `Áudio TTS`: Toca em loop "Olá..." a cada 15s até aceitar o pedido.
+ * - `Abas Operacionais`: Alternância fluida entre 'Operação Ativa' (Novos + Em Preparo) e 'Histórico & Finalizados'.
  */
 
 // API Base URL (adjust for testing/prod)
@@ -28,9 +44,10 @@ interface Order {
   id: string;
   customerName: string;
   total: number;
+  total_amount?: number;
   address: string;
   items: OrderItem[];
-  status: 'pending' | 'accepted' | 'ready_for_delivery' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled';
+  status: 'pending' | 'accepted' | 'ready_for_delivery' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled' | 'rejected';
   createdAt: string;
 }
 
@@ -64,6 +81,23 @@ const statusLabels: Record<string, string> = {
   rejected: 'Recusado',
   cancelled: 'Cancelado',
 };
+
+function getOrderStatusBadgeClass(status: string): string {
+  const normalized = (status || '').toLowerCase();
+  if (['delivered', 'completed', 'entregue', 'concluido'].includes(normalized)) {
+    return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  }
+  if (['rejected', 'cancelled', 'recusado', 'cancelado'].includes(normalized)) {
+    return 'bg-rose-50 text-rose-700 border-rose-200';
+  }
+  if (['pending', 'em_preparo', 'aberto', 'pendente'].includes(normalized)) {
+    return 'bg-amber-50 text-amber-700 border-amber-200';
+  }
+  if (['accepted', 'aceito', 'ready_for_delivery', 'out_for_delivery'].includes(normalized)) {
+    return 'bg-blue-50 text-blue-700 border-blue-200';
+  }
+  return 'bg-zinc-100 text-zinc-600 border-zinc-200';
+}
 
 // Custom Hook for real-time Orders
 function useOrdersWebSocket() {
@@ -173,6 +207,13 @@ export default function OrderManagerView() {
   const { orders, setOrders, announcedOrderIds, connectionStatus } = useOrdersWebSocket();
   const activeAlarms = useRef<Record<string, ActiveAlarm>>({});
 
+  // Abas operacionais: 'active' (em operação) vs 'history' (finalizados)
+  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
+
+  // Filtros de busca na aba de histórico
+  const [historySearch, setHistorySearch] = useState<string>('');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<'all' | 'delivered' | 'cancelled'>('all');
+
   const announceAudioFallback = useCallback((order: Order) => {
     const message = `Novo pedido pendente ${order.id}. Ative o som desta tela.`;
     toast.error(message);
@@ -186,8 +227,6 @@ export default function OrderManagerView() {
     const alarm = activeAlarms.current[orderId];
     if (!alarm) return;
 
-    // Remove primeiro para que uma requisição TTS que termine em paralelo não
-    // consiga iniciar um alarme depois de o pedido já ter sido aceito.
     delete activeAlarms.current[orderId];
     alarm.abortController.abort();
     if (alarm.interval) clearTimeout(alarm.interval);
@@ -211,7 +250,6 @@ export default function OrderManagerView() {
     };
 
     audio.onended = () => {
-      // Repete o alarme após 10 segundos de silêncio
       const alarm = activeAlarms.current[order.id];
       if (!alarm || alarm.audio !== audio) return;
       alarm.interval = setTimeout(replay, 10000);
@@ -261,7 +299,7 @@ export default function OrderManagerView() {
       }
     });
 
-    // Cleanup alarms for non-pending orders (just in case)
+    // Cleanup alarms for non-pending orders
     Object.keys(activeAlarms.current).forEach(orderId => {
       const order = orders.find(o => o.id === orderId);
       if (!order || order.status !== 'pending') {
@@ -342,140 +380,505 @@ export default function OrderManagerView() {
     }
   };
 
+  // 1. Particionamento de Ordens
+  const incomingOrders = orders.filter(o => o.status === 'pending');
+  const inProgressOrders = orders.filter(o => ['accepted', 'ready_for_delivery', 'out_for_delivery'].includes(o.status));
+  const finalizedOrders = orders.filter(o => ['delivered', 'completed', 'rejected', 'cancelled'].includes(o.status));
+  const activeOrders = [...incomingOrders, ...inProgressOrders];
+
+  // Métricas do Turno
+  const deliveredOrders = finalizedOrders.filter(o => ['delivered', 'completed'].includes(o.status));
+  const rejectedOrders = finalizedOrders.filter(o => ['rejected', 'cancelled'].includes(o.status));
+  const faturamentoConcluido = deliveredOrders.reduce((sum, o) => {
+    const val = Number(o.total_amount ?? o.total ?? 0);
+    return sum + (isNaN(val) ? 0 : val);
+  }, 0);
+
+  // Filtro de Histórico
+  const filteredFinalizedOrders = finalizedOrders.filter(order => {
+    const query = historySearch.toLowerCase().trim();
+    const matchesSearch = !query || 
+      order.id.toLowerCase().includes(query) ||
+      order.customerName.toLowerCase().includes(query) ||
+      order.address.toLowerCase().includes(query) ||
+      order.items.some(item => item.name.toLowerCase().includes(query));
+
+    if (!matchesSearch) return false;
+
+    if (historyStatusFilter === 'delivered') {
+      return ['delivered', 'completed'].includes(order.status);
+    }
+    if (historyStatusFilter === 'cancelled') {
+      return ['rejected', 'cancelled'].includes(order.status);
+    }
+    return true;
+  });
+
+  // Renderizador do Card Individual de Pedido Operacional
+  const renderOperationalCard = (order: Order, isIncoming: boolean) => {
+    const wazeUrl = buildWazeNavigationUrl(order.address);
+
+    return (
+      <div
+        key={order.id}
+        className={`bg-white rounded-2xl border transition-all overflow-hidden ${
+          isIncoming
+            ? 'border-amber-300 shadow-md ring-2 ring-amber-100'
+            : 'border-zinc-200 shadow-sm hover:border-zinc-300'
+        }`}
+      >
+        {/* Card Header */}
+        <div className={`p-4 border-b flex justify-between items-start ${
+          isIncoming ? 'bg-amber-50/60' : 'bg-zinc-50/60'
+        }`}>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-base text-zinc-900">
+                Pedido #{order.id.slice(0, 6).toUpperCase()}
+              </span>
+              {isIncoming && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-500 text-white animate-pulse">
+                  Novo
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 text-zinc-500 text-xs mt-1">
+              <Clock className="w-3.5 h-3.5 text-zinc-400" />
+              <span>{new Date(order.createdAt).toLocaleTimeString()}</span>
+            </div>
+          </div>
+          <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${getOrderStatusBadgeClass(order.status)}`}>
+            {statusLabels[order.status] || order.status}
+          </span>
+        </div>
+
+        {/* Card Body */}
+        <div className="p-4 space-y-3.5 text-sm">
+          <div>
+            <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-0.5">Cliente</p>
+            <p className="font-semibold text-zinc-900">{order.customerName}</p>
+          </div>
+
+          <div>
+            <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-zinc-400" /> Endereço
+            </p>
+            <p className="text-xs text-zinc-600 leading-relaxed">{order.address}</p>
+            {wazeUrl && (
+              <a
+                href={wazeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 font-medium hover:underline flex items-center gap-1 text-xs mt-1.5 inline-flex"
+              >
+                <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                <span>Abrir no Waze</span>
+              </a>
+            )}
+          </div>
+
+          <div>
+            <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">Itens do Pedido</p>
+            <ul className="space-y-1 bg-zinc-50 p-2.5 rounded-xl border border-zinc-100">
+              {order.items.map((item, idx) => (
+                <li key={idx} className="flex justify-between text-xs text-zinc-700">
+                  <span>
+                    <span className="font-bold text-zinc-900">{item.quantity}x</span> {item.name}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="pt-2 border-t border-zinc-100 flex justify-between items-center">
+            <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Total</span>
+            <span className="text-base font-extrabold text-zinc-900">
+              R$ {Number(order.total_amount || order.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+
+        {/* Card Actions */}
+        <div className="p-3.5 bg-zinc-50/80 border-t border-zinc-100">
+          {order.status === 'pending' && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleReject(order.id)}
+                className="flex-1 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl border border-rose-200 transition-colors cursor-pointer"
+              >
+                Recusar
+              </button>
+              <button
+                onClick={() => handleAccept(order.id)}
+                className="flex-[2] py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5" />
+                Aceitar Pedido
+              </button>
+            </div>
+          )}
+          {order.status === 'accepted' && (
+            <button 
+              onClick={() => handleStatusChange(order.id, 'ready_for_delivery')} 
+              className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition-colors cursor-pointer"
+            >
+              Marcar Pronto para Entrega
+            </button>
+          )}
+          {order.status === 'ready_for_delivery' && (
+            <button 
+              onClick={() => handleStatusChange(order.id, 'out_for_delivery')} 
+              className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm transition-colors cursor-pointer"
+            >
+              Marcar Saiu para Entrega
+            </button>
+          )}
+          {order.status === 'out_for_delivery' && (
+            <button 
+              onClick={() => handleStatusChange(order.id, 'delivered')} 
+              className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-colors cursor-pointer"
+            >
+              Marcar como Entregue
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="p-6 h-full flex flex-col bg-zinc-50">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 sm:p-6 lg:p-8 h-full flex flex-col bg-zinc-50">
+      {/* Header Principal com Status de Conexão */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 flex items-center gap-2">
             <ShoppingBag className="w-7 h-7 text-purple-600" />
             Order Manager (PDV)
           </h1>
-          <p className="text-sm text-zinc-500 mt-1">Gerencie os pedidos em tempo real.</p>
+          <p className="text-sm text-zinc-500 mt-1">
+            Painel operacional para gestão em tempo real de pedidos e entregas.
+          </p>
         </div>
-        <div className="flex items-center gap-2 text-sm bg-white border border-zinc-200 px-3 py-1.5 rounded-full shadow-sm">
-           <span className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : connectionStatus === 'connecting' ? 'bg-yellow-500' : 'bg-red-500'}`}></span>
-           <span className="text-zinc-600 font-medium">
+        <div className="flex items-center gap-2 text-xs bg-white border border-zinc-200 px-3.5 py-1.5 rounded-full shadow-sm self-start sm:self-auto">
+           <span className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : connectionStatus === 'connecting' ? 'bg-amber-500' : 'bg-rose-500'}`}></span>
+           <span className="text-zinc-600 font-semibold">
              {connectionStatus === 'connected' ? 'Conectado (Ao Vivo)' : connectionStatus === 'connecting' ? 'Conectando...' : 'Desconectado'}
            </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-max flex-1 overflow-y-auto pb-20">
-        {orders.length === 0 ? (
-          <div className="col-span-full flex flex-col items-center justify-center p-12 text-zinc-400 bg-white border border-dashed border-zinc-200 rounded-xl">
-             <ShoppingBag className="w-12 h-12 mb-4 opacity-50" />
-             <p className="text-lg font-medium text-zinc-600">Nenhum pedido no momento.</p>
-             <p className="text-sm">Aguardando novos pedidos...</p>
-          </div>
-        ) : (
-          orders.map((order) => (
-            <div
-              key={order.id}
-              className={`bg-white rounded-xl border ${order.status === 'pending' ? 'border-purple-300 shadow-md ring-1 ring-purple-100' : 'border-zinc-200 shadow-sm'} overflow-hidden transition-all`}
-            >
-              <div className={`p-4 border-b ${order.status === 'pending' ? 'bg-purple-50/50' : 'bg-zinc-50/50'} flex justify-between items-start`}>
-                 <div>
-                   <h3 className="font-semibold text-lg text-zinc-900">Pedido #{order.id.slice(0,6).toUpperCase()}</h3>
-                   <div className="flex items-center gap-1.5 text-zinc-500 text-sm mt-1">
-                     <Clock className="w-3.5 h-3.5" />
-                     {new Date(order.createdAt).toLocaleTimeString()}
-                   </div>
-                 </div>
-                 <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
-                    order.status === 'pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                    order.status === 'accepted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                    'bg-zinc-100 text-zinc-600 border-zinc-200'
-                 }`}>
-                   {statusLabels[order.status] || order.status}
-                 </span>
-              </div>
+      {/* Navegação de Abas Operacionais */}
+      <div className="flex items-center justify-between gap-4 border-b border-zinc-200 pb-3 mb-6">
+        <div role="tablist" aria-label="Abas operacionais do PDV" className="flex items-center gap-2 bg-zinc-100 p-1 rounded-2xl border border-zinc-200/80">
+          <button
+            role="tab"
+            aria-selected={activeTab === 'active'}
+            onClick={() => setActiveTab('active')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'active'
+                ? 'bg-white text-purple-700 shadow-sm'
+                : 'text-zinc-600 hover:text-zinc-900'
+            }`}
+          >
+            <Flame className="w-4 h-4 text-amber-500" />
+            <span>Operação Ativa</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              activeOrders.length > 0 ? 'bg-amber-100 text-amber-800' : 'bg-zinc-200 text-zinc-600'
+            }`}>
+              {activeOrders.length}
+            </span>
+          </button>
 
-              <div className="p-4 space-y-4">
-                <div>
-                   <p className="text-sm font-medium text-zinc-500 uppercase tracking-wider mb-1">Cliente</p>
-                   <p className="font-medium text-zinc-900">{order.customerName}</p>
-                </div>
+          <button
+            role="tab"
+            aria-selected={activeTab === 'history'}
+            onClick={() => setActiveTab('history')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'history'
+                ? 'bg-white text-purple-700 shadow-sm'
+                : 'text-zinc-600 hover:text-zinc-900'
+            }`}
+          >
+            <Archive className="w-4 h-4 text-purple-600" />
+            <span>Histórico & Finalizados</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-zinc-200 text-zinc-600">
+              {finalizedOrders.length}
+            </span>
+          </button>
+        </div>
 
-                <div>
-                   {/** HTTPS permite fallback para a versão web quando o app não estiver instalado. */}
-                   {(() => {
-                     const wazeUrl = buildWazeNavigationUrl(order.address);
-                     return <>
-                   <p className="text-sm font-medium text-zinc-500 uppercase tracking-wider mb-1 flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/> Endereço</p>
-                   <p className="text-sm text-zinc-700">{order.address}</p>
-                   {wazeUrl && <a
-                     href={wazeUrl}
-                     target="_blank"
-                     rel="noopener noreferrer"
-                     className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 mt-2 hover:underline"
-                   >
-                     Abrir no Waze
-                   </a>}
-                     </>;
-                   })()}
-                </div>
-
-                <div>
-                   <p className="text-sm font-medium text-zinc-500 uppercase tracking-wider mb-2">Itens</p>
-                   <ul className="space-y-1.5">
-                     {order.items.map((item, idx) => (
-                       <li key={idx} className="flex justify-between text-sm text-zinc-700">
-                         <span><span className="font-medium text-zinc-900">{item.quantity}x</span> {item.name}</span>
-                       </li>
-                     ))}
-                   </ul>
-                </div>
-
-                <div className="pt-3 border-t border-zinc-100 flex justify-between items-center">
-                   <span className="text-sm font-medium text-zinc-500">Total</span>
-                   <span className="text-lg font-bold text-zinc-900 flex items-center"><DollarSign className="w-4 h-4"/>{order.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                </div>
-              </div>
-
-              {order.status === 'pending' && (
-                <div className="p-4 bg-zinc-50 border-t border-zinc-100">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleReject(order.id)}
-                      className="flex-1 py-2.5 bg-red-100 hover:bg-red-200 text-red-700 font-medium rounded-lg shadow-sm transition-colors cursor-pointer"
-                    >
-                      Recusar
-                    </button>
-                    <button
-                      onClick={() => handleAccept(order.id)}
-                      className="flex-[2] py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg shadow-sm transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <Check className="w-4 h-4" />
-                      Aceitar Pedido
-                    </button>
-                  </div>
-                </div>
-              )}
-              {order.status === 'accepted' && (
-                <div className="p-4 bg-zinc-50 border-t border-zinc-100">
-                  <button onClick={() => handleStatusChange(order.id, 'ready_for_delivery')} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors cursor-pointer">
-                    Marcar pronto para entrega
-                  </button>
-                </div>
-              )}
-              {order.status === 'ready_for_delivery' && (
-                <div className="p-4 bg-zinc-50 border-t border-zinc-100">
-                  <button onClick={() => handleStatusChange(order.id, 'out_for_delivery')} className="w-full py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg shadow-sm transition-colors cursor-pointer">
-                    Marcar saiu para entrega
-                  </button>
-                </div>
-              )}
-              {order.status === 'out_for_delivery' && (
-                <div className="p-4 bg-zinc-50 border-t border-zinc-100">
-                  <button onClick={() => handleStatusChange(order.id, 'delivered')} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-sm transition-colors cursor-pointer">
-                    Marcar como entregue
-                  </button>
-                </div>
-              )}
-            </div>
-          ))
-        )}
+        {/* Resumo Rápido no Topo */}
+        <div className="hidden sm:flex items-center gap-3 text-xs font-semibold text-zinc-500">
+          <span>{incomingOrders.length} pendentes</span>
+          <span className="text-zinc-300">•</span>
+          <span>{inProgressOrders.length} em rota/preparo</span>
+        </div>
       </div>
+
+      {/* Conteúdo da Aba 1: Operação Ativa */}
+      {activeTab === 'active' && (
+        <div role="tabpanel" aria-label="Operação Ativa" className="flex flex-col flex-1 pb-12">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
+            {/* Coluna 1: Novos & Entrantes */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between bg-amber-50/80 border border-amber-200/70 p-3.5 rounded-2xl">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-5 h-5 text-amber-600" />
+                  <h2 className="text-sm font-bold text-amber-900">Novos & Entrantes</h2>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-200/70 text-amber-900">
+                  {incomingOrders.length}
+                </span>
+              </div>
+
+              <div className="space-y-4 flex-1">
+                {incomingOrders.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center p-10 text-center bg-white border border-dashed border-zinc-200 rounded-2xl min-h-[220px]">
+                    <Clock className="w-10 h-10 text-zinc-300 mb-2" />
+                    <p className="text-sm font-bold text-zinc-700">Nenhum pedido no momento.</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">Aguardando entradas e alertas neurais...</p>
+                  </div>
+                ) : (
+                  incomingOrders.map(order => renderOperationalCard(order, true))
+                )}
+              </div>
+            </div>
+
+            {/* Coluna 2: Em Preparo & Rota */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between bg-blue-50/80 border border-blue-200/70 p-3.5 rounded-2xl">
+                <div className="flex items-center gap-2">
+                  <ChefHat className="w-5 h-5 text-blue-600" />
+                  <h2 className="text-sm font-bold text-blue-900">Em Preparo & Rota</h2>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-200/70 text-blue-900">
+                  {inProgressOrders.length}
+                </span>
+              </div>
+
+              <div className="space-y-4 flex-1">
+                {inProgressOrders.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center p-10 text-center bg-white border border-dashed border-zinc-200 rounded-2xl min-h-[220px]">
+                    <ShoppingBag className="w-10 h-10 text-zinc-300 mb-2" />
+                    <p className="text-sm font-bold text-zinc-700">Nenhum pedido no momento.</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">Os pedidos aceitos aparecerão listados aqui.</p>
+                  </div>
+                ) : (
+                  inProgressOrders.map(order => renderOperationalCard(order, false))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Gaveta / Barra Minimizada de Finalizados no Rodapé da Visão Ativa */}
+          <div className="mt-8 bg-white border border-zinc-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900">
+                  Resumo do Turno: {deliveredOrders.length} {deliveredOrders.length === 1 ? 'pedido concluído' : 'pedidos concluídos'}
+                </h3>
+                <p className="text-xs text-zinc-500 font-medium mt-0.5">
+                  Faturamento consolidado: <span className="font-bold text-emerald-700">R$ {faturamentoConcluido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  {rejectedOrders.length > 0 && (
+                    <span className="text-zinc-400 ml-2">({rejectedOrders.length} cancelados/recusados)</span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* Mini previews dos últimos finalizados para manter contexto no DOM */}
+            {finalizedOrders.length > 0 && (
+              <div className="hidden lg:flex items-center gap-2">
+                {finalizedOrders.slice(0, 3).map(order => (
+                  <span
+                    key={order.id}
+                    className="flex items-center gap-1.5 bg-zinc-50 px-2 py-1 rounded-lg border border-zinc-200 text-[11px]"
+                  >
+                    <span className="text-zinc-500 font-medium">#{order.id.slice(0, 6).toUpperCase()}</span>
+                    <span className={`px-2 py-0.5 rounded-md border text-[10px] font-semibold ${getOrderStatusBadgeClass(order.status)}`}>
+                      {statusLabels[order.status] || order.status}
+                    </span>
+                    <span className="font-bold text-zinc-700">R$ {Number(order.total_amount || order.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </span>
+                ))}
+                {finalizedOrders.length > 3 && (
+                  <span className="text-[11px] text-zinc-400 font-semibold">
+                    +{finalizedOrders.length - 3}
+                  </span>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={() => setActiveTab('history')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 transition-all cursor-pointer self-stretch md:self-auto justify-center"
+            >
+              <span>Ver Histórico Completo</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Conteúdo da Aba 2: Histórico & Finalizados */}
+      {activeTab === 'history' && (
+        <div role="tabpanel" aria-label="Histórico & Finalizados" className="space-y-6 pb-12">
+          {/* Cards de Métricas de Fechamento */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="surface-card p-5 border border-emerald-100 bg-white">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Pedidos Concluídos</span>
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-zinc-900">{deliveredOrders.length}</div>
+              <p className="text-[11px] text-emerald-700 font-semibold mt-1">Entregas realizadas com sucesso</p>
+            </div>
+
+            <div className="surface-card p-5 border border-rose-100 bg-white">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Cancelados / Recusados</span>
+                <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                  <XCircle className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-zinc-900">{rejectedOrders.length}</div>
+              <p className="text-[11px] text-rose-600 font-semibold mt-1">Não convertidos na operação</p>
+            </div>
+
+            <div className="surface-card p-5 border border-purple-100 bg-white">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Faturamento Consolidado</span>
+                <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                  <TrendingUp className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-zinc-900">
+                R$ {faturamentoConcluido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-[11px] text-purple-700 font-semibold mt-1">Total bruto faturado</p>
+            </div>
+          </div>
+
+          {/* Filtros e Busca no Histórico */}
+          <div className="surface-card p-4 bg-white border border-zinc-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="relative w-full sm:w-80">
+              <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                placeholder="Buscar por cliente, ID ou endereço..."
+                className="pl-9 pr-3 py-1.5 text-xs rounded-xl border border-zinc-200 focus:border-purple-500 outline-none w-full"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-zinc-100 p-1 rounded-xl border border-zinc-200 text-xs font-bold self-stretch sm:self-auto justify-center">
+              <button
+                onClick={() => setHistoryStatusFilter('all')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  historyStatusFilter === 'all' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'
+                }`}
+              >
+                Todos ({finalizedOrders.length})
+              </button>
+              <button
+                onClick={() => setHistoryStatusFilter('delivered')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  historyStatusFilter === 'delivered' ? 'bg-white text-emerald-700 shadow-sm' : 'text-zinc-600 hover:text-emerald-700'
+                }`}
+              >
+                Entregues ({deliveredOrders.length})
+              </button>
+              <button
+                onClick={() => setHistoryStatusFilter('cancelled')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  historyStatusFilter === 'cancelled' ? 'bg-white text-rose-700 shadow-sm' : 'text-zinc-600 hover:text-rose-700'
+                }`}
+              >
+                Cancelados ({rejectedOrders.length})
+              </button>
+            </div>
+          </div>
+
+          {/* Tabela de Pedidos Finalizados */}
+          <div className="surface-card bg-white border border-zinc-200 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-200 text-[11px] font-bold text-zinc-600 uppercase tracking-wider bg-zinc-50/50">
+                    <th className="py-3 px-5">ID / Horário</th>
+                    <th className="py-3 px-5">Cliente</th>
+                    <th className="py-3 px-5">Itens Resumidos</th>
+                    <th className="py-3 px-5">Endereço</th>
+                    <th className="py-3 px-5">Total</th>
+                    <th className="py-3 px-5">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 text-xs">
+                  {filteredFinalizedOrders.length > 0 ? (
+                    filteredFinalizedOrders.map((order) => {
+                      const wazeUrl = buildWazeNavigationUrl(order.address);
+
+                      return (
+                        <tr key={order.id} className="hover:bg-zinc-50 transition-colors">
+                          <td className="py-3.5 px-5">
+                            <div className="font-bold text-zinc-900">#{order.id.slice(0, 6).toUpperCase()}</div>
+                            <div className="text-[11px] text-zinc-400 mt-0.5">
+                              {new Date(order.createdAt).toLocaleTimeString()} • {new Date(order.createdAt).toLocaleDateString()}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-5 font-semibold text-zinc-900">
+                            {order.customerName}
+                          </td>
+                          <td className="py-3.5 px-5 text-zinc-600 max-w-xs">
+                            <div className="truncate font-medium">
+                              {order.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-5 text-zinc-600 max-w-xs">
+                            <div className="truncate">{order.address}</div>
+                            {wazeUrl && (
+                              <a
+                                href={wazeUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-800 font-medium hover:underline inline-flex items-center gap-1 text-[11px] mt-0.5"
+                              >
+                                <ExternalLink className="w-3 h-3" /> Waze
+                              </a>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-5 font-bold text-zinc-900 whitespace-nowrap">
+                            R$ {Number(order.total_amount || order.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3.5 px-5 whitespace-nowrap">
+                            <span className={`px-2.5 py-1 text-[11px] font-semibold rounded-full border ${getOrderStatusBadgeClass(order.status)}`}>
+                              {statusLabels[order.status] || order.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-zinc-400">
+                        <AlertCircle className="w-8 h-8 mx-auto mb-2 text-zinc-300" />
+                        <p className="text-sm font-semibold text-zinc-700">Nenhum registro encontrado no histórico</p>
+                        <p className="text-xs text-zinc-400 mt-1">Os pedidos finalizados durante a operação aparecerão consolidados nesta listagem.</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -106,7 +106,13 @@ export default function Login() {
                 <Lock className="w-4 h-4 text-zinc-700" />
                 Senha
               </label>
-              <a href="#" className="text-sm text-purple-700 hover:text-purple-900 hover:underline font-semibold">Esqueci minha senha</a>
+              <button
+                type="button"
+                onClick={() => toast.info('Para redefinir seu acesso, solicite diretamente ao administrador institucional.')}
+                className="text-sm text-purple-700 hover:text-purple-900 hover:underline transition-colors duration-200 font-semibold cursor-pointer bg-transparent border-none p-0"
+              >
+                Esqueci minha senha
+              </button>
             </div>
             <div className="relative">
               <input

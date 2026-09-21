@@ -2665,7 +2665,7 @@ function playOutgoingSound() {
                 href={lightboxUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-2.5 rounded-full  hover: text-white transition-colors border border-white/20 shadow-lg"
+                className="p-2.5 rounded-full hover:bg-white/20 text-white transition-colors border border-white/20 shadow-lg"
                 title="Abrir em nova aba"
               >
                 <ExternalLink className="w-5 h-5" />
@@ -2673,7 +2673,7 @@ function playOutgoingSound() {
               <a
                 href={lightboxUrl}
                 download
-                className="p-2.5 rounded-full  hover: text-white transition-colors border border-white/20 shadow-lg"
+                className="p-2.5 rounded-full hover:bg-white/20 text-white transition-colors border border-white/20 shadow-lg"
                 title="Baixar mídia"
               >
                 <Download className="w-5 h-5" />

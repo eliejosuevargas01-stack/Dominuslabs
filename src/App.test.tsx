@@ -39,30 +39,38 @@ describe('ProtectedRoute', () => {
   });
 
   it('redirects to login when token is missing', () => {
+    localStorage.setItem('admin_refresh_token', 'refresh-token');
     renderProtectedRoute(null);
     expect(screen.getByTestId('login-page')).toBeInTheDocument();
     expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument();
     expect(localStorage.getItem('admin_token')).toBeNull();
+    expect(localStorage.getItem('admin_refresh_token')).toBeNull();
   });
 
   it('redirects to login when token is "null"', () => {
+    localStorage.setItem('admin_refresh_token', 'refresh-token');
     renderProtectedRoute('null');
     expect(screen.getByTestId('login-page')).toBeInTheDocument();
     expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument();
     expect(localStorage.getItem('admin_token')).toBeNull();
+    expect(localStorage.getItem('admin_refresh_token')).toBeNull();
   });
 
   it('redirects to login when token is "undefined"', () => {
+    localStorage.setItem('admin_refresh_token', 'refresh-token');
     renderProtectedRoute('undefined');
     expect(screen.getByTestId('login-page')).toBeInTheDocument();
     expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument();
     expect(localStorage.getItem('admin_token')).toBeNull();
+    expect(localStorage.getItem('admin_refresh_token')).toBeNull();
   });
 
   it('redirects to login when token is an empty string', () => {
+    localStorage.setItem('admin_refresh_token', 'refresh-token');
     renderProtectedRoute('');
     expect(screen.getByTestId('login-page')).toBeInTheDocument();
     expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument();
     expect(localStorage.getItem('admin_token')).toBeNull();
+    expect(localStorage.getItem('admin_refresh_token')).toBeNull();
   });
 });

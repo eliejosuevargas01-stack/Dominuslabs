@@ -79,7 +79,7 @@ function Header() {
   return (
     <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-zinc-200 shadow-sm shrink-0">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <Link to="/project-hub" className="flex items-center gap-2 group md:hidden ml-10">
+        <Link to="/project-hub" className="flex items-center gap-2 group lg:hidden ml-10">
           <img src="/logo.png" alt="Dominus Labs" className="w-8 h-8 rounded-lg object-contain shadow-sm group-hover:scale-105 transition-transform" />
           <span className="font-display font-semibold text-2xl tracking-tight text-zinc-900 group-hover:opacity-90 transition-opacity">
             Dominuslabs
@@ -95,7 +95,7 @@ function Header() {
           {isLoggedIn && (
             <button
               onClick={handleLogout}
-              className="text-xs font-medium text-zinc-500 hover:text-red-600 bg-zinc-50 hover:bg-red-50 border border-zinc-200 hover:border-red-100 px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer md:hidden"
+              className="text-xs font-medium text-zinc-500 hover:text-red-600 bg-zinc-50 hover:bg-red-50 border border-zinc-200 hover:border-red-100 px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer lg:hidden"
               title="Sair da Plataforma"
             >
               <LogOut className="w-3.5 h-3.5" />

@@ -7,6 +7,7 @@ venv/
 project-hub/backend/venv/
 project-hub/backend/.venv/
 **/__pycache__/
+.cache_distancias_osm/
 
 # SQLite database & local uploads
 project-hub/backend/uploads/
@@ -31,7 +32,8 @@ certs/
 *.key
 *.pem
 
-# Git worktrees & Aider
+# Git worktrees, Aider and scripts temporarios
 test-integration/
 .aider*
-scripts/
+scripts/*
+!scripts/calcular_distancias_osm.py

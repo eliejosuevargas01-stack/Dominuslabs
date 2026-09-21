@@ -97,7 +97,7 @@ export default function AutomationsView({
               return (
                 <div
                   key={rule.id}
-                  className="p-6 flex items-center justify-between gap-4 hover: transition-colors"
+                  className="p-6 flex items-center justify-between gap-4 hover:bg-zinc-50 transition-colors"
                 >
                   <div className="space-y-1 max-w-3xl">
                     <div className="flex items-center gap-2">
@@ -137,8 +137,8 @@ export default function AutomationsView({
           ) : (
             <div className="py-16 text-center text-zinc-400">
               <Workflow className="w-10 h-10 text-zinc-300 mx-auto mb-2" />
-              <p className="text-sm font-semibold text-zinc-600">Nenhuma regra de automação mapeada.</p>
-              <p className="text-xs text-zinc-400 mt-1">Conecte o array de regras vindo do back-end (GET /api/v1/automations/rules).</p>
+              <p className="text-sm font-semibold text-zinc-600">Nenhuma regra de automação configurada</p>
+              <p className="text-xs text-zinc-400 mt-1">Crie gatilhos e fluxos operacionais para automatizar seus processos de atendimento e vendas.</p>
             </div>
           )}
         </div>
