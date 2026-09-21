@@ -29,7 +29,6 @@ class User(Base):
     can_create_projects = Column(Boolean, nullable=True, default=True)
     can_edit_projects = Column(Boolean, nullable=True, default=True)
     can_manage_crm = Column(Boolean, nullable=True, default=True)
-    can_use_scrapper = Column(Boolean, nullable=True, default=True)
     
     preferred_session_id = Column(String, nullable=True)
     

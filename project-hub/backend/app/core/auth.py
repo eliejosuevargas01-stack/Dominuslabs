@@ -238,11 +238,4 @@ def check_crm_permission(credentials: HTTPAuthorizationCredentials = Security(se
     """
     return check_read_permission(credentials, db)
 
-def check_scrapper_permission(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)) -> str:
-    """
-    Função/Método check_scrapper_permission.
 
-    O que faz: Processa check_scrapper_permission recebendo os parâmetros (credentials, db) no contexto de o módulo core/base auth.
-    Impacto na regra de negócio: Assegura que o fluxo da operação check_scrapper_permission seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
-    """
-    return check_write_permission(credentials, db)

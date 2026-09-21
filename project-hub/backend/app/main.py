@@ -83,7 +83,6 @@ else:
         "ALTER TABLE users ALTER COLUMN can_create_projects DROP NOT NULL;",
         "ALTER TABLE users ALTER COLUMN can_edit_projects DROP NOT NULL;",
         "ALTER TABLE users ALTER COLUMN can_manage_crm DROP NOT NULL;",
-        "ALTER TABLE users ALTER COLUMN can_use_scrapper DROP NOT NULL;",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS access_token TEXT;",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token TEXT;",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_issued_at TIMESTAMP;",

@@ -10,14 +10,14 @@ services:
     environment:
       - PORT=8000
       - UPLOAD_DIR=/app/uploads
-      - SECRET_KEY=${SECRET_KEY:-dominuslabs-super-secret-key-production-32-chars-min}
+      - JWT_SECRET=${JWT_SECRET:-dominuslabs-super-secret-key-production-32-chars-min}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
       - ADMIN_TENANT_ID=${ADMIN_TENANT_ID:-admin}
       - N8N_WEBHOOK_SECRET=${N8N_WEBHOOK_SECRET:-n8n-webhook-secret-production-32-chars}
       - ENCRYPTION_MASTER_KEY=${ENCRYPTION_MASTER_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
       - DATABASE_URL=${DATABASE_URL:-}
-      - IDENTITY_WORKER_URL=${IDENTITY_WORKER_URL:-https://identity.dominus.online}
+      - IDENTITY_WORKER_URL=${IDENTITY_WORKER_URL:-https://idc-dominuslabs.eliejosuevargas01.workers.dev}
       - WHATSAPP_API_URL=${WHATSAPP_API_URL:-http://localhost:3000}
       - DOMINUS_PRIVATE_KEY=${DOMINUS_PRIVATE_KEY:-}
       - DOMINUS_PUBLIC_KEY=${DOMINUS_PUBLIC_KEY:-}

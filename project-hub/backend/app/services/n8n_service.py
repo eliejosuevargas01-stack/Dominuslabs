@@ -1181,47 +1181,6 @@ class N8NService:
             logger.info("CRM Leads Cache explicitly invalidated for all tenants.")
 
     @staticmethod
-    async def run_scrapper(payload: dict, platform: str = "meta_ads", user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> dict:
-        """
-        Função/Método run_scrapper.
-        """
-        fallback_url = settings.SCRAPPER_META_WEBHOOK_URL if platform == "meta_ads" else settings.SCRAPPER_MAPS_WEBHOOK_URL
-        url = payload.get("webhook_url") or fallback_url
-        if not url:
-            logger.info("SCRAPPER Webhook URL not configured. Returning mock success.")
-            return {"status": "success", "message": "Scrapper triggered (MOCK Mode)", "data": payload}
-
-        outgoing_payload = {
-            "action": "run_scrapper",
-            "queries": payload.get("queries", []),
-            "min_results": payload.get("min_results", 10),
-            "max_results": payload.get("max_results", 20),
-        }
-        if "target_platform" in payload and payload["target_platform"]:
-            outgoing_payload["target_platform"] = payload["target_platform"]
-            if payload["target_platform"] in ("whatsapp", "instagram"):
-                outgoing_payload["contact_channel"] = payload["target_platform"]
-        if "contact_channel" in payload and payload["contact_channel"]:
-            outgoing_payload["contact_channel"] = payload["contact_channel"]
-        if "objective" in payload and payload["objective"]:
-            outgoing_payload["objective"] = payload["objective"]
-
-        outgoing_payload = N8NService._enrich_payload(outgoing_payload, user_id=user_id or payload.get("user_id"), tenant_id=tenant_id or payload.get("tenant_id"))
-        encrypted_payload = encrypt_payload(outgoing_payload, "n8n")
-
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            try:
-                response = await client.post(url, json=encrypted_payload, timeout=30.0)
-                response.raise_for_status()
-                res_data = response.json()
-                if isinstance(res_data, dict) and res_data.get("_encrypted") is True:
-                    res_data = decrypt_payload(res_data)
-                return clean_n8n_response(res_data)
-            except Exception as e:
-                logger.error(f"Error calling Scrapper webhook: {e}")
-                return {"status": "error", "message": str(e)}
-
-    @staticmethod
     async def get_leads(user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> List[dict]:
         """
         Recuperação de leads isolada estritamente por tenant_id.
