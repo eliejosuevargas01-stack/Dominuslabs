@@ -428,7 +428,7 @@ export default function OrderManagerView() {
     };
   }, []);
 
-  const handleAccept = async (orderId: string) => {
+  const handleAccept = useCallback(async (orderId: string) => {
     stopAlarm(orderId);
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -445,9 +445,9 @@ export default function OrderManagerView() {
     } catch {
       toast.error('Não foi possível confirmar o pedido.');
     }
-  };
+  }, [stopAlarm]);
 
-  const handleReject = async (orderId: string) => {
+  const handleReject = useCallback(async (orderId: string) => {
     stopAlarm(orderId);
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -464,7 +464,7 @@ export default function OrderManagerView() {
     } catch {
       toast.error('Não foi possível recusar o pedido.');
     }
-  };
+  }, [stopAlarm]);
 
   const handleStatusChange = async (orderId: string, nextStatus: OperationalStatus) => {
     try {
