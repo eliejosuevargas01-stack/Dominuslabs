@@ -121,56 +121,17 @@ async def notify_lead_listeners(lead_id: str, tenant_id: Optional[str] = None, e
             _enqueue_sse_event(queue, event)
 
 async def notify_crm_chat_listeners(
-    lead_id: str,
-    is_from_me: bool = False,
-    sender: str = "lead",
-    messages: Optional[List[Dict[str, Any]]] = None,
-    tenant_id: Optional[str] = None
+    sse_payload: str,
+    tenant_id: str,
 ):
     """
-    Função/Método notify_crm_chat_listeners.
-
-    O que faz: Processa notify_crm_chat_listeners recebendo os parâmetros (lead_id, is_from_me, sender, messages, tenant_id) no contexto de o endpoint de API para webhooks.
-    Impacto na regra de negócio: Assegura que o fluxo da operação notify_crm_chat_listeners seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+    Publica um payload SSE já montado para todos os listeners CRM do tenant.
+    O payload deve seguir o contrato E5: action, contact_jid, all_jids,
+    sidebar_update, messages[].
     """
-    import json
-    all_jids = [lead_id] if lead_id and "{{" not in lead_id and "$" not in lead_id else []
-    if messages:
-        for msg in messages:
-            if isinstance(msg, dict):
-                if not tenant_id and msg.get("tenant_id"):
-                    tenant_id = msg.get("tenant_id")
-                for k in ["contact_jid", "chat_jid", "group_jid", "remoteJid", "lead_id"]:
-                    val = msg.get(k)
-                    if val and isinstance(val, str) and "{{" not in val and "$" not in val:
-                        if val not in all_jids:
-                            all_jids.append(val)
-
-    if not tenant_id:
-        log_realtime_event(
-            "TENANT_RESOLUTION_FAILED",
-            extra={
-                "error": "Mensagem sem tenant_id identificado em notify_crm_chat_listeners",
-                "lead_id": lead_id
-            }
-        )
-        return
-
-    primary_jid = all_jids[0] if all_jids else lead_id
-
-    payload = json.dumps({
-        "lead_id": primary_jid,
-        "contact_jid": primary_jid,
-        "all_jids": all_jids,
-        "is_from_me": is_from_me,
-        "sender": sender,
-        "action": "new_message",
-        "event": "new_message",
-        "messages": messages or []
-    })
-    for user_email, listener_tenant_id, queue in list(crm_chat_listeners):
+    for _user_email, listener_tenant_id, queue in list(crm_chat_listeners):
         if listener_tenant_id == tenant_id:
-            _enqueue_crm_chat_event(queue, payload)
+            _enqueue_crm_chat_event(queue, sse_payload)
 
 @router.get("/events/leads/{lead_id}")
 @limiter.limit("10/minute")
@@ -419,38 +380,104 @@ async def _process_update_chat(
             raise HTTPException(status_code=403, detail="Cross-tenant event injection rejected.")
 
     messages_list = raw_body
-    
+
     resolved_contact_id = messages_list[0].get("contact_jid") if messages_list else contact_id
-    resolved_tenant_id = messages_list[0].get("tenant_id") if messages_list else tenant_id
-    resolved_session_id = messages_list[0].get("session_id") if messages_list else session_id
+    resolved_tenant_id  = messages_list[0].get("tenant_id")   if messages_list else tenant_id
+    resolved_session_id = messages_list[0].get("session_id")  if messages_list else session_id
     if not resolved_contact_id:
         raise HTTPException(status_code=400, detail="Missing contact_id or contact_jid parameter")
 
-    explicit_from_me = messages_list[0].get("is_from_me", False) if messages_list else (is_from_me or False)
-    explicit_sender = messages_list[0].get("participant_pushname", "lead") if messages_list else (sender or "lead")
+    # Collect all JIDs present in this batch (contact_jid is the primary one)
+    all_jids: list = []
+    for item in messages_list:
+        for k in ("contact_jid", "chat_jid", "group_jid", "remoteJid"):
+            v = item.get(k)
+            if v and isinstance(v, str) and v not in all_jids:
+                all_jids.append(v)
+    if not all_jids:
+        all_jids = [resolved_contact_id]
 
-    from app.services.n8n_service import n8n_service
-    n8n_service.invalidate_leads_cache(tenant_id=resolved_tenant_id)
+    first = messages_list[0]
+    final_is_from_me = first.get("is_from_me", False)
+    final_sender = "user" if final_is_from_me else "lead"
 
-    final_is_from_me = explicit_from_me if explicit_from_me is not None else False
-    final_sender = explicit_sender or ("user" if final_is_from_me else "lead")
+    # ── Build normalised message objects (contract E4) ──────────────────────
+    def _normalise(item: dict) -> dict:
+        ts = item.get("message_timestamp") or item.get("created_at") or ""
+        return {
+            "message_id":                   item.get("message_id") or item.get("id", ""),
+            "id":                           item.get("message_id") or item.get("id", ""),
+            "contact_jid":                  item.get("contact_jid", ""),
+            "session_id":                   item.get("session_id", ""),
+            "is_from_me":                   bool(item.get("is_from_me", False)),
+            "sender":                       "user" if item.get("is_from_me") else "lead",
+            "direction":                    "outgoing" if item.get("is_from_me") else "incoming",
+            "chat_kind":                    item.get("chat_kind", "private"),
+            "message_type":                 item.get("message_type", "conversation"),
+            "content":                      item.get("content") or item.get("text") or "",
+            "message":                      item.get("content") or item.get("text") or "",
+            "status":                       item.get("status", "received"),
+            "message_timestamp":            ts,
+            "timestamp":                    ts,
+            "created_at":                   item.get("created_at", ""),
+            "media_url":                    item.get("media_url"),
+            "participant":                  item.get("participant"),
+            "participant_pushname":         item.get("participant_pushname"),
+            "quoted_message_id":            item.get("quoted_message_id"),
+            "quoted_participant":           item.get("quoted_participant"),
+            "quoted_text":                  item.get("quoted_text"),
+            "reaction_text":                item.get("reaction_text"),
+            "reaction_target_message_id":   item.get("reaction_target_message_id"),
+            "reaction_target_sender_jid":   item.get("reaction_target_sender_jid"),
+            "tenant_id":                    item.get("tenant_id", ""),
+        }
+
+    normalised_messages = [_normalise(item) for item in messages_list]
+
+    # ── Build sidebar_update (contract E5) ──────────────────────────────────
+    preview  = first.get("content") or first.get("text") or ""
+    msg_ts   = first.get("message_timestamp") or first.get("created_at") or ""
+    sidebar  = {
+        "contact_jid":            resolved_contact_id,
+        "session_id":             resolved_session_id,
+        "last_message_preview":   preview,
+        "last_message_timestamp": msg_ts,
+        "unread_count_increment": 0 if final_is_from_me else 1,
+        "push_name":              first.get("participant_pushname") or "",
+        "is_from_me":             final_is_from_me,
+        "last_message_status":    first.get("status", "received"),
+    }
+
+    # ── Build and publish SSE payload ────────────────────────────────────────
+    sse_payload = json.dumps({
+        "action":         "new_message",
+        "event":          "new_message",
+        "contact_jid":    resolved_contact_id,
+        "lead_id":        resolved_contact_id,
+        "all_jids":       all_jids,
+        "is_from_me":     final_is_from_me,
+        "sender":         final_sender,
+        "tenant_id":      resolved_tenant_id,
+        "sidebar_update": sidebar,
+        "messages":       normalised_messages,
+    })
 
     await notify_lead_listeners(resolved_contact_id, tenant_id=resolved_tenant_id, event="reload")
-    await notify_crm_chat_listeners(resolved_contact_id, is_from_me=final_is_from_me, sender=final_sender, messages=messages_list, tenant_id=resolved_tenant_id)
+    await notify_crm_chat_listeners(sse_payload=sse_payload, tenant_id=resolved_tenant_id or "")
 
     tenant_chat_listeners = [l for l in crm_chat_listeners if l[1] == resolved_tenant_id]
     notified_count = len(lead_listeners.get((resolved_tenant_id, resolved_contact_id), [])) + len(tenant_chat_listeners)
     return {
-        "status": "success",
-        "contact_id": resolved_contact_id,
-        "lead_id": resolved_contact_id,
-        "tenant_id": resolved_tenant_id,
-        "session_id": resolved_session_id,
-        "is_from_me": final_is_from_me,
-        "sender": final_sender,
-        "messages_received": len(messages_list),
-        "notified_sessions": notified_count,
-        "active_clients_connected": len(tenant_chat_listeners)
+        "status":              "success",
+        "contact_id":          resolved_contact_id,
+        "lead_id":             resolved_contact_id,
+        "tenant_id":           resolved_tenant_id,
+        "session_id":          resolved_session_id,
+        "is_from_me":          final_is_from_me,
+        "sender":              final_sender,
+        "messages_received":   len(messages_list),
+        "notified_sessions":   notified_count,
+        "active_clients_connected": len(tenant_chat_listeners),
     }
 
 @router.post("/crm/update-chat")

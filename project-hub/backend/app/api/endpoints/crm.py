@@ -149,37 +149,63 @@ async def get_contacts_action(
 
 @router.get("/conversations")
 async def get_conversations_action(
+    session_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user),
 ):
     """
-    Action 2: get_conversations
-    Retorna a prévia de todas as conversas agrupadas ou separadas por sessão.
+    Retorna prévia de todas as conversas do tenant, direto do banco.
+    JOIN com contacts para push_name, display_phone, profile_pic_url.
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    try:
-        convs = await n8n_service.get_conversations(user_id=current_user, tenant_id=tenant_id)
-        if convs and len(convs) > 0:
-            return convs
-    except Exception as e:
-        print(f"[CRM] n8n get_conversations error: {e}", flush=True)
+    from sqlalchemy import text as sa_text
 
-    # Fallback return standard leads format mapped to conversations preview.
-    try:
-        leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
-    except N8NIntegrationUnavailableError as exc:
-        raise _crm_integration_unavailable(exc) from exc
+    q = """
+        SELECT
+            conv.contact_jid,
+            conv.session_id,
+            conv.unread_count,
+            conv.last_message_preview,
+            conv.last_message_timestamp,
+            conv.participant_pushname,
+            conv.participant,
+            conv.tenant_id,
+            conv.updated_at,
+            c.push_name,
+            c.display_phone,
+            c.profile_pic_url
+        FROM conversations conv
+        LEFT JOIN contacts c ON c.contact_jid = conv.contact_jid
+        WHERE conv.tenant_id = :tenant_id
+        {session_filter}
+        ORDER BY conv.last_message_timestamp DESC NULLS LAST
+        LIMIT 300
+    """.format(
+        session_filter="AND conv.session_id = :session_id" if session_id else ""
+    )
+
+    params: dict = {"tenant_id": tenant_id}
+    if session_id:
+        params["session_id"] = session_id
+
+    rows = db.execute(sa_text(q), params).fetchall()
+
     result = []
-    for l in leads:
+    for row in rows:
+        ts = row.last_message_timestamp
+        ts_iso = ts.isoformat() if ts else ""
         result.append({
-            "contact_jid": l.get("contact_jid") or l.get("jid") or l.get("id"),
-            "push_name": l.get("push_name") or l.get("nome") or "Contato",
-            "display_phone": l.get("display_phone") or l.get("whatsapp") or None,
-            "profile_pic_url": l.get("profile_pic_url") or "",
-            "session_id": l.get("session_id") or "default",
-            "unread_count": l.get("unread_count", 0),
-            "last_message_preview": l.get("last_message_preview") or l.get("ultima_mensagem") or "",
-            "last_message_timestamp": l.get("last_message_timestamp") or l.get("last_interaction") or l.get("updated_at") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
+            "contact_jid":              row.contact_jid,
+            "session_id":               row.session_id,
+            "push_name":                row.push_name or row.participant_pushname or row.contact_jid,
+            "display_phone":            row.display_phone,
+            "profile_pic_url":          row.profile_pic_url or "",
+            "unread_count":             row.unread_count or 0,
+            "last_message_preview":     row.last_message_preview or "",
+            "last_message_timestamp":   ts_iso,
+            "participant_pushname":     row.participant_pushname,
+            "participant":              row.participant,
+            "tenant_id":                row.tenant_id,
         })
     return result
 
@@ -188,16 +214,90 @@ async def get_conversations_action(
 async def get_chat_history_action(
     contact_jid: str,
     session_id: Optional[str] = None,
+    limit: int = 500,
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user),
 ):
     """
-    Action 3: get_chat_history
-    Busca o histórico de mensagens de uma conversa com n8n ou Whats API.
+    Retorna histórico de mensagens de um contato, direto do banco.
+    Ordenado cronologicamente ASC (mais antigas primeiro).
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    lookup_id = f"{contact_jid}___{session_id}" if session_id and session_id != "default" else contact_jid
-    return await n8n_service.get_messages(lookup_id, user_id=current_user, tenant_id=tenant_id)
+    from sqlalchemy import text as sa_text
+
+    q = """
+        SELECT
+            m.message_id,
+            m.contact_jid,
+            m.session_id,
+            m.is_from_me,
+            m.chat_kind,
+            m.message_type,
+            m.content,
+            m.status,
+            m.message_timestamp,
+            m.created_at,
+            m.media_url,
+            m.participant,
+            m.participant_pushname,
+            m.quoted_message_id,
+            m.quoted_participant,
+            m.quoted_text,
+            m.reaction_text,
+            m.reaction_target_message_id,
+            m.reaction_target_sender_jid,
+            m.tenant_id
+        FROM messages m
+        WHERE m.tenant_id = :tenant_id
+          AND m.contact_jid = :contact_jid
+          {session_filter}
+        ORDER BY m.message_timestamp ASC
+        LIMIT :lim
+    """.format(
+        session_filter="AND m.session_id = :session_id" if session_id and session_id != "default" else ""
+    )
+
+    params: dict = {"tenant_id": tenant_id, "contact_jid": contact_jid, "lim": min(limit, 1000)}
+    if session_id and session_id != "default":
+        params["session_id"] = session_id
+
+    rows = db.execute(sa_text(q), params).fetchall()
+
+    result = []
+    for m in rows:
+        ts = m.message_timestamp
+        ts_iso = ts.isoformat() if ts else ""
+        ca = m.created_at
+        ca_iso = ca.isoformat() if ca else ""
+        from_me = bool(m.is_from_me)
+        result.append({
+            "message_id":                   m.message_id,
+            "id":                           m.message_id,
+            "contact_jid":                  m.contact_jid,
+            "session_id":                   m.session_id,
+            "is_from_me":                   from_me,
+            "sender":                       "user" if from_me else "lead",
+            "direction":                    "outgoing" if from_me else "incoming",
+            "chat_kind":                    m.chat_kind or "private",
+            "message_type":                 m.message_type or "conversation",
+            "content":                      m.content or "",
+            "message":                      m.content or "",
+            "status":                       m.status or "received",
+            "message_timestamp":            ts_iso,
+            "timestamp":                    ts_iso,
+            "created_at":                   ca_iso,
+            "media_url":                    m.media_url,
+            "participant":                  m.participant,
+            "participant_pushname":         m.participant_pushname,
+            "quoted_message_id":            m.quoted_message_id,
+            "quoted_participant":           m.quoted_participant,
+            "quoted_text":                  m.quoted_text,
+            "reaction_text":                m.reaction_text,
+            "reaction_target_message_id":   m.reaction_target_message_id,
+            "reaction_target_sender_jid":   m.reaction_target_sender_jid,
+            "tenant_id":                    m.tenant_id,
+        })
+    return result
 
 from fastapi.responses import RedirectResponse, Response
 

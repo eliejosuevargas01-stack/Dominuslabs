@@ -1218,348 +1218,162 @@ function playOutgoingSound() {
     selectedChatRef.current = selectedChat;
   }, [selectedChat]);
 
-  // Real-time EventSource (SSE) listener for instant n8n webhook notifications
+  // Real-time EventSource (SSE) listener — contract E5
+  // Backend sends: { action, contact_jid, all_jids, is_from_me, sender,
+  //                  sidebar_update, messages[] }
+  // Rule: only touch the open chat if contact_jid matches; otherwise only
+  // update the sidebar entry — no full re-fetch ever.
   useEffect(() => {
     const sseClient = new SSEClient({
       url: `${API_BASE}/webhooks/events/crm-chats`,
       onMessage: (data) => {
         try {
-          let rawEvents: any[] = [];
-          if (Array.isArray(data)) {
-            rawEvents = data;
-          } else if (data && typeof data === 'object') {
-            rawEvents = [data];
+          // ── Parse SSE frame ───────────────────────────────────────────────
+          let parsed: any = null;
+          if (data && typeof data === 'object' && !Array.isArray(data)) {
+            parsed = data;
           } else if (typeof data === 'string') {
-            const trimmed = data.trim();
-            if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return;
-            try {
-              const parsedJson = JSON.parse(trimmed);
-              if (Array.isArray(parsedJson)) {
-                rawEvents = parsedJson;
-              } else if (parsedJson && typeof parsedJson === 'object') {
-                rawEvents = [parsedJson];
-              }
-            } catch (e) {
-              return;
-            }
+            const t = data.trim();
+            if (!t.startsWith('{')) return;
+            try { parsed = JSON.parse(t); } catch { return; }
+          } else {
+            return;
           }
+          if (!parsed) return;
 
-          let notifiedJids: string[] = [];
-          let isFromMe = false;
-          let newMsgs: any[] = [];
-
-          for (const parsed of rawEvents) {
-            if (!parsed) continue;
-
-            if (parsed.action === 'reload') {
-              void loadConversations();
-              setRealtimeReloadVersion(version => version + 1);
-              continue;
-            }
-
-            if (parsed.action === 'session_disconnected') {
-              setDisconnectedSessionInfo({
-                session_id: parsed.session_id,
-                message: parsed.message || `A sessão '${parsed.session_id}' foi desconectada.`
-              });
-              continue;
-            }
-
-            let currentItemMsgs: any[] = [];
-            if (Array.isArray(parsed.messages) && parsed.messages.length > 0) {
-              currentItemMsgs = parsed.messages;
-            } else if (Array.isArray(parsed.data) && parsed.data.length > 0) {
-              currentItemMsgs = parsed.data.map((d: any) => {
-                if (d.update && d.key) {
-                  return { ...d, status: d.update.status || d.status, id: d.key.id, message_id: d.key.id, _is_evolution_ack: true };
-                }
-                return d;
-              });
-            } else if (parsed.message && typeof parsed.message === 'object') {
-              currentItemMsgs = [parsed.message];
-            } else if (parsed.event === 'messages.update' || parsed.update) {
-              currentItemMsgs = [parsed];
-            } else if (parsed.id || parsed.message_id || parsed.key || parsed.content || parsed.text) {
-              currentItemMsgs = [parsed];
-            }
-
-            for (let rawMsg of currentItemMsgs) {
-              if (!rawMsg) continue;
-
-              if (rawMsg.message && typeof rawMsg.message === 'object' && (rawMsg.message.id || rawMsg.message.text || rawMsg.message.content || rawMsg.message.key)) {
-                rawMsg = { ...rawMsg, ...rawMsg.message };
-              }
-              
-              const msgIsFromMe = rawMsg.fromMe ?? rawMsg.from_me ?? rawMsg.is_from_me ?? parsed.fromMe ?? parsed.from_me ?? parsed.is_from_me ?? false;
-              const msgTs = rawMsg.timestamp 
-                ? (typeof rawMsg.timestamp === 'number' && rawMsg.timestamp < 10000000000 ? new Date(rawMsg.timestamp * 1000).toISOString() : new Date(rawMsg.timestamp).toISOString()) 
-                : (rawMsg.message_timestamp || rawMsg.created_at || parsed.emittedAt || new Date().toISOString());
-
-              const generatedId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-              const normalized = {
-                ...rawMsg,
-                id: rawMsg.id || rawMsg.message_id || rawMsg.key?.id || generatedId,
-                message_id: rawMsg.message_id || rawMsg.id || rawMsg.key?.id || generatedId,
-                content: rawMsg.content || rawMsg.text || (typeof rawMsg.message === 'string' ? rawMsg.message : '') || rawMsg.body || rawMsg.output || '',
-                text: rawMsg.text || rawMsg.content || (typeof rawMsg.message === 'string' ? rawMsg.message : '') || rawMsg.body || rawMsg.output || '',
-                is_from_me: msgIsFromMe,
-                from_me: msgIsFromMe,
-                fromMe: msgIsFromMe,
-                contact_jid: msgIsFromMe
-                  ? (rawMsg.to || rawMsg.recipient || rawMsg.key?.remoteJid || parsed.to || parsed.recipient || rawMsg.contact_jid || rawMsg.jid || rawMsg.resolvedJid || rawMsg.lid || parsed.conversation?.jid || parsed.contact_jid)
-                  : (rawMsg.contact_jid || rawMsg.jid || rawMsg.resolvedJid || rawMsg.lid || rawMsg.key?.remoteJid || parsed.conversation?.jid || parsed.contact_jid),
-                session_id: rawMsg.session_id || parsed.session_id || parsed.session?.id,
-                message_timestamp: msgTs,
-                status: rawMsg.status || 'sent',
-                media_url: rawMsg.media_url || rawMsg.url || rawMsg.file_url || (rawMsg.media?.url),
-                participant_pushname: rawMsg.pushName || rawMsg.participant_pushname || parsed.conversation?.title
-              };
-              newMsgs.push(normalized);
-            }
-
-            if (parsed.conversation?.jid) notifiedJids.push(parsed.conversation.jid);
-            if (parsed.conversation?.displayJid) notifiedJids.push(parsed.conversation.displayJid);
-            if (parsed.contact_jid) notifiedJids.push(parsed.contact_jid);
-            if (parsed.lead_id) notifiedJids.push(parsed.lead_id);
-            if (Array.isArray(parsed.all_jids)) {
-              for (const j of parsed.all_jids) {
-                if (j && typeof j === 'string' && !notifiedJids.includes(j)) notifiedJids.push(j);
-              }
-            }
-
-            for (let msg of currentItemMsgs) {
-              if (!msg) continue;
-              if (msg.message && typeof msg.message === 'object' && (msg.message.id || msg.message.text || msg.message.content || msg.message.key)) {
-                msg = { ...msg, ...msg.message };
-              }
-              for (const k of ['contact_jid', 'chat_jid', 'group_jid', 'remoteJid', 'lead_id']) {
-                const val = msg[k];
-                if (val && typeof val === 'string' && !val.includes('{{') && !notifiedJids.includes(val)) {
-                  notifiedJids.push(val);
-                }
-              }
-            }
-
-            if (
-              parsed.is_from_me === true ||
-              parsed.from_me === true ||
-              parsed.fromMe === true ||
-              parsed.sender === 'user' ||
-              parsed.sender === 'me'
-            ) {
-              isFromMe = true;
-            }
+          // ── Special actions ───────────────────────────────────────────────
+          if (parsed.action === 'reload') {
+            void loadConversations();
+            setRealtimeReloadVersion(v => v + 1);
+            return;
           }
-
-          for (const m of newMsgs) {
-            if (m.is_from_me === true || m.from_me === true || m.fromMe === true || m.sender === 'user' || m.sender === 'me') {
-              isFromMe = true;
-              break;
-            }
+          if (parsed.action === 'session_disconnected') {
+            setDisconnectedSessionInfo({
+              session_id: parsed.session_id,
+              message: parsed.message || `A sessão '${parsed.session_id}' foi desconectada.`
+            });
+            return;
           }
+          if (parsed.action !== 'new_message') return;
 
-          let isNewMessageWithContent = false;
-          
-          for (const m of newMsgs) {
-            if (m._encrypted) continue;
-            const msgType = String(m.message_type || m.type || '').toLowerCase();
-            const hasText = Boolean((m.content || m.text || m.body || '').trim());
-            const hasMedia = Boolean(m.media_url || m.file_url || ['image', 'video', 'audio', 'document', 'sticker'].includes(msgType));
-            
-            if (hasText || hasMedia) {
-              isNewMessageWithContent = true;
-              break;
-            }
-          }
+          // ── Extract fields from contract E5 ───────────────────────────────
+          const primaryJid: string = parsed.contact_jid || parsed.lead_id || '';
+          const allJids: string[]  = Array.isArray(parsed.all_jids) ? parsed.all_jids : [primaryJid];
+          const isFromMe: boolean  = Boolean(parsed.is_from_me);
+          const messages: any[]    = Array.isArray(parsed.messages) ? parsed.messages : [];
+          const sidebar: any       = parsed.sidebar_update || {};
 
-          // 2. Play Notification Audio for real new messages
-          if (isNewMessageWithContent) {
-            let hasFreshId = false;
-            for (const m of newMsgs) {
-              const id = String(m.message_id || m.id || m.key?.id || '');
-              if (id && !id.startsWith('temp_')) {
-                if (!knownMessageIds.current.has(id)) {
-                  knownMessageIds.current.add(id);
-                  hasFreshId = true;
-                }
-              } else {
-                hasFreshId = true;
-              }
-            }
+          if (!primaryJid || messages.length === 0) return;
 
-            if (hasFreshId) {
+          // ── Exact-match JID comparison ────────────────────────────────────
+          // @lid IDs are internal WA identifiers — strip only the @ suffix for
+          // comparison, keeping the full numeric part intact.
+          const normaliseJid = (j: string) =>
+            String(j || '').split('@')[0].split(':')[0].trim().toLowerCase();
+
+          const jidMatches = (a: string, b: string) => {
+            const na = normaliseJid(a);
+            const nb = normaliseJid(b);
+            return na.length > 0 && nb.length > 0 && na === nb;
+          };
+
+          const curChat = selectedChatRef.current;
+          const isCurrentOpenChat = curChat != null && allJids.some(nj =>
+            [curChat.contact_jid, curChat.chat_jid, curChat.lead_id, curChat.id]
+              .filter(Boolean)
+              .some((cj: string) => jidMatches(cj, nj))
+          );
+
+          // ── Sound notification ────────────────────────────────────────────
+          const firstMsg = messages[0];
+          const hasContent = Boolean(
+            (firstMsg?.content || firstMsg?.message || '').trim() ||
+            firstMsg?.media_url ||
+            ['image','video','audio','document','sticker'].includes(firstMsg?.message_type || '')
+          );
+          if (hasContent) {
+            const msgId = String(firstMsg?.message_id || firstMsg?.id || '');
+            if (msgId && !knownMessageIds.current.has(msgId)) {
+              knownMessageIds.current.add(msgId);
               const now = Date.now();
               if (now - lastSoundPlayedAt.current > 1500) {
                 lastSoundPlayedAt.current = now;
-                if (!isFromMe) {
-                  playIncomingSound();
-                } else {
-                  playOutgoingSound();
-                }
+                isFromMe ? playOutgoingSound() : playIncomingSound();
               }
             }
           }
 
-          // 3. Match conversation with current selection
-          const curChat = selectedChatRef.current;
-          let isCurrentOpenChat = false;
-          const matchJids = (a: string, b: string) => {
-            if (!a || !b) return false;
-            const cleanA = String(a).split('@')[0].split(':')[0].trim().toLowerCase();
-            const cleanB = String(b).split('@')[0].split(':')[0].trim().toLowerCase();
-            if (!cleanA || !cleanB) return false;
-            if (cleanA === cleanB) return true;
-            if (/^\d+$/.test(cleanA) && /^\d+$/.test(cleanB) && cleanA.length >= 8 && cleanB.length >= 8) {
-              return cleanA.endsWith(cleanB) || cleanB.endsWith(cleanA);
-            }
-            return false;
-          };
-          if (curChat && notifiedJids.length > 0) {
-            const currentJids = [
-              curChat.contact_jid,
-              curChat.chat_jid,
-              curChat.group_jid,
-              curChat.lead_id,
-              curChat.id
-            ].filter(Boolean);
-
-            for (const cJid of currentJids) {
-              for (const nJid of notifiedJids) {
-                if (matchJids(cJid, nJid)) {
-                  isCurrentOpenChat = true;
-                  break;
-                }
-              }
-              if (isCurrentOpenChat) break;
-            }
-          }
-
-          // 4. CONDITIONAL 1: Append to Current Chat immediately
-          if (isCurrentOpenChat && newMsgs.length > 0) {
+          // ── 1. Append to open chat (only if same contact) ─────────────────
+          if (isCurrentOpenChat) {
             setChatMessages(prev => {
-              const updatedMsgs = [...prev];
-              const existingIds = new Set(updatedMsgs.map(m => String(m.message_id || m.id || m.key?.id || '')));
-              const msgsToAdd: any[] = [];
-
-              for (const m of newMsgs) {
-                const id = String(m.message_id || m.id || m.key?.id || '');
+              const existingIds = new Set(prev.map(m => String(m.message_id || m.id || '')));
+              const toAdd = messages.filter(m => {
+                const id = String(m.message_id || m.id || '');
                 if (id && existingIds.has(id)) {
-                   updatedMsgs.forEach((oldM, idx) => {
-                     const oldId = String(oldM.message_id || oldM.id || oldM.key?.id || '');
-                     if (oldId === id) {
-                        updatedMsgs[idx] = { ...oldM, ...m, status: m.status || oldM.status };
-                     }
-                   });
-                } else if (m._is_evolution_ack && id) {
-                   return updatedMsgs.map(oldM => {
-                     const oldId = String(oldM.message_id || oldM.id || oldM.key?.id || '');
-                     if (oldId === id) {
-                        return { ...oldM, ...m, status: m.status || oldM.status };
-                     }
-                     return oldM;
-                   });
-                } else {
-                  const mIsFromMe = m.is_from_me === true || m.fromMe === true || m.from_me === true || m.sender === 'user' || m.sender === 'me';
-                  let replacedTemp = false;
-
-                  if (mIsFromMe) {
-                    const getTxt = (msg: any) => String(msg.content || msg.message || msg.text || '').trim();
-                    const mTxt = getTxt(m);
-
-                    if (mTxt) {
-                      const tempIndex = updatedMsgs.findIndex(oldM => {
-                        const oldId = String(oldM.message_id || oldM.id || oldM.key?.id || '');
-                        return oldId.startsWith('temp_') && getTxt(oldM) === mTxt;
-                      });
-
-                      if (tempIndex !== -1) {
-                        updatedMsgs[tempIndex] = { ...updatedMsgs[tempIndex], ...m, status: m.status || updatedMsgs[tempIndex].status };
-                        replacedTemp = true;
-                      }
-                    }
-                  }
-
-                  if (!replacedTemp) {
-                    msgsToAdd.push(m);
-                  }
+                  // Update status of existing message in-place
+                  return false;
                 }
-              }
-
-              if (msgsToAdd.length === 0) return updatedMsgs;
-              return [...updatedMsgs, ...msgsToAdd];
+                return true;
+              });
+              // Also update status of any existing messages that arrived again
+              const updated = prev.map(old => {
+                const oldId = String(old.message_id || old.id || '');
+                const fresh = messages.find(m => String(m.message_id || m.id || '') === oldId);
+                return fresh ? { ...old, status: fresh.status || old.status } : old;
+              });
+              if (toAdd.length === 0) return updated;
+              return [...updated, ...toAdd];
             });
-
             setTimeout(() => scrollToBottom(), 50);
           }
 
-          // 5. CONDITIONAL 2: Update Sidebar (conversations) locally
-          if (newMsgs.length > 0) {
-            const extractContent = (m: any): string => {
-              if (!m) return '';
-              if (m._encrypted === true || m._is_evolution_ack) return '';
-              if (typeof m.content === 'string' && m.content.trim()) return m.content.trim();
-              if (typeof m.message === 'string' && m.message.trim()) return m.message.trim();
-              if (typeof m.text === 'string' && m.text.trim()) return m.text.trim();
-              if (typeof m.body === 'string' && m.body.trim()) return m.body.trim();
-              if (typeof m.output === 'string' && m.output.trim()) return m.output.trim();
-              return '';
-            };
-
-            const latestMsg = newMsgs[newMsgs.length - 1];
-            const rawPreview = extractContent(latestMsg);
-            const msgTs = latestMsg.message_timestamp || new Date().toISOString();
-
-            setConversations(prevConvs => {
-              let matched = false;
-              const updated = prevConvs.map(conv => {
-                const convJids = [
-                  conv.contact_jid,
-                  conv.chat_jid,
-                  conv.group_jid,
-                  conv.lead_id,
-                  conv.id
-                ].filter(Boolean);
-
-                let convMatches = false;
-                for (const cJid of convJids) {
-                  for (const nJid of notifiedJids) {
-                    if (matchJids(cJid, nJid)) {
-                      convMatches = true;
-                      break;
-                    }
-                  }
-                  if (convMatches) break;
-                }
-
-                if (convMatches) {
-                  matched = true;
-                  return {
-                    ...conv,
-                    last_message_preview: rawPreview || conv.last_message_preview || 'Nova mensagem',
-                    last_message_timestamp: msgTs,
-                    unread_count: isCurrentOpenChat ? 0 : ((conv.unread_count || 0) + (rawPreview && !isFromMe ? 1 : 0)),
-                    participant_pushname: latestMsg.participant_pushname || conv.participant_pushname,
-                    last_message_is_from_me: rawPreview ? isFromMe : conv.last_message_is_from_me,
-                    last_message_status: (latestMsg.status || (rawPreview ? 'sent' : conv.last_message_status))
-                  };
-                }
+          // ── 2. Update sidebar entry — no re-fetch ─────────────────────────
+          setConversations(prevConvs => {
+            let matched = false;
+            const updated = prevConvs.map(conv => {
+              const convJids = [conv.contact_jid, conv.chat_jid, conv.lead_id, conv.id].filter(Boolean);
+              if (!allJids.some(nj => convJids.some((cj: string) => jidMatches(cj, nj)))) {
                 return conv;
-              });
-
-              if (!matched && !isCurrentOpenChat) {
-                loadConversations();
-                return prevConvs;
               }
-
-              return updated.sort((a, b) => {
-                const timeA = new Date(a.last_message_timestamp || 0).getTime();
-                const timeB = new Date(b.last_message_timestamp || 0).getTime();
-                return timeB - timeA;
-              });
+              matched = true;
+              const su = sidebar as any;
+              return {
+                ...conv,
+                last_message_preview:   su.last_message_preview   ?? conv.last_message_preview ?? '',
+                last_message_timestamp: su.last_message_timestamp  ?? conv.last_message_timestamp,
+                last_message_is_from_me: isFromMe,
+                last_message_status:    su.last_message_status     ?? conv.last_message_status,
+                // Increment unread only when the chat is not currently open
+                unread_count: isCurrentOpenChat
+                  ? 0
+                  : (conv.unread_count || 0) + (su.unread_count_increment ?? (isFromMe ? 0 : 1)),
+              };
             });
+
+            // Contact not yet in sidebar — fetch full list once to pick it up
+            if (!matched) {
+              void loadConversations();
+              return prevConvs;
+            }
+
+            return updated.sort((a, b) =>
+              new Date(b.last_message_timestamp || 0).getTime() -
+              new Date(a.last_message_timestamp || 0).getTime()
+            );
+          });
+
+          // ── 3. If open chat: zero unread counter ──────────────────────────
+          if (isCurrentOpenChat) {
+            setConversations(prev => prev.map(conv => {
+              const convJids = [conv.contact_jid, conv.chat_jid, conv.lead_id, conv.id].filter(Boolean);
+              return allJids.some(nj => convJids.some((cj: string) => jidMatches(cj, nj)))
+                ? { ...conv, unread_count: 0 }
+                : conv;
+            }));
           }
-        } catch (err) {
-          // Ignore
+
+        } catch (_err) {
+          // Silently ignore malformed SSE frames
         }
       },
       onError: (err) => {
