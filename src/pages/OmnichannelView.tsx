@@ -1042,8 +1042,23 @@ export default function OmnichannelView() {
   };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
 
-  // Keyboard shortcut listener for Esc key to close lightbox/menus
+  // Track whether user is near the bottom of the chat
+  const handleChatScroll = () => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const threshold = 120; // px from bottom considered "at bottom"
+    setIsAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < threshold);
+  };
+
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+    setIsAtBottom(true);
+  };
+
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -1130,13 +1145,21 @@ export default function OmnichannelView() {
     }
   };
 
-  // Auto-scroll chat to bottom
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
+  // Auto-scroll only when the user is already at the bottom (new message arrived)
+  // or when they first open a chat (chatMessages first load)
+  const prevChatContactRef = useRef<string>('');
   useEffect(() => {
-    scrollToBottom();
+    const currentContact = selectedChat?.contact_jid || '';
+    const isNewChat = currentContact !== prevChatContactRef.current;
+    if (isNewChat) {
+      // Switched to a different chat — scroll to bottom immediately (no animation)
+      prevChatContactRef.current = currentContact;
+      scrollToBottom('instant' as ScrollBehavior);
+    } else if (isAtBottom) {
+      // Same chat, new message arrived, user was already at bottom — keep them there
+      scrollToBottom('smooth');
+    }
+    // If user has scrolled up, do NOT force-scroll — show the arrow button instead
   }, [chatMessages]);
 
 let sharedAudioCtx: AudioContext | null = null;
@@ -1324,7 +1347,9 @@ function playOutgoingSound() {
               if (toAdd.length === 0) return updated;
               return [...updated, ...toAdd];
             });
-            setTimeout(() => scrollToBottom(), 50);
+            // Don't force-scroll here — the chatMessages useEffect handles it
+            // respecting whether the user has scrolled up
+
           }
 
           // ── 2. Update sidebar entry — no re-fetch ─────────────────────────
@@ -2091,6 +2116,8 @@ function playOutgoingSound() {
 
               {/* Chat Messages Area with WhatsApp Background Theme */}
               <div 
+                ref={chatContainerRef}
+                onScroll={handleChatScroll}
                 className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 relative w-full min-w-0"
                 style={{
                   backgroundImage: `radial-gradient(#cbd5e1 0.75px, transparent 0.75px)`,
@@ -2275,6 +2302,19 @@ function playOutgoingSound() {
                 )}
                 <div ref={messagesEndRef} />
               </div>
+
+              {/* Scroll-to-bottom floating button — visible only when scrolled up */}
+              {!isAtBottom && (
+                <button
+                  onClick={() => scrollToBottom('smooth')}
+                  className="absolute bottom-[72px] right-4 z-20 w-9 h-9 flex items-center justify-center rounded-full bg-zinc-700 hover:bg-zinc-600 text-white shadow-lg transition-all duration-200"
+                  title="Ir para o final"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              )}
 
               {/* Hidden File Input */}
               <input
