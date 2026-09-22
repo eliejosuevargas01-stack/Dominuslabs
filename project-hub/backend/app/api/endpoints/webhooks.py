@@ -532,6 +532,58 @@ async def update_chat_webhook_get(
         sender=sender
     )
 
+
+async def _process_update_chat_message_status(
+    tenant_id: str,
+    message_id: str,
+    status: str,
+    session_id: Optional[str] = None,
+    contact_jid: Optional[str] = None,
+):
+    """
+    Processa atualização de status de mensagem e emite SSE para CRM.
+    Chamado por WA API webhook ao receber message-receipt.update (sent/delivered/read).
+    """
+    sse_payload = json.dumps({
+        "action": "message.updated",
+        "message_id": message_id,
+        "status": status,
+        "session_id": session_id,
+        "contact_jid": contact_jid,
+        "tenant_id": tenant_id,
+    })
+    await notify_crm_chat_listeners(sse_payload=sse_payload, tenant_id=tenant_id)
+    return {"status": "success", "message_id": message_id, "status": status}
+
+
+@router.post("/crm/message-status")
+async def webhook_message_status(
+    request: Request,
+    tenant_id: str = Body(..., embed=True),
+    message_id: str = Body(..., embed=True),
+    status: str = Body(..., embed=True),
+    session_id: Optional[str] = Body(None, embed=True),
+    contact_jid: Optional[str] = Body(None, embed=True),
+):
+    """
+    Recebe atualização de status de mensagem via webhook da WA API.
+    Emite SSE para todos os listeners CRM do tenant.
+    """
+    body_bytes = await request.body()
+    auth_info = authenticate_n8n_request(request, body_bytes)
+
+    if not all([tenant_id, message_id, status]):
+        raise HTTPException(status_code=400, detail="Missing required fields: tenant_id, message_id, status")
+
+    return await _process_update_chat_message_status(
+        tenant_id=tenant_id,
+        message_id=message_id,
+        status=status,
+        session_id=session_id,
+        contact_jid=contact_jid,
+    )
+
+
 async def notify_listeners(public_token: str):
     """
     Função/Método notify_listeners.

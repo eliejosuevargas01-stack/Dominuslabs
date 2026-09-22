@@ -306,9 +306,31 @@ function getMediaUrl(msg: any, defaultSessionId?: string): string | null {
   const sessId = msg.session_id || defaultSessionId || '';
   if (!sessId || sessId.toLowerCase() === 'default') return null;
   const msgId = msg.message_id || msg.id;
-  const rawUrl = msg.media_url || msg.image_url || msg.url || msg.file_url;
 
-  if (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) {
+  // Helper to extract URL from raw value (handles JSON string or plain URL)
+  const safeMediaUrl = (raw: any): string | null => {
+    if (!raw) return null;
+    // If already an object with .url, use it
+    if (raw && typeof raw === 'object') return raw.url || null;
+    // If string, try JSON.parse first
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      // data: URIs or external URLs are not JSON, try as-is
+      if (trimmed.startsWith('data:') || trimmed.includes('pps.whatsapp.net') || trimmed.includes('fbcdn.net')) {
+        return trimmed;
+      }
+      try {
+        const p = JSON.parse(trimmed);
+        if (p && p.url) return p.url;
+      } catch {}
+      return trimmed;
+    }
+    return null;
+  };
+
+  const rawUrl = safeMediaUrl(msg.media_url) || safeMediaUrl(msg.image_url) || safeMediaUrl(msg.url) || safeMediaUrl(msg.file_url);
+
+  if (rawUrl && rawUrl.trim()) {
     const trimmed = rawUrl.trim();
     if (trimmed.startsWith('data:')) {
       return trimmed;
@@ -1275,6 +1297,16 @@ function playOutgoingSound() {
               session_id: parsed.session_id,
               message: parsed.message || `A sessão '${parsed.session_id}' foi desconectada.`
             });
+            return;
+          }
+          if (parsed.action === 'message.updated') {
+            const updId = parsed.message_id || parsed.id;
+            const newStatus = parsed.status;
+            if (updId && newStatus) {
+              setChatMessages(prev => prev.map(m =>
+                (m.message_id === updId || m.id === updId) ? {...m, status: newStatus} : m
+              ));
+            }
             return;
           }
           if (parsed.action !== 'new_message') return;
