@@ -1776,7 +1776,7 @@ function playOutgoingSound() {
               {sessionsList.map(s => (
                 <button
                   key={s}
-                  onClick={() => setSelectedSession(s)}
+                  onClick={() => { setSelectedSession(s); setSelectedChat(null); }}
                   className={`shrink-0 snap-start px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-all duration-300 flex items-center gap-1.5 border ${
                     selectedSession === s 
                       ? 'bg-purple-600 text-white border-purple-500' 
