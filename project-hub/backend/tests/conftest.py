@@ -27,6 +27,28 @@ def anyio_backend():
 if not settings.N8N_WEBHOOK_SECRET:
     settings.N8N_WEBHOOK_SECRET = "test-n8n-webhook-secret"
 
+# Ensure CRM webhook URLs are set so N8NService doesn't raise
+# N8NIntegrationUnavailableError before mocks can intercept
+_FAKE_WEBHOOK = "https://n8n.test.invalid/webhook/test"
+if not settings.CRM_GET_LEADS_WEBHOOK_URL:
+    settings.CRM_GET_LEADS_WEBHOOK_URL = _FAKE_WEBHOOK
+if not settings.CRM_CREATE_LEAD_WEBHOOK_URL:
+    settings.CRM_CREATE_LEAD_WEBHOOK_URL = _FAKE_WEBHOOK
+if not settings.CRM_UPDATE_LEAD_WEBHOOK_URL:
+    settings.CRM_UPDATE_LEAD_WEBHOOK_URL = _FAKE_WEBHOOK
+if not settings.CRM_DELETE_LEAD_WEBHOOK_URL:
+    settings.CRM_DELETE_LEAD_WEBHOOK_URL = _FAKE_WEBHOOK
+if not settings.CRM_GET_MESSAGES_WEBHOOK_URL:
+    settings.CRM_GET_MESSAGES_WEBHOOK_URL = _FAKE_WEBHOOK
+if not settings.CRM_CREATE_MESSAGE_WEBHOOK_URL:
+    settings.CRM_CREATE_MESSAGE_WEBHOOK_URL = _FAKE_WEBHOOK
+if not settings.CRM_SEND_WHATSAPP_WEBHOOK_URL:
+    settings.CRM_SEND_WHATSAPP_WEBHOOK_URL = _FAKE_WEBHOOK
+if not settings.CRM_UPDATE_STATUS_WEBHOOK_URL:
+    settings.CRM_UPDATE_STATUS_WEBHOOK_URL = _FAKE_WEBHOOK
+if not settings.CRM_CREATE_ACTIVITY_WEBHOOK_URL:
+    settings.CRM_CREATE_ACTIVITY_WEBHOOK_URL = _FAKE_WEBHOOK
+
 # Ensure test RSA keys are available for hybrid encryption
 if not settings.DOMINUS_PRIVATE_KEY:
     from cryptography.hazmat.primitives.asymmetric import rsa
