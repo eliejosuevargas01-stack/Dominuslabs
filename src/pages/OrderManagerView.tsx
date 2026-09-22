@@ -899,6 +899,7 @@ export default function OrderManagerView() {
                             {order.status === 'pending' && (
                               <div className="flex items-center justify-end gap-2">
                                 <button
+                                  // eslint-disable-next-line react-hooks/refs
                                   onClick={() => handleReject(order.id)}
                                   className="text-xs font-bold text-rose-600 hover:text-rose-700 px-2 py-1 rounded hover:bg-rose-50"
                                 >
