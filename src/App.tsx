@@ -30,6 +30,7 @@ const DashboardOperationalView = lazy(() => import('./pages/DashboardOperational
 const AiIntelligenceView = lazy(() => import('./pages/AiIntelligenceView'));
 const AutomationsView = lazy(() => import('./pages/AutomationsView'));
 const CampaignsWizardView = lazy(() => import('./pages/CampaignsWizardView'));
+const IntegrationsView = lazy(() => import('./pages/IntegrationsView'));
 
 function PageLoader() {
   return (
@@ -265,6 +266,16 @@ function App() {
               <ProtectedRoute>
                 <DashboardLayout>
                   <ConnectionsView />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/integrations"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <IntegrationsView />
                 </DashboardLayout>
               </ProtectedRoute>
             }

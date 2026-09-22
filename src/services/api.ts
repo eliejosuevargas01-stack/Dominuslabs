@@ -594,6 +594,68 @@ export async function deleteWhatsappSession(sessionId: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Integrações de Delivery
+// ---------------------------------------------------------------------------
+
+export interface Integration {
+  id: number;
+  platform: string;
+  store_code: string;
+  display_name?: string;
+  is_active: boolean;
+  last_error?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function fetchIntegrations(): Promise<Integration[]> {
+  const res = await fetchWithAuth(`${API_BASE}/integrations`);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Falha ao buscar integrações.");
+  }
+  return res.json();
+}
+
+export async function createIntegration(
+  platform: string,
+  store_code: string,
+  display_name?: string
+): Promise<Integration> {
+  const res = await fetchWithAuth(`${API_BASE}/integrations`, {
+    method: "POST",
+    body: JSON.stringify({ platform, store_code, display_name }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Falha ao criar integração.");
+  }
+  return res.json();
+}
+
+export async function deleteIntegration(id: string | number): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/integrations/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Falha ao desconectar integração.");
+  }
+}
+
+export async function patchIntegration(id: string | number, is_active: boolean): Promise<Integration> {
+  const res = await fetchWithAuth(`${API_BASE}/integrations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_active }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Falha ao atualizar integração.");
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
 // Preferência de sessão WhatsApp
 // ---------------------------------------------------------------------------
 
