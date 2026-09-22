@@ -244,7 +244,7 @@ def test_receive_order_returns_duplicate_after_a_concurrent_integrity_error():
         pedido_id="order-race", tenant_id="admin", cliente_id="125203162075156@lid",
         total=Decimal("10.00"), address="rua 1", status="pending",
         created_at=datetime(2026, 8, 31, 14, 48, 7, tzinfo=timezone.utc),
-        content_jid="125203162075156@lid", items=[],
+        content_jid="125203162075156@lid", customer_name=None, items=[],
     )
 
     class FakeQuery:
@@ -515,7 +515,7 @@ def test_outbound_order_callback_fails_closed_without_secret(monkeypatch):
     monkeypatch.setattr(settings, "ACCEPT_ORDER_WEBHOOK_URL", "http://n8n-internal/webhook/order")
 
     # Should not raise exception, logs error and aborts immediately without sending request
-    asyncio.run(notify_order_status("pedido-123", "accepted", "tenant-test", "client@s.whatsapp.net"))
+    asyncio.run(notify_order_status("pedido-123", "tenant-test", "accepted", "client@s.whatsapp.net"))
 
 
 def test_sse_order_events_rejects_query_token_parameter(client):
@@ -529,3 +529,72 @@ def test_sse_order_events_rejects_query_token_parameter(client):
     res = client.get(f"/api/v1/orders/events?token={token}")
     assert res.status_code == 401
     assert "detail" in res.json()
+
+
+def test_outbound_order_callback_sends_hmac_headers(monkeypatch, httpx_mock):
+    """
+    P1: HMAC callback sends proper headers including Content-Type, X-N8N-Timestamp,
+    X-N8N-Event-Id, X-Dominus-Signature, X-Signature.
+    """
+    import secrets
+    import time
+    import hmac
+    import hashlib
+    import json
+
+    from app.core.config import settings
+    from app.api.endpoints.orders import notify_order_status
+
+    test_secret = "test-hmac-secret-123"
+    test_url = "http://test-n8n/webhook/order"
+    test_ts = "1727000000"
+    test_event_id = "evt_test123"
+
+    monkeypatch.setattr(settings, "N8N_WEBHOOK_SECRET", test_secret)
+    monkeypatch.setattr(settings, "ACCEPT_ORDER_WEBHOOK_URL", test_url)
+
+    # Mock time.time() to return a fixed timestamp
+    monkeypatch.setattr(time, "time", lambda: 1727000000.0)
+    # Mock secrets.token_hex for event_id generation
+    monkeypatch.setattr(secrets, "token_hex", lambda n: "test123")
+
+    payload_dict = {
+        "pedido_id": "pedido-123",
+        "tenant_id": "tenant-test",
+        "client_jid": "client@s.whatsapp.net",
+        "status": "accepted",
+        "event_id": test_event_id,
+        "timestamp": test_ts,
+    }
+    payload_bytes = json.dumps(payload_dict, separators=(',', ':')).encode('utf-8')
+    canonical_payload = f"{test_ts}.".encode('utf-8') + payload_bytes
+    expected_signature = hmac.new(
+        test_secret.encode('utf-8'),
+        canonical_payload,
+        hashlib.sha256
+    ).hexdigest()
+
+    expected_headers = {
+        "Content-Type": "application/json",
+        "X-N8N-Timestamp": test_ts,
+        "X-N8N-Event-Id": test_event_id,
+        "X-Dominus-Signature": f"sha256={expected_signature}",
+        "X-Signature": f"sha256={expected_signature}",
+    }
+
+    httpx_mock.add_response(
+        method="POST",
+        url=test_url,
+        status_code=200,
+    )
+
+    asyncio.run(notify_order_status("pedido-123", "tenant-test", "accepted", "client@s.whatsapp.net"))
+
+    # Verify the mock was called with correct headers and payload
+    request = httpx_mock.get_request()
+    assert request.headers["Content-Type"] == "application/json"
+    assert request.headers["X-N8N-Timestamp"] == test_ts
+    assert request.headers["X-N8N-Event-Id"] == test_event_id
+    assert request.headers["X-Dominus-Signature"] == f"sha256={expected_signature}"
+    assert request.headers["X-Signature"] == f"sha256={expected_signature}"
+    assert request.content == payload_bytes

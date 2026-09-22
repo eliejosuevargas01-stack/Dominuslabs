@@ -13,7 +13,10 @@ import {
   Search,
   ArrowRight,
   ChefHat,
-  AlertCircle
+  AlertCircle,
+  LayoutGrid,
+  Columns3,
+  List
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -213,7 +216,104 @@ export default function OrderManagerView() {
   // Filtros de busca na aba de histórico
   const [historySearch, setHistorySearch] = useState<string>('');
   const [historyStatusFilter, setHistoryStatusFilter] = useState<'all' | 'delivered' | 'cancelled'>('all');
+  
+  // View mode toggle: 'cards' (default), 'kanban', 'list'
+  const [viewMode, setViewMode] = useState<'cards' | 'kanban' | 'list'>('cards');
 
+  // Manual order modal state
+  const [isManualOrderModalOpen, setIsManualOrderModalOpen] = useState(false);
+  const [manualOrderCustomerName, setManualOrderCustomerName] = useState('');
+  const [manualOrderAddress, setManualOrderAddress] = useState('');
+  const [manualOrderItems, setManualOrderItems] = useState<{id: string; name: string; quantity: number; price: string; notes: string}[]>([
+    { id: '1', name: '', quantity: 1, price: '0.00', notes: '' }
+  ]);
+
+  // Calculate total for manual order
+  const calculateManualOrderTotal = () => {
+    return manualOrderItems.reduce((sum, item) => {
+      const price = parseFloat(item.price) || 0;
+      return sum + price * item.quantity;
+    }, 0);
+  };
+
+  // Handle adding a new item row
+  const addManualOrderItem = () => {
+    setManualOrderItems(prev => [
+      ...prev,
+      { id: Date.now().toString(), name: '', quantity: 1, price: '0.00', notes: '' }
+    ]);
+  };
+
+  // Handle removing an item
+  const removeManualOrderItem = (id: string) => {
+    if (manualOrderItems.length > 1) {
+      setManualOrderItems(prev => prev.filter(item => item.id !== id));
+    }
+  };
+
+  // Handle updating an item
+  const updateManualOrderItem = (id: string, field: keyof typeof manualOrderItems[0], value: string | number) => {
+    setManualOrderItems(prev => prev.map(item => 
+      item.id === id ? { ...item, [field]: value } : item
+    ));
+  };
+
+  // Handle submitting manual order
+  const handleCreateManualOrder = async () => {
+    if (!manualOrderCustomerName.trim() || !manualOrderAddress.trim()) {
+      toast.error('Por favor, preencha o nome do cliente e o endereço.');
+      return;
+    }
+    
+    const itemsWithValidData = manualOrderItems.filter(item => item.name.trim());
+    if (itemsWithValidData.length === 0) {
+      toast.error('Adicione pelo menos um item ao pedido.');
+      return;
+    }
+
+    const payload = {
+      customer_name: manualOrderCustomerName,
+      address: manualOrderAddress,
+      items: itemsWithValidData.map(item => ({
+        nome: item.name,
+        quantidade: item.quantity,
+        preco_unitario: parseFloat(item.price) || 0,
+        observacoes: item.notes
+      }))
+    };
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Não autenticado. Faça login novamente.');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE}/orders/manual`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Falha ao criar pedido');
+      }
+
+      await response.json();
+      toast.success('Pedido criado com sucesso!');
+      setIsManualOrderModalOpen(false);
+      setManualOrderCustomerName('');
+      setManualOrderAddress('');
+      setManualOrderItems([{ id: '1', name: '', quantity: 1, price: '0.00', notes: '' }]);
+    } catch (error) {
+      console.error('Erro ao criar pedido:', error);
+      toast.error(error instanceof Error ? error.message : 'Não foi possível criar o pedido.');
+    }
+  };
   const announceAudioFallback = useCallback((order: Order) => {
     const message = `Novo pedido pendente ${order.id}. Ative o som desta tela.`;
     toast.error(message);
@@ -558,6 +658,15 @@ export default function OrderManagerView() {
           <p className="text-sm text-zinc-500 mt-1">
             Painel operacional para gestão em tempo real de pedidos e entregas.
           </p>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsManualOrderModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+          >
+            <ShoppingBag className="w-4 h-4" />
+            <span>+ Novo Pedido</span>
+          </button>
+        </div>
         </div>
         <div className="flex items-center gap-2 text-xs bg-white border border-zinc-200 px-3.5 py-1.5 rounded-full shadow-sm self-start sm:self-auto">
            <span className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : connectionStatus === 'connecting' ? 'bg-amber-500' : 'bg-rose-500'}`}></span>
@@ -605,6 +714,32 @@ export default function OrderManagerView() {
               {finalizedOrders.length}
             </span>
           </button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-zinc-500">Visão:</span>
+          <div className="flex items-center bg-zinc-100 p-0.5 rounded-xl border border-zinc-200">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${viewMode === 'cards' ? 'bg-white text-purple-700 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'}`}
+            >
+              <LayoutGrid className="w-4 h-4" />
+              <span className="hidden sm:inline">Cards</span>
+            </button>
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${viewMode === 'kanban' ? 'bg-white text-purple-700 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'}`}
+            >
+              <Columns3 className="w-4 h-4" />
+              <span className="hidden sm:inline">Kanban</span>
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${viewMode === 'list' ? 'bg-white text-purple-700 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'}`}
+            >
+              <List className="w-4 h-4" />
+              <span className="hidden sm:inline">Lista</span>
+            </button>
+          </div>
+        </div>
         </div>
 
         {/* Resumo Rápido no Topo */}
@@ -618,57 +753,259 @@ export default function OrderManagerView() {
       {/* Conteúdo da Aba 1: Operação Ativa */}
       {activeTab === 'active' && (
         <div role="tabpanel" aria-label="Operação Ativa" className="flex flex-col flex-1 pb-12">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
-            {/* Coluna 1: Novos & Entrantes */}
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between bg-amber-50/80 border border-amber-200/70 p-3.5 rounded-2xl">
-                <div className="flex items-center gap-2">
-                  <Flame className="w-5 h-5 text-amber-600" />
-                  <h2 className="text-sm font-bold text-amber-900">Novos & Entrantes</h2>
+                    {viewMode === 'kanban' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-1 min-h-0">
+              {/* Pendente */}
+              <div className="flex flex-col gap-3 bg-white border border-zinc-200 rounded-2xl p-3 min-h-0">
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+                  <div className="flex items-center gap-2">
+                    <Flame className="w-4 h-4 text-amber-600" />
+                    <h3 className="text-xs font-bold text-amber-900 uppercase tracking-wider">Pendente</h3>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800">
+                    {incomingOrders.length}
+                  </span>
                 </div>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-200/70 text-amber-900">
-                  {incomingOrders.length}
-                </span>
+                <div className="space-y-3 overflow-y-auto">
+                  {incomingOrders.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center text-zinc-400">
+                      <Clock className="w-8 h-8 mb-2" />
+                      <span className="text-xs">Nenhum pedido pendente</span>
+                    </div>
+                  ) : (
+                    incomingOrders.map(order => renderOperationalCard(order, true))
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-4 flex-1">
-                {incomingOrders.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-10 text-center bg-white border border-dashed border-zinc-200 rounded-2xl min-h-[220px]">
-                    <Clock className="w-10 h-10 text-zinc-300 mb-2" />
-                    <p className="text-sm font-bold text-zinc-700">Nenhum pedido no momento.</p>
-                    <p className="text-xs text-zinc-400 mt-0.5">Aguardando entradas e alertas neurais...</p>
+              {/* Aceito */}
+              <div className="flex flex-col gap-3 bg-white border border-zinc-200 rounded-2xl p-3 min-h-0">
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                    <h3 className="text-xs font-bold text-blue-900 uppercase tracking-wider">Aceito</h3>
                   </div>
-                ) : (
-                  incomingOrders.map(order => renderOperationalCard(order, true))
-                )}
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800">
+                    {incomingOrders.filter(o => o.status === 'accepted').length + inProgressOrders.filter(o => o.status === 'accepted').length}
+                  </span>
+                </div>
+                <div className="space-y-3 overflow-y-auto">
+                  {[...incomingOrders, ...inProgressOrders].filter(o => o.status === 'accepted').length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center text-zinc-400">
+                      <Check className="w-8 h-8 mb-2" />
+                      <span className="text-xs">Nenhum pedido aceito</span>
+                    </div>
+                  ) : (
+                    [...incomingOrders, ...inProgressOrders].filter(o => o.status === 'accepted').map(order => (
+                      <div key={order.id} className="bg-zinc-50 p-3 rounded-xl border border-zinc-100">
+                        {renderOperationalCard(order, false)}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Pronto para Entrega */}
+              <div className="flex flex-col gap-3 bg-white border border-zinc-200 rounded-2xl p-3 min-h-0">
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-purple-600" />
+                    <h3 className="text-xs font-bold text-purple-900 uppercase tracking-wider">Pronto</h3>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800">
+                    {inProgressOrders.filter(o => o.status === 'ready_for_delivery').length}
+                  </span>
+                </div>
+                <div className="space-y-3 overflow-y-auto">
+                  {inProgressOrders.filter(o => o.status === 'ready_for_delivery').length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center text-zinc-400">
+                      <ChefHat className="w-8 h-8 mb-2" />
+                      <span className="text-xs">Nenhum pedido pronto</span>
+                    </div>
+                  ) : (
+                    inProgressOrders.filter(o => o.status === 'ready_for_delivery').map(order => (
+                      <div key={order.id} className="bg-zinc-50 p-3 rounded-xl border border-zinc-100">
+                        {renderOperationalCard(order, false)}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Saiu para Entrega */}
+              <div className="flex flex-col gap-3 bg-white border border-zinc-200 rounded-2xl p-3 min-h-0">
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-amber-600" />
+                    <h3 className="text-xs font-bold text-amber-900 uppercase tracking-wider">Saiu</h3>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800">
+                    {inProgressOrders.filter(o => o.status === 'out_for_delivery').length}
+                  </span>
+                </div>
+                <div className="space-y-3 overflow-y-auto">
+                  {inProgressOrders.filter(o => o.status === 'out_for_delivery').length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center text-zinc-400">
+                      <ExternalLink className="w-8 h-8 mb-2" />
+                      <span className="text-xs">Nenhum pedido em rota</span>
+                    </div>
+                  ) : (
+                    inProgressOrders.filter(o => o.status === 'out_for_delivery').map(order => (
+                      <div key={order.id} className="bg-zinc-50 p-3 rounded-xl border border-zinc-100">
+                        {renderOperationalCard(order, false)}
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
+          )}
 
-            {/* Coluna 2: Em Preparo & Rota */}
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between bg-blue-50/80 border border-blue-200/70 p-3.5 rounded-2xl">
-                <div className="flex items-center gap-2">
-                  <ChefHat className="w-5 h-5 text-blue-600" />
-                  <h2 className="text-sm font-bold text-blue-900">Em Preparo & Rota</h2>
-                </div>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-200/70 text-blue-900">
-                  {inProgressOrders.length}
-                </span>
-              </div>
-
-              <div className="space-y-4 flex-1">
-                {inProgressOrders.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-10 text-center bg-white border border-dashed border-zinc-200 rounded-2xl min-h-[220px]">
-                    <ShoppingBag className="w-10 h-10 text-zinc-300 mb-2" />
-                    <p className="text-sm font-bold text-zinc-700">Nenhum pedido no momento.</p>
-                    <p className="text-xs text-zinc-400 mt-0.5">Os pedidos aceitos aparecerão listados aqui.</p>
-                  </div>
-                ) : (
-                  inProgressOrders.map(order => renderOperationalCard(order, false))
-                )}
+                    {viewMode === 'list' && (
+            <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-zinc-200 text-[11px] font-bold text-zinc-600 uppercase tracking-wider bg-zinc-50/50">
+                      <th className="py-3 px-5">ID</th>
+                      <th className="py-3 px-5">Cliente</th>
+                      <th className="py-3 px-5">Endereço</th>
+                      <th className="py-3 px-5">Itens</th>
+                      <th className="py-3 px-5">Total</th>
+                      <th className="py-3 px-5">Status</th>
+                      <th className="py-3 px-5 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 text-xs">
+                    {[...incomingOrders, ...inProgressOrders].length > 0 ? (
+                      [...incomingOrders, ...inProgressOrders].map((order) => (
+                        <tr key={order.id} className="hover:bg-zinc-50 transition-colors">
+                          <td className="py-3.5 px-5 font-bold text-zinc-900">#{order.id.slice(0, 6).toUpperCase()}</td>
+                          <td className="py-3.5 px-5 font-semibold text-zinc-900">{order.customerName}</td>
+                          <td className="py-3.5 px-5 text-zinc-600 max-w-xs truncate">{order.address}</td>
+                          <td className="py-3.5 px-5 text-zinc-600 max-w-xs">
+                            <div className="truncate">{order.items.slice(0, 3).map(i => `${i.quantity}x ${i.name}`).join(', ')}</div>
+                            {order.items.length > 3 && <span className="text-zinc-400 text-[10px]">+{order.items.length - 3} itens</span>}
+                          </td>
+                          <td className="py-3.5 px-5 font-bold text-zinc-900">
+                            R$ {Number(order.total_amount || order.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <span className={`px-2.5 py-1 text-[11px] font-semibold rounded-full border ${getOrderStatusBadgeClass(order.status)}`}>
+                              {statusLabels[order.status] || order.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-5 text-right">
+                            {order.status === 'pending' && (
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleReject(order.id)}
+                                  className="text-xs font-bold text-rose-600 hover:text-rose-700 px-2 py-1 rounded hover:bg-rose-50"
+                                >
+                                  Recusar
+                                </button>
+                                <button
+                                  onClick={() => handleAccept(order.id)}
+                                  className="text-xs font-bold text-purple-600 hover:text-purple-700 px-2 py-1 rounded bg-purple-50 hover:bg-purple-100"
+                                >
+                                  Aceitar
+                                </button>
+                              </div>
+                            )}
+                            {order.status === 'accepted' && (
+                              <button
+                                onClick={() => handleStatusChange(order.id, 'ready_for_delivery')}
+                                className="text-xs font-bold text-blue-600 hover:text-blue-700 px-2 py-1 rounded bg-blue-50 hover:bg-blue-100"
+                              >
+                                Marcar Pronto
+                              </button>
+                            )}
+                            {order.status === 'ready_for_delivery' && (
+                              <button
+                                onClick={() => handleStatusChange(order.id, 'out_for_delivery')}
+                                className="text-xs font-bold text-amber-600 hover:text-amber-700 px-2 py-1 rounded bg-amber-50 hover:bg-amber-100"
+                              >
+                                Marcar Saiu
+                              </button>
+                            )}
+                            {order.status === 'out_for_delivery' && (
+                              <button
+                                onClick={() => handleStatusChange(order.id, 'delivered')}
+                                className="text-xs font-bold text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100"
+                              >
+                                Entregue
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-zinc-400">
+                          <Clock className="w-6 h-6 mx-auto mb-2 text-zinc-300" />
+                          <span className="text-sm font-medium">Nenhum pedido ativo</span>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
+          )}
+
+                    {viewMode === 'cards' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
+              {/* Coluna 1: Novos & Entrantes */}
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between bg-amber-50/80 border border-amber-200/70 p-3.5 rounded-2xl">
+                  <div className="flex items-center gap-2">
+                    <Flame className="w-5 h-5 text-amber-600" />
+                    <h2 className="text-sm font-bold text-amber-900">Novos & Entrantes</h2>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-200/70 text-amber-900">
+                    {incomingOrders.length}
+                  </span>
+                </div>
+
+                <div className="space-y-4 flex-1">
+                  {incomingOrders.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center p-10 text-center bg-white border border-dashed border-zinc-200 rounded-2xl min-h-[220px]">
+                      <Clock className="w-10 h-10 text-zinc-300 mb-2" />
+                      <p className="text-sm font-bold text-zinc-700">Nenhum pedido no momento.</p>
+                      <p className="text-xs text-zinc-400 mt-0.5">Aguardando entradas e alertas neurais...</p>
+                    </div>
+                  ) : (
+                    incomingOrders.map(order => renderOperationalCard(order, true))
+                  )}
+                </div>
+              </div>
+
+              {/* Coluna 2: Em Preparo & Rota */}
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between bg-blue-50/80 border border-blue-200/70 p-3.5 rounded-2xl">
+                  <div className="flex items-center gap-2">
+                    <ChefHat className="w-5 h-5 text-blue-600" />
+                    <h2 className="text-sm font-bold text-blue-900">Em Preparo & Rota</h2>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-200/70 text-blue-900">
+                    {inProgressOrders.length}
+                  </span>
+                </div>
+
+                <div className="space-y-4 flex-1">
+                  {inProgressOrders.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center p-10 text-center bg-white border border-dashed border-zinc-200 rounded-2xl min-h-[220px]">
+                      <ShoppingBag className="w-10 h-10 text-zinc-300 mb-2" />
+                      <p className="text-sm font-bold text-zinc-700">Nenhum pedido no momento.</p>
+                      <p className="text-xs text-zinc-400 mt-0.5">Os pedidos aceitos aparecerão listados aqui.</p>
+                    </div>
+                  ) : (
+                    inProgressOrders.map(order => renderOperationalCard(order, false))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Gaveta / Barra Minimizada de Finalizados no Rodapé da Visão Ativa */}
           <div className="mt-8 bg-white border border-zinc-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
@@ -875,6 +1212,138 @@ export default function OrderManagerView() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Order Modal */}
+      {isManualOrderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b border-zinc-100 p-4 flex items-center justify-between z-10">
+              <h2 className="text-lg font-bold text-zinc-900">Criar Pedido Manual</h2>
+              <button
+                onClick={() => setIsManualOrderModalOpen(false)}
+                className="p-2 text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-colors"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 space-y-5">
+              {/* Customer Info */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-700 uppercase tracking-wider">Nome do Cliente</label>
+                <input
+                  type="text"
+                  value={manualOrderCustomerName}
+                  onChange={(e) => setManualOrderCustomerName(e.target.value)}
+                  placeholder="Ex: João da Silva"
+                  className="w-full px-3 py-2 text-sm rounded-xl border border-zinc-200 focus:border-purple-500 outline-none transition-colors"
+                />
+              </div>
+
+              {/* Address */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-700 uppercase tracking-wider">Endereço de Entrega</label>
+                <textarea
+                  value={manualOrderAddress}
+                  onChange={(e) => setManualOrderAddress(e.target.value)}
+                  placeholder="Ex: Rua das Flores, 123 - Centro"
+                  rows={2}
+                  className="w-full px-3 py-2 text-sm rounded-xl border border-zinc-200 focus:border-purple-500 outline-none transition-colors resize-none"
+                />
+              </div>
+
+              {/* Items List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-700 uppercase tracking-wider">Itens do Pedido</label>
+                  <button
+                    onClick={addManualOrderItem}
+                    className="text-xs font-bold text-purple-600 hover:text-purple-700 px-3 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 transition-colors"
+                  >
+                    + Adicionar Item
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {manualOrderItems.map((item, idx) => (
+                    <div key={item.id} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center bg-zinc-50 p-3 rounded-xl border border-zinc-100">
+                      <div className="flex-1 space-y-1.5 w-full sm:w-auto">
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => updateManualOrderItem(item.id, 'name', e.target.value)}
+                          placeholder={`Item ${idx + 1}`}
+                          className="w-full sm:w-48 px-2 py-1.5 text-sm rounded-lg border border-zinc-200 focus:border-purple-500 outline-none"
+                        />
+                        <input
+                          type="text"
+                          value={item.notes}
+                          onChange={(e) => updateManualOrderItem(item.id, 'notes', e.target.value)}
+                          placeholder="Observações (opcional)"
+                          className="w-full sm:w-64 px-2 py-1.5 text-xs rounded-lg border border-zinc-200 focus:border-purple-500 outline-none text-zinc-500"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => updateManualOrderItem(item.id, 'quantity', parseInt(e.target.value) || 0)}
+                          className="w-20 px-2 py-1.5 text-sm rounded-lg border border-zinc-200 focus:border-purple-500 outline-none text-center"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.price}
+                          onChange={(e) => updateManualOrderItem(item.id, 'price', e.target.value)}
+                          placeholder="0.00"
+                          className="w-24 px-2 py-1.5 text-sm rounded-lg border border-zinc-200 focus:border-purple-500 outline-none text-right font-medium"
+                        />
+                        {manualOrderItems.length > 1 && (
+                          <button
+                            onClick={() => removeManualOrderItem(item.id)}
+                            className="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Total Display */}
+                <div className="pt-3 border-t border-zinc-100 flex items-center justify-between">
+                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Total do Pedido</span>
+                  <span className="text-lg font-extrabold text-zinc-900">
+                    R$ {calculateManualOrderTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="sticky bottom-0 bg-white border-t border-zinc-100 p-4 flex items-center justify-end gap-3 z-10 rounded-b-2xl">
+              <button
+                onClick={() => setIsManualOrderModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-zinc-600 hover:text-zinc-800 hover:bg-zinc-100 rounded-xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateManualOrder}
+                className="px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-sm transition-all flex items-center gap-2"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span>Salvar Pedido</span>
+              </button>
             </div>
           </div>
         </div>

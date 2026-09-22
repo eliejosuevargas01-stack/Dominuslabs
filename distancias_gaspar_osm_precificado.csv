@@ -1,0 +1,49 @@
+id,destino,distancia_km,tempo_estimado_min,valor_calculado_km,ajuste_piso,desconto_aplicado,valor_final,categoria
+1,Aguas Negras - 01,6.82,10.6,10.23,0.0,0.0,10.23,"Padrão (R$ 1,50/km)"
+2,Aguas Negras - 02,8.54,13.8,12.81,0.0,0.0,12.81,"Padrão (R$ 1,50/km)"
+3,Aguas Negras - 03,12.35,14.8,18.52,0.0,0.0,18.52,"Padrão (R$ 1,50/km)"
+4,Alto Gasparinho,10.88,17.4,16.32,0.0,0.0,16.32,"Padrão (R$ 1,50/km)"
+5,Arraial - 1,12.71,18.8,19.07,0.0,0.0,19.07,"Padrão (R$ 1,50/km)"
+6,Arraial - 2,14.06,19.8,21.09,0.0,0.0,21.09,"Padrão (R$ 1,50/km)"
+7,Arraial D'ouro,15.63,22.2,23.45,0.0,5.11,18.34,Top 10 (Com Desconto)
+8,Barracão,16.2,23.3,24.3,0.0,5.11,19.19,Top 10 (Com Desconto)
+9,Barracão - 02,14.59,16.9,21.88,0.0,5.11,16.77,Top 10 (Com Desconto)
+10,Bateias,9.67,12.4,14.5,0.0,0.0,14.5,"Padrão (R$ 1,50/km)"
+11,Bela Vista,9.12,14.2,13.68,0.0,0.0,13.68,"Padrão (R$ 1,50/km)"
+12,Belchior - 1,13.29,16.4,19.93,0.0,0.0,19.93,"Padrão (R$ 1,50/km)"
+13,Belchior Alto,22.88,28.4,34.32,0.0,5.11,29.21,Top 10 (Com Desconto)
+14,Belchior Baixo,12.27,15.6,18.41,0.0,0.0,18.41,"Padrão (R$ 1,50/km)"
+15,Belchior Central,15.95,18.1,23.92,0.0,5.11,18.81,Top 10 (Com Desconto)
+16,Centro,2.11,5.3,3.17,4.83,0.0,8.0,"Piso Mínimo (R$ 8,00)"
+17,Coloninha,4.27,6.8,6.4,1.6,0.0,8.0,"Piso Mínimo (R$ 8,00)"
+18,Figueira,7.79,12.0,11.69,0.0,0.0,11.69,"Padrão (R$ 1,50/km)"
+19,Gaspar Alto,18.62,29.8,27.93,0.0,5.11,22.82,Top 10 (Com Desconto)
+20,Gaspar Grande - 01,4.54,7.5,6.81,1.19,0.0,8.0,"Piso Mínimo (R$ 8,00)"
+21,Gaspar Grande - 02,7.12,11.4,10.68,0.0,0.0,10.68,"Padrão (R$ 1,50/km)"
+22,Gaspar Grande - 03,12.1,19.6,18.15,0.0,0.0,18.15,"Padrão (R$ 1,50/km)"
+23,Gaspar Grande - 04,17.88,32.7,26.82,0.0,5.11,21.71,Top 10 (Com Desconto)
+24,Gaspar Grande - 05,18.75,29.8,28.12,0.0,5.11,23.01,Top 10 (Com Desconto)
+25,Gaspar Mirim - 01,1.12,2.0,1.68,6.32,0.0,8.0,"Piso Mínimo (R$ 8,00)"
+26,Gaspar Mirim - 02,1.86,2.8,2.79,5.21,0.0,8.0,"Piso Mínimo (R$ 8,00)"
+27,Gasparinho - 01,3.86,6.6,5.79,2.21,0.0,8.0,"Piso Mínimo (R$ 8,00)"
+28,Gasparinho - 02,3.37,6.0,5.05,2.95,0.0,8.0,"Piso Mínimo (R$ 8,00)"
+29,Gasparinho - 03,5.41,8.4,8.12,0.0,0.0,8.12,"Padrão (R$ 1,50/km)"
+30,Gasparinho - 04,9.53,15.2,14.29,0.0,0.0,14.29,"Padrão (R$ 1,50/km)"
+31,Gasparinho - 05,10.06,15.2,15.09,0.0,0.0,15.09,"Padrão (R$ 1,50/km)"
+32,Lagoa - 01,7.88,11.4,11.82,0.0,0.0,11.82,"Padrão (R$ 1,50/km)"
+33,Lagoa - 02,11.71,21.5,17.57,0.0,0.0,17.57,"Padrão (R$ 1,50/km)"
+34,Lagoa - 03,14.26,15.5,21.39,0.0,0.0,21.39,"Padrão (R$ 1,50/km)"
+35,Macucos,11.02,16.3,16.53,0.0,0.0,16.53,"Padrão (R$ 1,50/km)"
+36,Margem Esquerda - 01,3.26,5.2,4.89,3.11,0.0,8.0,"Piso Mínimo (R$ 8,00)"
+37,Margem Esquerda - 02,9.8,12.9,14.7,0.0,0.0,14.7,"Padrão (R$ 1,50/km)"
+38,Margem Esquerda - 03,9.88,15.9,14.82,0.0,0.0,14.82,"Padrão (R$ 1,50/km)"
+39,Óleo Grande,15.91,19.9,23.87,0.0,5.11,18.76,Top 10 (Com Desconto)
+40,Pocinho,16.98,21.2,25.47,0.0,5.11,20.36,Top 10 (Com Desconto)
+41,Poço Grande - 01,3.38,6.3,5.07,2.93,0.0,8.0,"Piso Mínimo (R$ 8,00)"
+42,Poço Grande - 02,8.17,11.9,12.25,0.0,0.0,12.25,"Padrão (R$ 1,50/km)"
+43,Poço Grande 03 -,11.41,16.0,17.12,0.0,0.0,17.12,"Padrão (R$ 1,50/km)"
+44,Santa Teresinha - 02,2.05,3.6,3.07,4.93,0.0,8.0,"Piso Mínimo (R$ 8,00)"
+45,Santa Teresinha - 03,3.23,5.4,4.84,3.16,0.0,8.0,"Piso Mínimo (R$ 8,00)"
+46,Santa Terezinha,0.0,0.0,0.0,8.0,0.0,8.0,"Piso Mínimo (R$ 8,00)"
+47,Sertão Verde,6.17,8.9,9.25,0.0,0.0,9.25,"Padrão (R$ 1,50/km)"
+48,Sete de Setembro,2.24,4.1,3.36,4.64,0.0,8.0,"Piso Mínimo (R$ 8,00)"
