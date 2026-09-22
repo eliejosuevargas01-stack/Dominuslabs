@@ -249,6 +249,27 @@ async def disconnect_session(
     )
 
 
+@router.post("/sessions/{session_id}/repair-signal")
+async def repair_session_signal(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(check_crm_permission)
+):
+    """
+    Limpa chaves Signal corrompidas e reconecta a sessão sem QR code.
+    Corrige erros 'Bad MAC' causados por dessincronização de chaves Signal após redeploys.
+    """
+    user = db.query(User).filter(User.email == current_user).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+
+    resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
+    return await whatsapp_client.repair_session_signal(
+        tenant_id=user.tenant_id,
+        session_id=resolved_session
+    )
+
+
 @router.delete("/sessions/{session_id}")
 async def delete_session(
     session_id: str,

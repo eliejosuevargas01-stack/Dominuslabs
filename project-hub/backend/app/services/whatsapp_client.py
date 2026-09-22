@@ -341,6 +341,24 @@ class WhatsAppClient:
             timeout=15.0
         )
 
+    async def repair_session_signal(self, tenant_id: str, session_id: str, contact_jid: Optional[str] = None) -> Any:
+        """
+        Limpa chaves Signal corrompidas e reconecta a sessão sem QR code.
+        Corrige erros 'Bad MAC' causados por dessincronização de chaves Signal após redeploys.
+        Escopo: whatsapp:sessions:write
+        """
+        json_data: Dict[str, Any] = {}
+        if contact_jid:
+            json_data["contactJid"] = contact_jid
+        return await self._execute_request(
+            method="POST",
+            path=f"/api/sessions/{session_id}/repair-signal",
+            tenant_id=tenant_id,
+            scope="whatsapp:sessions:write",
+            json_data=json_data,
+            timeout=30.0
+        )
+
     async def get_session_media(self, tenant_id: str, session_id: str, message_id: str) -> httpx.Response:
         """
         Obtém streaming de mídia (áudio, imagem, vídeo, documento).
