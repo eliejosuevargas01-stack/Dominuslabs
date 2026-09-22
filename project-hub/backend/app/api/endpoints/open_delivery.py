@@ -198,3 +198,53 @@ async def open_delivery_acknowledgment(
     # We assume the token is valid if integration exists.
 
     return {"status": "ok"}
+
+
+@router.get("/{platform}/merchant", response_model=Dict[str, Any], status_code=status.HTTP_200_OK)
+async def get_merchant(
+    platform: str,
+    merchant_id: str = None,
+    x_merchant_id: str = Header(None, alias="X-Merchant-Id"),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Open Delivery - Merchant export endpoint.
+
+    Expected path: /api/v1/od/{platform}/merchant
+
+    Returns the merchant schema built by
+    ``app.services.merchant_exporter.export_merchant``.
+    """
+    # 1. Validate Authorization Bearer header.
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid Authorization header",
+        )
+
+    # 2. Extract merchant_id from the X-Merchant-Id header or the query param.
+    resolved_merchant_id = x_merchant_id or merchant_id
+    if not resolved_merchant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="merchant_id is required via X-Merchant-Id header or query parameter",
+        )
+
+    # 3. Find the TenantPlatformIntegration for this merchant_id + platform.
+    stmt = select(TenantPlatformIntegration).where(
+        TenantPlatformIntegration.merchant_id == resolved_merchant_id,
+        TenantPlatformIntegration.platform == platform,
+        TenantPlatformIntegration.is_active == True,
+    )
+    integration = db.execute(stmt).scalar_one_or_none()
+    if not integration:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Integration not found for merchant_id and platform",
+        )
+
+    # 4. Export and return.
+    from app.services.merchant_exporter import export_merchant
+
+    return export_merchant(integration.tenant_id, db)

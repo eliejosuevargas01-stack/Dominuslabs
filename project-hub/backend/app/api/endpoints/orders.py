@@ -6,6 +6,7 @@ import secrets
 import time
 import hmac
 import hashlib
+import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
@@ -24,6 +25,11 @@ from app.core.database import get_db
 from app.core.n8n_auth import authenticate_n8n_request
 from app.models.order_manager import OrderManagerOrder, OrderManagerOrderItem, utc_now
 from sqlalchemy.orm import Session, joinedload
+
+from app.services.open_delivery_adapter import STATUS_OUTBOUND_MAP
+from app.services.platform_token_manager import platform_token_manager
+from app.models.tenant_platform_integration import TenantPlatformIntegration
+from app.core.realtime_logger import log_realtime_event
 
 router = APIRouter()
 
@@ -101,7 +107,7 @@ class AgentOrderPayload(BaseModel):
 def public_order(order: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "id": order["id"], 
-        "customerName": order["customer_name"],
+        "customerName": order.get("customer_name", "Cliente"),
         "tenantId": order["tenant_id"],
         "total": order["total"], 
         "address": order["address"],
@@ -143,6 +149,11 @@ async def notify_order_status(
         )
         return
 
+    headers = {
+        "Content-Type": "application/json",
+        "X-N8N-Timestamp": current_ts,
+        "X-N8N-Event-Id": event_id,
+    }
     canonical_payload = f"{current_ts}.".encode('utf-8') + payload_bytes
     signature = hmac.new(
         secret.encode('utf-8'),
@@ -181,6 +192,68 @@ async def retry_order_status_webhook(
             return
         except httpx.HTTPError:
             continue
+        except Exception as exc:
+            from app.core.realtime_logger import log_realtime_event
+            log_realtime_event(
+                "ORDER_CALLBACK_UNEXPECTED_ERROR",
+                tenant_id=tenant_id,
+                pedido_id=pedido_id,
+                extra={"error": str(exc), "error_type": type(exc).__name__}
+            )
+            continue
+
+
+
+async def notify_platform_status(order_id: str, tenant_id: str, new_status: str, db: Session) -> None:
+    """Notifica a plataforma de origem sobre a mudança de status do pedido."""
+    # Buscar o OrderManagerOrder no DB
+    db_order = db.query(OrderManagerOrder).filter_by(
+        tenant_id=tenant_id, pedido_id=order_id
+    ).first()
+    if not db_order:
+        return
+    # Se source_platform e None ou external_order_id e None: retornar imediatamente (pedido interno)
+    if db_order.source_platform is None or db_order.external_order_id is None:
+        return
+    # Buscar o mapeamento de status em STATUS_OUTBOUND_MAP do open_delivery_adapter
+    od_action = STATUS_OUTBOUND_MAP.get(new_status)
+    if not od_action:
+        return
+    # Buscar TenantPlatformIntegration no DB com tenant_id, platform=source_platform, is_active=True
+    integration = db.query(TenantPlatformIntegration).filter_by(
+        tenant_id=tenant_id,
+        platform=db_order.source_platform,
+        is_active=True
+    ).first()
+    if not integration:
+        return
+    # Obter token via platform_token_manager.get_token()
+    try:
+        token = await platform_token_manager.get_token(tenant_id, db_order.source_platform, db)
+    except Exception as e:
+        log_realtime_event(
+            "PLATFORM_TOKEN_ERROR",
+            tenant_id=tenant_id,
+            pedido_id=order_id,
+            extra={"error": str(e), "error_type": type(e).__name__}
+        )
+        return
+    # Fazer POST para URL = base_url.rstrip('/') + '/orders/' + external_order_id + '/' + od_action
+    url = f"{integration.base_url.rstrip('/')}/orders/{db_order.external_order_id}/{od_action}"
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, headers=headers)
+            response.raise_for_status()
+    except Exception as e:
+        log_realtime_event(
+            "PLATFORM_NOTIFY_ERROR",
+            tenant_id=tenant_id,
+            pedido_id=order_id,
+            extra={"error": str(e), "error_type": type(e).__name__}
+        )
+        # NAO re-raise (fail-safe)
+        return
 
 
 def record_from_agent_payload(payload: AgentOrderPayload) -> Dict[str, Any]:
@@ -243,6 +316,22 @@ def record_from_agent_payload(payload: AgentOrderPayload) -> Dict[str, Any]:
     }
 
 
+# --- Manual Order Schemas ---
+class ManualOrderItem(BaseModel):
+    nome: str = Field(min_length=1)
+    quantidade: int = Field(gt=0)
+    preco_unitario: Decimal = Field(ge=0)
+    observacoes: Optional[str] = None
+
+
+class ManualOrderPayload(BaseModel):
+    customer_name: str = Field(min_length=1)
+    address: str = Field(min_length=1)
+    items: List[ManualOrderItem] = Field(min_length=1)
+    metodo_pagamento: str = Field(default="manual")
+    tipo_entrega: str = Field(default="manual")
+
+
 def apply_order_snapshot(
     existing: OrderManagerOrder,
     record_data: Dict[str, Any],
@@ -303,7 +392,7 @@ def order_to_record(db_order: OrderManagerOrder) -> Dict[str, Any]:
     return {
         "id": db_order.pedido_id,
         "tenant_id": db_order.tenant_id,
-        "customer_name": "Cliente",
+        "customer_name": db_order.customer_name or "Cliente",
         "total": db_order.total,
         "address": db_order.address,
         "items": [
@@ -567,6 +656,7 @@ async def accept_order(
     await broadcast("order_updated", order)
     event_id = f"evt_{secrets.token_hex(12)}"
     background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, "order_accepted", db_order.client_jid or db_order.cliente_id, event_id)
+    background_tasks.add_task(notify_platform_status, str(db_order.pedido_id), tenant_id, 'accepted', db)
     return {"ok": True, "order": public_order(order)}
 
 
@@ -604,6 +694,7 @@ async def reject_order(
     await broadcast("order_updated", order)
     event_id = f"evt_{secrets.token_hex(12)}"
     background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, "order_rejected", db_order.client_jid or db_order.cliente_id, event_id)
+    background_tasks.add_task(notify_platform_status, str(db_order.pedido_id), tenant_id, 'rejected', db)
     return {"ok": True, "order": public_order(order)}
 
 
@@ -643,6 +734,7 @@ async def update_order_status(
     await broadcast("order_updated", order)
     event_id = f"evt_{secrets.token_hex(12)}"
     background_tasks.add_task(retry_order_status_webhook, order_id, tenant_id, order_status, db_order.client_jid or db_order.cliente_id, event_id)
+    background_tasks.add_task(notify_platform_status, str(db_order.pedido_id), tenant_id, order_status, db)
     return {"ok": True, "order": public_order(order)}
 
 @router.get("/{order_id}/tts-alarm")
@@ -704,3 +796,76 @@ async def get_order_tts_alarm(
             return Response(content=audio_bytes, media_type="audio/mpeg")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"TTS generation failed: {str(e)}")
+
+
+@router.post("/manual", status_code=status.HTTP_201_CREATED)
+async def create_manual_order(
+    request: Request,
+    payload: ManualOrderPayload,
+    db: Session = Depends(get_db),
+):
+    """Cria um pedido manual via interface do operador."""
+    tenant_id = get_operator_tenant_id(request)
+    
+    pedido_id = f"MANUAL_{uuid.uuid4().hex[:12].upper()}"
+    
+    items_source = []
+    total = Decimal("0")
+    for idx, item in enumerate(payload.items):
+        external_item_id = f"ITEM_{uuid.uuid4().hex[:8].upper()}"
+        subtotal = item.quantidade * item.preco_unitario
+        total += subtotal
+        items_source.append({
+            "external_item_id": external_item_id,
+            "tenant_id": tenant_id,
+            "pedido_id": pedido_id,
+            "codigo": f"MANUAL_{idx+1:03d}",
+            "nome": item.nome,
+            "quantidade": item.quantidade,
+            "preco_unitario": item.preco_unitario,
+            "subtotal": subtotal,
+            "observacoes": item.observacoes,
+            "created_at": utc_now(),
+        })
+    
+    total = total.quantize(Decimal("0.01"))
+    
+    db_order = OrderManagerOrder(
+        tenant_id=tenant_id,
+        pedido_id=pedido_id,
+        cliente_id="MANUAL",
+        client_jid=None,
+        content_jid="manual_order",
+        customer_name=payload.customer_name,
+        address=payload.address,
+        total=total,
+        status="pending",
+        created_at=utc_now(),
+        items=[
+            OrderManagerOrderItem(
+                external_item_id=item["external_item_id"],
+                tenant_id=item["tenant_id"],
+                pedido_id=item["pedido_id"],
+                codigo=item["codigo"],
+                nome=item["nome"],
+                quantidade=item["quantidade"],
+                preco_unitario=item["preco_unitario"],
+                subtotal=item["subtotal"],
+                observacoes=item["observacoes"],
+                created_at=item["created_at"],
+            ) for item in items_source
+        ],
+    )
+    db.add(db_order)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Falha ao salvar pedido manual.")
+    db.refresh(db_order)
+    
+    order = order_to_record(db_order)
+    storage_id = f"{tenant_id}:{pedido_id}"
+    orders[storage_id] = order
+    await broadcast("new_order", order)
+    return {"ok": True, "order": public_order(order)}
