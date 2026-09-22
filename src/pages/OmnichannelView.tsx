@@ -1454,10 +1454,6 @@ function playOutgoingSound() {
 
         setConversations(enrichedData);
 
-        // Auto-select the first conversation if none selected
-        if (!selectedChat && enrichedData.length > 0) {
-          setSelectedChat(enrichedData[0]);
-        }
       } else {
         setConversations([]);
       }
