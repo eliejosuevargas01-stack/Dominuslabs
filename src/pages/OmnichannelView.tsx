@@ -1969,7 +1969,7 @@ function playOutgoingSound() {
                                 <span className="inline-flex mr-1 align-middle">
                                   {(st === 'read' || st === 'played') ? (
                                     <CheckCheck className="w-3.5 h-3.5 text-sky-500" />
-                                  ) : (st === 'received' || st === 'delivered' || st === 'delivery_ack') ? (
+                                  ) : (st === 'delivered' || st === 'delivery_ack') ? (
                                     <CheckCheck className="w-3.5 h-3.5 text-zinc-400" />
                                   ) : (st === 'sending') ? (
                                     <Clock className="w-3 h-3 text-zinc-400 animate-pulse" />
@@ -2239,9 +2239,9 @@ function playOutgoingSound() {
                                   </span>
                                 );
                               }
-                              if (st === 'received' || st === 'delivered' || st === 'delivery_ack') {
+                              if (st === 'delivered' || st === 'delivery_ack') {
                                 return (
-                                  <span title="Entregue (received)">
+                                  <span title="Entregue">
                                     <CheckCheck className="w-3.5 h-3.5 text-zinc-400 font-bold" />
                                   </span>
                                 );
