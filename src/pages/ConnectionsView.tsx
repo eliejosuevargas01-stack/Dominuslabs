@@ -58,14 +58,8 @@ export default function ConnectionsView() {
   // Webhook Settings Modal States
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [settingsSession, setSettingsSession] = useState<Session | null>(null);
-  const [webhookEnabled, setWebhookEnabled] = useState(false);
-  const [webhookUrl, setWebhookUrl] = useState('');
-  const [webhookSecret, setWebhookSecret] = useState('');
-  const [allowPrivate, setAllowPrivate] = useState(true);
   const [allowGroups, setAllowGroups] = useState(true);
-  const [allowNewsletters, setAllowNewsletters] = useState(false);
   const [allowBroadcasts, setAllowBroadcasts] = useState(false);
-  const [includeFromMe, setIncludeFromMe] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
 
@@ -255,14 +249,8 @@ export default function ConnectionsView() {
       const res = await getWhatsappSessionSettings(session.id);
       if (res && res.settings) {
         const wh = res.settings.webhook || {};
-        setWebhookEnabled(!!wh.enabled);
-        setWebhookUrl(wh.url || '');
-        setWebhookSecret(wh.secret || '');
-        setAllowPrivate(wh.allowPrivate !== false);
         setAllowGroups(wh.allowGroups !== false);
-        setAllowNewsletters(!!wh.allowNewsletters);
         setAllowBroadcasts(!!wh.allowBroadcasts);
-        setIncludeFromMe(!!wh.includeFromMe);
       }
     } catch (err: any) {
       console.error(err); toast.error("Ocorreu um erro na operacao.");
@@ -283,14 +271,8 @@ export default function ConnectionsView() {
 
       const payload = {
         webhook: {
-          enabled: webhookEnabled,
-          url: webhookUrl.trim(),
-          secret: webhookSecret.trim(),
-          allowPrivate,
           allowGroups,
-          allowNewsletters,
-          allowBroadcasts,
-          includeFromMe
+          allowBroadcasts
         }
       };
 
@@ -647,60 +629,11 @@ export default function ConnectionsView() {
               </div>
             ) : (
               <form onSubmit={handleSaveSettings} className="space-y-4">
-                {/* Enabled Toggle */}
-                <div className="flex items-center justify-between p-3  border border-zinc-100 rounded-xl">
-                  <div>
-                    <label className="text-xs font-bold text-zinc-700">Ativar Webhook</label>
-                    <p className="text-[10px] text-zinc-400">Envia notificações de mensagens recebidas para a URL configurada.</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    className="w-4.5 h-4.5 accent-purple-600 rounded cursor-pointer"
-                    checked={webhookEnabled}
-                    onChange={(e) => setWebhookEnabled(e.target.checked)}
-                  />
-                </div>
-
-                {/* URL Input */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">URL do Webhook</label>
-                  <input
-                    type="url"
-                    placeholder="https://seu-crm.com/webhook-whatsapp"
-                    className="w-full text-sm border border-zinc-200 rounded-xl px-3.5 py-2.5  focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                    value={webhookUrl}
-                    onChange={(e) => setWebhookUrl(e.target.value)}
-                    required={webhookEnabled}
-                  />
-                </div>
-
-                {/* Secret Input */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Chave Secreta (Secret - Opcional)</label>
-                  <input
-                    type="text"
-                    placeholder="Assinatura secreta para validação no CRM"
-                    className="w-full text-sm border border-zinc-200 rounded-xl px-3.5 py-2.5  focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                    value={webhookSecret}
-                    onChange={(e) => setWebhookSecret(e.target.value)}
-                  />
-                </div>
-
                 {/* Event Permissions Checklist */}
                 <div className="space-y-2 pt-2">
                   <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Filtros de Eventos</label>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <label className="flex items-center gap-2.5 p-2.5 rounded-xl border border-zinc-100 hover:bg-zinc-50 cursor-pointer text-xs font-medium text-zinc-700">
-                      <input
-                        type="checkbox"
-                        className="accent-purple-600 rounded"
-                        checked={allowPrivate}
-                        onChange={(e) => setAllowPrivate(e.target.checked)}
-                      />
-                      <span>Conversas Privadas (1-para-1)</span>
-                    </label>
-
                     <label className="flex items-center gap-2.5 p-2.5 rounded-xl border border-zinc-100 hover:bg-zinc-50 cursor-pointer text-xs font-medium text-zinc-700">
                       <input
                         type="checkbox"
@@ -715,35 +648,12 @@ export default function ConnectionsView() {
                       <input
                         type="checkbox"
                         className="accent-purple-600 rounded"
-                        checked={allowNewsletters}
-                        onChange={(e) => setAllowNewsletters(e.target.checked)}
-                      />
-                      <span>Canais/Newsletters</span>
-                    </label>
-
-                    <label className="flex items-center gap-2.5 p-2.5 rounded-xl border border-zinc-100 hover:bg-zinc-50 cursor-pointer text-xs font-medium text-zinc-700">
-                      <input
-                        type="checkbox"
-                        className="accent-purple-600 rounded"
                         checked={allowBroadcasts}
                         onChange={(e) => setAllowBroadcasts(e.target.checked)}
                       />
                       <span>Listas de Transmissão</span>
                     </label>
                   </div>
-
-                  <label className="flex items-center gap-2.5 p-2.5 rounded-xl border border-zinc-100 hover:bg-zinc-50 cursor-pointer text-xs font-medium text-zinc-700 mt-2 bg-purple-50/20 border-zinc-200/30">
-                    <input
-                      type="checkbox"
-                      className="accent-purple-600 rounded"
-                      checked={includeFromMe}
-                      onChange={(e) => setIncludeFromMe(e.target.checked)}
-                    />
-                    <div>
-                      <span className="font-bold">Incluir minhas próprias mensagens</span>
-                      <p className="text-[9px] text-zinc-400 font-normal mt-0.5">Envia mensagens que você envia a partir do celular.</p>
-                    </div>
-                  </label>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-4 border-t border-zinc-100 mt-4">
