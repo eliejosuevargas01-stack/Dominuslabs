@@ -1333,17 +1333,57 @@ function playOutgoingSound() {
               const toAdd = messages.filter(m => {
                 const id = String(m.message_id || m.id || '');
                 if (id && existingIds.has(id)) {
-                  // Update status of existing message in-place
+                  // Exact ID match — update status in-place, don't add
                   return false;
                 }
+
+                // For fromMe messages: check if there's a temp_ placeholder with same content
+                // The webhook arrives with the real WA message ID (e.g. "3EB0...") but the
+                // temp message has a synthetic ID ("temp_xxx"). Deduplicate by content match.
+                if (m.is_from_me || m.fromMe || m.sender === 'user') {
+                  const incomingText = (m.content || m.message || m.text || '').trim();
+                  const tempMatch = prev.find(old => {
+                    if (!String(old.message_id || '').startsWith('temp_')) return false;
+                    const oldText = (old.content || old.message || old.text || '').trim();
+                    return oldText === incomingText;
+                  });
+                  if (tempMatch) {
+                    // Replace the temp message with the confirmed one (real ID + status)
+                    return false; // Don't add as new — handled in the map below
+                  }
+                }
+
                 return true;
               });
-              // Also update status of any existing messages that arrived again
+
+              // Update existing messages: status updates AND replace temp with real
               const updated = prev.map(old => {
                 const oldId = String(old.message_id || old.id || '');
-                const fresh = messages.find(m => String(m.message_id || m.id || '') === oldId);
-                return fresh ? { ...old, status: fresh.status || old.status } : old;
+                // Exact ID match
+                const freshById = messages.find(m => String(m.message_id || m.id || '') === oldId);
+                if (freshById) return { ...old, status: freshById.status || old.status };
+
+                // Temp message replacement: match by content for fromMe messages
+                if (String(old.message_id || '').startsWith('temp_')) {
+                  const oldText = (old.content || old.message || old.text || '').trim();
+                  const freshByContent = messages.find(m => {
+                    if (!(m.is_from_me || m.fromMe || m.sender === 'user')) return false;
+                    return (m.content || m.message || m.text || '').trim() === oldText;
+                  });
+                  if (freshByContent) {
+                    // Promote temp → real confirmed message
+                    return {
+                      ...old,
+                      ...freshByContent,
+                      message_id: freshByContent.message_id || freshByContent.id || old.message_id,
+                      status: freshByContent.status || 'sent',
+                    };
+                  }
+                }
+
+                return old;
               });
+
               if (toAdd.length === 0) return updated;
               return [...updated, ...toAdd];
             });
