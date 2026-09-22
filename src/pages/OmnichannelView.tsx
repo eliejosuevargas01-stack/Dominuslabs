@@ -2014,7 +2014,7 @@ function playOutgoingSound() {
                           contact_jid: contact.contact_jid,
                           push_name: displayName,
                           display_phone: contact.display_phone,
-                          session_id: (activeSendSession && activeSendSession !== 'default') || (availableSessions.find(s => s.status === 'WORKING') || availableSessions[0])?.id || '',
+                          session_id: (activeSendSession && activeSendSession !== 'default' ? activeSendSession : null) || (availableSessions.find(s => s.status === 'WORKING') || availableSessions[0])?.id || '',
                           unread_count: 0,
                           last_message_preview: 'Iniciar conversa...',
                           last_message_timestamp: new Date().toISOString()
