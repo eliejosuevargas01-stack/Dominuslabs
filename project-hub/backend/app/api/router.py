@@ -6,7 +6,7 @@ Impacto na regra de negócio: É responsável por garantir que as operações e 
 """
 from fastapi import APIRouter
 
-from app.api.endpoints import projects, uploads, webhooks, auth, crm, users, whatsapp, health, company_setting, product_media, products, orders
+from app.api.endpoints import projects, uploads, webhooks, auth, crm, users, whatsapp, health, company_setting, product_media, products, orders, open_delivery
 
 api_router = APIRouter()
 
@@ -22,3 +22,4 @@ api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(whatsapp.router, prefix="/whatsapp", tags=["whatsapp"])
 api_router.include_router(products.router, prefix="/products", tags=["products"])
 api_router.include_router(orders.router, prefix="/orders", tags=["orders"])
+api_router.include_router(open_delivery.router, prefix="/od", tags=["open_delivery"])

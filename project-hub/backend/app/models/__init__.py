@@ -9,6 +9,7 @@ from app.models.product import Product
 from app.models.product_media import ProductMedia
 from app.models.project import Project
 from app.models.task import ProjectTask
+from app.models.tenant_platform_integration import TenantPlatformIntegration
 from app.models.user import User
 from app.models.whatsapp_account import WhatsappAccount
 
@@ -24,6 +25,7 @@ __all__ = [
     "Project",
     "ProjectAsset",
     "ProjectTask",
+    "TenantPlatformIntegration",
     "User",
     "WhatsappAccount",
 ]

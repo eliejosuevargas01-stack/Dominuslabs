@@ -23,12 +23,15 @@ class OrderManagerOrder(Base):
     pedido_id = Column(String(255), nullable=False, index=True)
     cliente_id = Column(String(255), nullable=False)
     client_jid = Column(String(255), nullable=True)
-    content_jid = Column(String(255), nullable=False)
+    content_jid = Column(String(255), nullable=True)
+    customer_name = Column(String, nullable=True, default="Cliente")
     address = Column(String, nullable=False, default="")
     total = Column(Numeric(12, 2), nullable=False, default=0)
     status = Column(String(32), nullable=False, default="pending", index=True)
     created_at = Column(DateTime, nullable=False, default=utc_now)
     accepted_at = Column(DateTime, nullable=True)
+    source_platform = Column(String(64), nullable=True, default=None, index=True)
+    external_order_id = Column(String(255), nullable=True, index=True)
 
     items = relationship("OrderManagerOrderItem", back_populates="order", cascade="all, delete-orphan")
 
