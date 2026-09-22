@@ -1770,13 +1770,24 @@ function playOutgoingSound() {
     });
 
     // 2. Deduplicate messages by message_id
+    //    Also dedup temp_ placeholders by content (fromMe) to prevent showing both
+    //    the temp and the confirmed message when the SSE arrives with real WA ID
     const seenIds = new Set<string>();
+    const seenFromMeContent = new Set<string>();
     const deduplicated: any[] = [];
     for (const msg of nonReactionMsgs) {
       const id = msg.message_id || msg.id;
-      if (id && !String(id).startsWith('temp_')) {
+      const isTemp = id && String(id).startsWith('temp_');
+      if (id && !isTemp) {
         if (seenIds.has(String(id))) continue;
         seenIds.add(String(id));
+      }
+      // For fromMe messages (temp or real), dedup by content to avoid showing
+      // both the temp placeholder AND the confirmed SSE message
+      if (msg.is_from_me || msg.sender === 'user') {
+        const text = (msg.content || msg.message || msg.text || '').trim();
+        if (text && seenFromMeContent.has(text)) continue;
+        if (text) seenFromMeContent.add(text);
       }
       deduplicated.push(msg);
     }
