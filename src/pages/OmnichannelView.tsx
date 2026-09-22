@@ -984,7 +984,7 @@ export default function OmnichannelView() {
       try {
         const base64Data = await blobToBase64(audioBlob);
 
-        const targetSession = (activeSendSession && activeSendSession !== 'default') 
+        const targetSession = (activeSendSession && activeSendSession !== 'default' ? activeSendSession : null) 
           || (selectedChat.session_id && selectedChat.session_id !== 'default' ? selectedChat.session_id : '')
           || (availableSessions.find(s => s.status === 'WORKING') || availableSessions[0])?.id || '';
         if (!targetSession) {
@@ -1084,7 +1084,7 @@ export default function OmnichannelView() {
     try {
       const base64Data = await blobToBase64(file);
 
-      const targetSession = (activeSendSession && activeSendSession !== 'default') 
+      const targetSession = (activeSendSession && activeSendSession !== 'default' ? activeSendSession : null) 
         || (selectedChat.session_id && selectedChat.session_id !== 'default' ? selectedChat.session_id : '')
         || (availableSessions.find(s => s.status === 'WORKING') || availableSessions[0])?.id || '';
       if (!targetSession) {
@@ -1552,7 +1552,7 @@ function playOutgoingSound() {
     setMessageInput('');
     setSending(true);
 
-    const targetSession = (activeSendSession && activeSendSession !== 'default') 
+    const targetSession = (activeSendSession && activeSendSession !== 'default' ? activeSendSession : null) 
       || (selectedChat.session_id && selectedChat.session_id !== 'default' ? selectedChat.session_id : '')
       || (availableSessions.find(s => s.status === 'WORKING') || availableSessions[0])?.id || '';
     if (!targetSession) {
