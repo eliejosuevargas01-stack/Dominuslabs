@@ -1,0 +1,118 @@
+PRODUTOS CAPTURADOS DO PEDIDOS10 (parcialmente truncado)
+
+URL Base: https://api-monitor.pedidos10.com.br/api-gestor-V1/estabelecimento-cardapio/id_estabelecimento/14348
+
+=== PRODUTOS IDENTIFICADOS ===
+
+1. O Imbatível: Brigadeiro de Ninho e Morango Cravejado
+   ID: 1020097
+   Categoria: bolo de fatia
+   Status: I (Inativo)
+   Preço: R$ 35.00
+   Descrição: Nosso campeão absoluto. Um pote absurdamente recheado com camadas do mais puro brigadeiro de Leite Ninho, intercalado com geleia de morango e muitos morangos frescos em pedaços.
+
+2. Beijo Cravejado (Morango Cravejado)
+   ID: 1017504
+   Categoria: bolo de fatia
+   Status: I (Inativo)
+   Preço: R$ 20.00
+   Descrição: Morangos frescos cobertos em brigadeiro de Leite Ninho, calda especial de caramelo de morango e generosa cobertura de chocolate branco.
+
+3. O queridinho que não vai resistir MORANGO CRONCH
+   ID: 1020459
+   Categoria: bolo de fatia
+   Status: I (Inativo)
+   Preço: R$ 20.00
+   Descrição: Um morango fresco e suculento envolvido em um brigadeiro branco cremoso, com uma camada crocante de flocos de milho.
+
+4. Contraste Perfeito (torta de maracujá)
+   ID: 1018371
+   Categoria: bolo de fatia
+   Status: I (Inativo)
+   Preço: R$ 20.00
+   Descrição: Quando o Doce Intenso do Chocolate Encontra a Explosão Cítrica do Maracujá
+
+5. Proibido Comer Uma Só: Torta de Limão
+   ID: 1010752
+   Categoria: bolo de fatia
+   Status: A (Ativo)
+   Preço: R$ 20.00
+   Descrição: Azedinho na medida para arrepiar e doce o suficiente para viciar.
+
+6. Torta Gelada de Morango
+   ID: 1010753
+   Categoria: bolo de fatia
+   Status: I (Inativo)
+   Preço: R$ 20.00
+   Descrição: A Fatia Irresistível que Derrete na Boca
+
+7. Chegou o colossal sanduíche de brownie
+   ID: 1017552
+   Categoria: bolo de fatia
+   Status: I (Inativo)
+   Preço: R$ 35.00
+   Descrição: Brownie recheado com brigadeiro duplo e morangos frescos
+
+8. Brownie Bombom
+   ID: (não capturado completamente)
+   Preço: N/A
+
+9. A Dupla Perfeita: Bolo de Chocolate com Maracujá
+   ID: (não capturado completamente)
+   Preço: N/A
+
+10. Ninho Cremoso com Coração de Nutella
+    ID: (não capturado completamente)
+    Preço: N/A
+
+11. Bolo Red Velvet
+    ID: (não capturado completamente)
+    Preço: N/A
+
+12. Bolo de Oreo
+    ID: (não capturado completamente)
+    Preço: N/A
+
+13. Bolo Matilda
+    ID: (não capturado completamente)
+    Preço: N/A
+
+14. Bolo de pudim com maracujá
+    ID: (não capturado completamente)
+    Preço: N/A
+
+=== TOTAL PARCIAL ===
+Aproximadamente 27 produtos no catálogo
+14 identificados com preço
+13 sem dados completos (JSON truncado)
+
+=== ESTRUTURA DOS DADOS ===
+
+{
+  "data": [
+    {
+      "id": "1020097",
+      "des_item": "Nome do Produto",
+      "des_complementar": "Descrição detalhada",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A" ou "I",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3230944",
+          "des_item": "Único",
+          "val_preco": "35.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    }
+  ]
+}
+
+=== PRÓXIMOS PASSOS ===
+
+1. Aumentar limite de captura para 100.000 caracteres
+2. Usar headers Authorization e x-token para baixar diretamente
+3. Salvar tokens em arquivo para reutilização

@@ -1,0 +1,544 @@
+{
+  "data": [
+    {
+      "id": "1020097",
+      "des_item": "O Imbatível: Brigadeiro de Ninho e Morango Cravejado",
+      "des_complementar": "Nosso campeão absoluto. Um pote absurdamente recheado com camadas do mais puro brigadeiro de Leite Ninho, intercalado com geleia de morango e muitos morangos frescos em pedaços. Para fechar com chave de ouro, uma capa de chocolate branco crocante entupida de pedacinhos de caramelo de morango. Muito recheio, fruta fresca de verdade e uma crocância de dar água na boca. Peça agora e entenda por que ninguém consegue comer um só.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "I",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3230944",
+          "des_item": "Único",
+          "val_preco": "35.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1017504",
+      "des_item": "Beijo Cravejado (Morango Cravejado)",
+      "des_complementar": "Morangos frescos cobertos em brigadeiro de Leite Ninho, calda especial de caramelo de morango e generosa cobertura de chocolate branco. Uma explosão de sabor e doçura na medida certa.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "I",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3215851",
+          "des_item": "Único",
+          "val_preco": "20.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1020459",
+      "des_item": "O queridinho que não vai resistir MORANGO CRONCH",
+      "des_complementar": "  Um morango fresco e suculento envolvido em um brigadeiro branco cremoso, com uma camada crocante de flocos de milho e finalizado com uma casquinha perfeita de chocolate nobre meio amargo. Uma explosão de sabor e textura que derrete na boca!",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "I",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3232203",
+          "des_item": "Único",
+          "val_preco": "20.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1018371",
+      "des_item": "Contraste Perfeito (torta de maracujá) : Quando o Doce Intenso do Chocolate Encontra a Explosão Cítrica do Maracujá",
+      "des_complementar": "Prepare-se para uma experiência que desafia os sentidos. Nossa torta de maracujá redefine o conceito de sobremesa ao unir uma base de biscoito a uma ganache de chocolate. O recheio traz uma harmonia viciante entre camadas generosas de mousse de maracujá bem aerado e um brigadeiro de chocolate cremoso. Para coroar nossa obra-prima, uma geleia de maracujá fresca e brilhante na decoração traz o toque cítrico perfeito para equilibrar tanta doçura. Cada fatia é um convite irresistível.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "I",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3223210",
+          "des_item": "Único",
+          "val_preco": "20.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1010752",
+      "des_item": "Proibido Comer Uma Só: Torta de Limão",
+      "des_complementar": "Azedinho na medida para arrepiar e doce o suficiente para viciar. Juntamos a cremosidade aveludada do limão com a crocância que derrete na boca, criando uma tentação perigosa que desafia qualquer autocontrole. Você jura que vai comer só um, mas a gente sabe como essa história termina. Entregue-se.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3193740",
+          "des_item": "Único",
+          "val_preco": "20.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1010753",
+      "des_item": "Torta Gelada de Morango: A Fatia Irresistível que Derrete na Boca",
+      "des_complementar": "Uma experiência única em cada mordida! Esta fatia combina a crocância perfeita do biscoito com a cremosidade inconfundível do brigadeiro tradicional e a leveza refrescante de uma mousse de morango artesanal. Para coroar tanta gostosura, finalizamos com um morango fresco selecionado no topo. Perfeito para adoçar o seu dia ou encantar os seus clientes!",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "I",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3193741",
+          "des_item": "Único",
+          "val_preco": "20.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1017552",
+      "des_item": "Chegou o colossal sanduíche de brownie, brigadeiro duplo e morangos frescos.",
+      "des_complementar": "A Tentação Definitiva.  Quer garantir uma na sua porta? Esta fatia de brownie recheado é a resposta. Começa com a estrutura pesada e rica de duas bases de brownie puro cacau, recheadas até transbordar com uma dupla imbatível: brigadeiro de leite cremoso e brigadeiro de chocolate. Entre uma camada e outra, fatias de morango selecionados trazem suculência e cor para essa verdadeira joia da confeitaria. Uma mordida e você percebe que não está comendo apenas um docinho, mas sim a melhor experiência ",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3216088",
+          "des_item": "Único",
+          "val_preco": "35.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1017671",
+      "des_item": "Brownie Bombom",
+      "des_complementar": "Nosso brownie 100% cacau, molhadinho por dentro, recheado com creme de Leite Ninho e finalizado com MUITA Nutella por cima. A dupla que todo mundo ama, agora em versão brownie.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3216764",
+          "des_item": "Único",
+          "val_preco": "12.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1010756",
+      "des_item": "A Dupla Perfeita: Bolo de Chocolate com Maracujá",
+      "des_complementar": "Surpreenda seu paladar com uma combinação irresistível que equilibra a intensidade do cacau com a doçura na medida certa e o toque vibrante da fruta. Esta receita traz camadas generosas de uma massa de chocolate fofinha e molhadinha, abraçadas por um recheio cremoso de brigadeiro de maracujá feito com polpa fresca. O azedinho cítrico corta a doçura do chocolate de forma sublime, criando uma explosão de sabores sofisticada e aconchecante a cada garfada. Ideal para transformar  seu dia em um momen",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "I",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3193744",
+          "des_item": "Único",
+          "val_preco": "22.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1017665",
+      "des_item": "Ninho Cremoso com Coração de Nutella",
+      "des_complementar": "Massa branca fofinha e super úmida, recheio cremoso de Leite Ninho que derrete na boca e MUITA Nutella original. Não é \"gostinho\", é GOOTOZINHO transbordando mesmo. Impossível comer só um pedaço.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3216757",
+          "des_item": "Único",
+          "val_preco": "25.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1010754",
+      "des_item": "Bolo Red Velvet: A Experiência Mais Cremosa do Seu Dia em Uma Fatia",
+      "des_complementar": "Uma experiência sofisticada e inesquecível em cada mordida! Esta fatia traz a massa clássica Red Velvet, incrivelmente macia e aveludada, perfeitamente combinada com um recheio generoso e cremoso de cream cheese artesanal que equilibra doçura e suavidade na medida certa. É sabor, textura e elegância reunidos em uma única fatia para encantar qualquer paladar.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3193742",
+          "des_item": "Único",
+          "val_preco": "22.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1014648",
+      "des_item": "Cuidado: este bolo de Oreo é perigosamente irresistível (e viciante).",
+      "des_complementar": "Uma fatia generosa de pura tentação que une o melhor dos dois mundos: a sofisticação da confeitaria artesanal e irresistível do biscoito mais famoso do mundo.  Nossa massa amanteigada de chocolate é assada no ponto perfeito, trazendo uma textura incrivelmente macia, úmida e com um sabor profundo de cacau que derrete na boca. Entre as camadas, um recheio extremamente cremoso à base de brigadeiro branco aveludado, generosamente misturado com pedaços de Oreo para garantir aquela textura única a cad",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3204229",
+          "des_item": "Único",
+          "val_preco": "23.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1017551",
+      "des_item": "Abandone a dieta: a fatia de bolo Matilda mais chocolatuda e intensa que você vai provar.",
+      "des_complementar": "A Experiência Clássica e Intensa  Uma fatia imponente do verdadeiro clássico dos clássicos: o lendário bolo Matilda. Esqueça qualquer versão leve, porque aqui o chocolate reina absoluto do primeiro ao último detalhe. A experiência começa na massa ultra úmida e densamente chocolatuda, abraçada por um recheio robusto e escuro que transborda sabor. Para elevar o nível, a fatia é generosamente banhada por uma calda de chocolate encorpada que garante maciez extrema, finalizada com uma cobertura espes",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3216086",
+          "des_item": "Único",
+          "val_preco": "23.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1017556",
+      "des_item": "Bolo de pudin com maracuja, encontro supremo da confeitaria: pura tentação em forma de bolo que vai dominar o teu dia.",
+      "des_complementar": "A Harmonia Perfeita entre o Doce e o Azedinho  Prepare-se para uma viagem de texturas e sabores que vai revolucionar o teu paladar. Esta fatia une a maciez e o aroma aconchegante de uma massa amanteigada de chocolate com duas das texturas mais amadas do Brasil: um recheio incrivelmente aveludado de pudim tradicional e uma mousse de maracujá leve, aerada e na medida exata de acidez. Para fechar com chave de ouro, a cobertura traz uma camada generosa de mousse de maracujá finalizada com um brilho ",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3216092",
+          "des_item": "Único",
+          "val_preco": "23.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1010755",
+      "des_item": "Bolo Dois Amores: O Encontro Perfeito",
+      "des_complementar": "Fatia.Um abraço em forma de bolo! Nossa massa artesanal de chocolate une o melhor dos dois mundos: recheio aveludado de brigadeiro de leite combinado com brigadeiro de chocolate. Confeitado com delicados brigadeirinhos para adoçar seus melhores momentos. Título: Delícia Dois Amores",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3193743",
+          "des_item": "Único",
+          "val_preco": "22.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1010757",
+      "des_item": "Bolo Pudim mini O Fim da Dúvida: Bolo de Chocolate com Pudim de Leite em uma Explosão de Sabor  Descrições Atraentes e Provocativas",
+      "des_complementar": "Por que escolher entre um bolo fofinho e um pudim incrivelmente cremoso quando você pode ter os dois na mesma garfada? Nossa receita de bolo pudim é uma verdadeira obra de arte da confeitaria: uma base de massa leve e aerada que abraça e se funde a uma camada generosa de pudim de leite condensado ultra aveludado, tudo coroado por uma calda de caramelo dourada e brilhante. Uma experiência de texturas que contrasta a maciez do bolo com a cremosidade suprema do creme, feita para conquistar qualquer",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "I",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3193745",
+          "des_item": "Único",
+          "val_preco": "15.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1010758",
+      "des_item": "Pequeno no Tamanho, Gigante no Sabor: O Mini Pudim Individual Mais Cremoso do Mundo",
+      "des_complementar": "Sabe aquele abraço em forma de doce? Encontramos ele em 150 gramas. Nosso mini pudim de leite traz todo o sabor reconfortante da infância, com uma consistência que desmancha na boca logo na primeira colherada. Perfeitamente dimensionado em 10cm de pura riqueza láctea e coroado por uma calda brilhante que escorre na medida exata. Uma experiência afetiva, sofisticada e feita sob medida para o seu momento de prazer que você não precisar dividir com ninguém (e nem querer).",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3193746",
+          "des_item": "Único",
+          "val_preco": "10.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1010759",
+      "des_item": " O Bolo Mini   é um Abraço em Forma de Doce.",
+      "des_complementar": "Quem disse que bolo de vó não pode ter um toque de sofisticação moderna? Com 12cm de pura tentação, nosso bolo caseirinho é a dose exata de conforto que o seu dia precisa. Feito com aquela massa extremamente fofinha, leve e aromática, ele vem coroado por uma cobertura generosa e cremosa que escorre pelas laterais de forma irresistível. É o tamanho ideal para saborear sozinho, sem culpa (ou para guardar o segredo de tão bom que é).",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3193747",
+          "des_item": "Único",
+          "val_preco": "15.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1018393",
+      "des_item": "Abraço em Forma de Doce: O Pudim de Leite Casseiro Feito para Conquistar no Primeiro Olhar",
+      "des_complementar": "Sabe aquela sobremesa que traz memórias instantâneas de afeto e conforto? Nosso pudim de 16cm entrega todo o sabor da autêntica confeitaria caseira com uma apresentação de dar água na boca. Com 600gr de pura riqueza láctea, ele equilibra o doce na medida certa com uma calda artesanal que escorre de forma irresistível ao desenformar. Uma experiência sofisticada, nostálgica e absolutamente impossível de resistir.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3223338",
+          "des_item": "Único",
+          "val_preco": "30.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1018399",
+      "des_item": "O Autêntico Sabor da Roça: Bolo de Milho verde",
+      "des_complementar": "Feito com aquele milho de verdade que traz todo o aconchego da fazenda direto para a sua mesa. Com 16cm de pura maciez e 500g de puro sabor, este caseirinho tem uma textura levemente cremosa por dentro e uma casquinha dourada que é uma verdadeira perdição. O acompanhamento perfeito para o café fresquinho da tarde, feito para abraçar o paladar a cada garfada.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3223345",
+          "des_item": "Único",
+          "val_preco": "18.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1018400",
+      "des_item": "Fofura Suprema: 500g de Puro Amor em Forma de Bolo de Cenoura",
+      "des_complementar": "Esqueça os bolos secos. Nosso caseirinho de cenoura de 16cm entrega uma massa incrivelmente fofinha, vibrante e úmida, coroada por aquela camada de chocolate que derrete na boca. Com 500g de pura nostalgia e sabor marcante, ele transforma qualquer pausa para o café em um momento de puro deleite. Irresistível do primeiro ao último pedaço.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3223347",
+          "des_item": "Único",
+          "val_preco": "23.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1018401",
+      "des_item": "Dança de Sabores: O Caseirinho Bicolor que Agrada a Todos os Gostos (mesclado)",
+      "des_complementar": "Por que escolher entre a delicadeza da baunilha e a intensidade do chocolate quando você pode ter os dois se abraçando na mesma massa? Nosso caseirinho mesclado de 16cm traz um balanço perfeito de sabores e um visual marmorizado que é puro charme. São 500g de uma massa macia, leve e cheia de personalidade, perfeita para quem ama surpreender o paladar.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3223349",
+          "des_item": "Único",
+          "val_preco": "18.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1018402",
+      "des_item": "O Doce Aconchego: Bolo de Coco Caseiro com Aquela Cobertura dos Sonhos",
+      "des_complementar": "Uma viagem direta aos sabores mais afetivos da confeitaria artesanal. Este caseirinho de coco de 16cm é rico, extremamente macio e generosamente coberto com coco ralado fresco que traz um toque perfumado e levemente úmido. Com 500g de pura tentação, ele derrete na boca e deixa aquele gostinho inconfundível de quero mais.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "I",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3223352",
+          "des_item": "Único",
+          "val_preco": "23.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1018404",
+      "des_item": "O Caseirinho de Chocolate Mais Macio e Molhadinho",
+      "des_complementar": "Para quem não resiste ao poder absoluto do cacau. Nosso bolo de chocolate de 16cm entrega uma massa escura, rica, aromática e incrivelmente fofa, pensada para saciar a vontade de doce mais exigente. Com 500g de pura cremosidade e sabor profundo, é a escolha definitiva para acompanhar o café ou celebrar os pequenos prazeres da rotina.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3223354",
+          "des_item": "Único",
+          "val_preco": "23.00",
+          "val_preco_promocao": null,
+          "ind_status": "I"
+        }
+      ]
+    },
+    {
+      "id": "1018405",
+      "des_item": "Fugindo do Comum: A Refrescância Irresistível do Bolo de Limão em 500g",
+      "des_complementar": "Uma lufada de frescor em forma de sobremesa. Nosso bolo de limão de 16cm combina uma massa fofíssima com notas cítricas na medida certa, finalizado com aquela coberturinha branca e levemente ácida que escorre pela lateral. Com 500g de pura leveza, ele traz o contraste perfeito entre o doce da massa e a vivacidade do limão.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "I",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3223355",
+          "des_item": "Único",
+          "val_preco": "23.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1018406",
+      "des_item": "O Encontro do Doce com o Salgado: O Caseirinho de Queijo Irresistível",
+      "des_complementar": "Um clássico absoluto para quem ama sabores marcantes e reconfortantes. Nosso bolo de queijo de 16cm traz uma textura levemente densa, extremamente cremosa e um toque na medida exata entre o salgadinho do queijo e o adocicado da massa. Com 500g de puro aconchego, é o par ideal para um café bem quentinho em qualquer hora do dia.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "I",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3223356",
+          "des_item": "Único",
+          "val_preco": "25.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1018407",
+      "des_item": "Sabor de Raiz: A Riqueza do Aipim em um Mini Bolo Inesquecível",
+      "des_complementar": "Denso, incrivelmente cremoso e com aquela consistência que lembra uma cocada cremosa assada. Nosso bolo de aipim de 16cm une a tradição da mandioca fresca a uma textura úmida e marcante que desmancha na boca. Com 500g de pura riqueza artesanal e uma casquinha tostada apaixonante, é uma verdadeira viagem aos sabores mais autênticos da terra.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "I",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3223357",
+          "des_item": "Único",
+          "val_preco": "23.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1018409",
+      "des_item": "O Favorito de Todos: O Bolo Formigueiro de 500g que Todo Mundo Ama",
+      "des_complementar": "Um verdadeiro clássico que traz diversão e sabor na mesma garfada. Nosso caseirinho formigueiro de 16cm e 500g combina uma massa branca extremamente leve, amanteigada e fofíssima, recheada de pontinhos de chocolate que derretem no ponto certo ao assar. Finalizado com uma cobertura generosa que abraça a massa, é aquela sobremesa que agrada tanto os adultos quanto as crianças, transformando qualquer lanche da tarde em um momento especial.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3223362",
+          "des_item": "Único",
+          "val_preco": "18.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1020085",
+      "des_item": "Amarelinho, Dourado e Absurdamente Fofo (fubá)",
+      "des_complementar": "Elevamos o simples ao extraordinário. Um bolo de fubá feito com ingredientes selecionados, técnica 100% artesanal e zero aditivos. O resultado? Uma cor vibrante, um aroma que invade o ambiente e um sabor equilibrado que não pesa no açúcar. Uma peça de 500g perfeita para harmonizar com um bom café da tarde especial.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3230916",
+          "des_item": "Único",
+          "val_preco": "18.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    },
+    {
+      "id": "1022990",
+      "des_item": "Bolo Supremo de Chocolate com Calda Cremosa - 500g",
+      "des_complementar": "Um verdadeiro sonho para os chocólatras! Nosso bolo caseiro une uma massa leve de chocolate a uma cobertura super cremosa e brilhante.",
+      "id_categoria": "110541",
+      "des_categoria": "bolo de fatia",
+      "ind_status": "A",
+      "ind_atualizar": "N",
+      "cardapio_elementos": [
+        {
+          "id": "3240639",
+          "des_item": "Único",
+          "val_preco": "23.00",
+          "val_preco_promocao": null,
+          "ind_status": "A"
+        }
+      ]
+    }
+  ]
+}
