@@ -739,9 +739,9 @@ export async function fetchConversations() {
   return res.json();
 }
 
-export async function fetchChatHistory(contactJid: string, sessionId?: string) {
+export async function fetchChatHistory(contactJid: string, sessionId?: string, signal?: AbortSignal) {
   const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
-  const res = await fetchWithAuth(`${API_BASE}/crm/chat-history/${encodeURIComponent(contactJid)}${query}`);
+  const res = await fetchWithAuth(`${API_BASE}/crm/chat-history/${encodeURIComponent(contactJid)}${query}`, { signal });
   if (!res.ok) throw new Error("Falha ao carregar histórico da conversa.");
   return res.json();
 }

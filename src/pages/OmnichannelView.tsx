@@ -1475,35 +1475,56 @@ function playOutgoingSound() {
     loadContacts();
   }, []);
 
-  // Fetch Action 3: get_chat_history whenever selectedChat changes
+  // Fetch chat history whenever selectedChat changes.
+  // Uses AbortController to cancel any in-flight request when the user
+  // switches chats quickly — prevents stale response from a slow chat1
+  // overwriting the messages of chat2 that is already open.
   useEffect(() => {
-    if (selectedChat && selectedChat.contact_jid) {
-      setLoadingHistory(true);
-      fetchChatHistory(selectedChat.contact_jid, selectedChat.session_id)
-        .then((res: any) => {
-          let msgsList: any[] = [];
-          if (Array.isArray(res) && res.length > 0) {
-            if (res[0].messages && Array.isArray(res[0].messages)) {
-              msgsList = res[0].messages;
-            } else if (res[0].mensagens && Array.isArray(res[0].mensagens)) {
-              msgsList = res[0].mensagens;
-            } else {
-              msgsList = res;
-            }
+    if (!selectedChat?.contact_jid) return;
+
+    const controller = new AbortController();
+    const targetJid     = selectedChat.contact_jid;
+    const targetSession = selectedChat.session_id;
+
+    setLoadingHistory(true);
+    setChatMessages([]);   // clear immediately so old messages don't flash
+
+    fetchChatHistory(targetJid, targetSession, controller.signal)
+      .then((res: any) => {
+        // Guard: if the user already switched to another chat, discard
+        if (controller.signal.aborted) return;
+
+        let msgsList: any[] = [];
+        if (Array.isArray(res) && res.length > 0) {
+          if (res[0].messages && Array.isArray(res[0].messages)) {
+            msgsList = res[0].messages;
+          } else if (res[0].mensagens && Array.isArray(res[0].mensagens)) {
+            msgsList = res[0].mensagens;
+          } else {
+            msgsList = res;
           }
-          setChatMessages(msgsList);
-          msgsList.forEach((m: any) => {
-             const id = String(m.message_id || m.id || m.key?.id || '');
-             if (id) knownMessageIds.current.add(id);
-          });
-        })
-        .catch((err) => {
-          console.warn("Error fetching chat history from backend/n8n", err);
-          toast.error(err instanceof Error ? err.message : 'Erro ao buscar histórico do chat');
-          setChatMessages([]);
-        })
-        .finally(() => setLoadingHistory(false));
-    }
+        }
+        setChatMessages(msgsList);
+        msgsList.forEach((m: any) => {
+          const id = String(m.message_id || m.id || m.key?.id || '');
+          if (id) knownMessageIds.current.add(id);
+        });
+      })
+      .catch((err: any) => {
+        if (controller.signal.aborted) return;   // cancelled — ignore
+        console.warn('Error fetching chat history', err);
+        toast.error(err instanceof Error ? err.message : 'Erro ao buscar histórico do chat');
+        setChatMessages([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingHistory(false);
+      });
+
+    // Cleanup: cancel the fetch if selectedChat changes before it resolves
+    return () => {
+      controller.abort();
+      setLoadingHistory(false);
+    };
   }, [selectedChat?.contact_jid, selectedChat?.session_id, realtimeReloadVersion]);
 
   // Fetch Action 3: get_chat_history when chat selected
