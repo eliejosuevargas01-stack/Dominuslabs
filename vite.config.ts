@@ -63,6 +63,11 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
+    environmentOptions: {
+      jsdom: {
+        storageQuota: 10000000,
+      },
+    },
     exclude: ['**/node_modules/**', '**/dist/**', '**/test-integration/**'],
   },
   server: {

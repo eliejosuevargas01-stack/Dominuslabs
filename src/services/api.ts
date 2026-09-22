@@ -1,4 +1,26 @@
 import { toast } from 'sonner';
+
+// Safe localStorage accessor — returns null when localStorage is unavailable (e.g., SSR, test env)
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      const ls = (typeof window !== "undefined" && window.localStorage) ? window.localStorage : (typeof globalThis !== "undefined" && (globalThis as any)._testLocalStorage);
+      return ls ? ls.getItem(key) : null;
+    } catch { return null; }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      const ls = (typeof window !== "undefined" && window.localStorage) ? window.localStorage : (typeof globalThis !== "undefined" && (globalThis as any)._testLocalStorage);
+      if (ls) ls.setItem(key, value);
+    } catch { /* noop */ }
+  },
+  removeItem: (key: string): void => {
+    try {
+      const ls = (typeof window !== "undefined" && window.localStorage) ? window.localStorage : (typeof globalThis !== "undefined" && (globalThis as any)._testLocalStorage);
+      if (ls) ls.removeItem(key);
+    } catch { /* noop */ }
+  },
+};
 export const getDynamicApiUrl = () => {
   const hostname = window.location.hostname;
   if (hostname === "localhost" || hostname === "127.0.0.1") {
@@ -31,7 +53,7 @@ function getHeaders(contentType: string | null = "application/json") {
   if (contentType) {
     headers["Content-Type"] = contentType;
   }
-  const token = localStorage.getItem("admin_token");
+  const token = safeLocalStorage.getItem("admin_token");
   if (token && token !== "null" && token !== "undefined") {
     headers["Authorization"] = `Bearer ${token}`;
   }
@@ -54,9 +76,9 @@ export function decodeJwtExp(token: string): number | null {
 }
 
 export function handleExpiredSessionRedirect() {
-  localStorage.removeItem("admin_token");
-  localStorage.removeItem("admin_refresh_token");
-  if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+  safeLocalStorage.removeItem("admin_token");
+  safeLocalStorage.removeItem("admin_refresh_token");
+  if (typeof window !== "undefined" && window.location?.pathname && !window.location.pathname.startsWith("/login")) {
     window.location.href = "/login";
   }
 }
@@ -70,7 +92,7 @@ export async function refreshAuthTokenSilently(): Promise<string | null> {
     return activeRefreshPromise;
   }
 
-  const refreshToken = localStorage.getItem("admin_refresh_token");
+  const refreshToken = safeLocalStorage.getItem("admin_refresh_token");
   if (!refreshToken || refreshToken === "null" || refreshToken === "undefined") {
     return null;
   }
@@ -86,9 +108,9 @@ export async function refreshAuthTokenSilently(): Promise<string | null> {
       if (res.ok) {
         const data = await res.json();
         if (data && data.access_token) {
-          localStorage.setItem("admin_token", data.access_token);
+          safeLocalStorage.setItem("admin_token", data.access_token);
           if (data.refresh_token) {
-            localStorage.setItem("admin_refresh_token", data.refresh_token);
+            safeLocalStorage.setItem("admin_refresh_token", data.refresh_token);
           }
           console.log("[SILENT-REAUTH] ✅ Token renovado com sucesso por baixo dos panos!");
           window.dispatchEvent(new CustomEvent("token_refreshed", { detail: { token: data.access_token } }));
@@ -112,7 +134,7 @@ export async function refreshAuthTokenSilently(): Promise<string | null> {
 }
 
 export function getStoredAccessToken(): string | null {
-  const token = localStorage.getItem("admin_token");
+  const token = safeLocalStorage.getItem("admin_token");
   if (!token || token === "null" || token === "undefined") return null;
   return token;
 }
@@ -130,7 +152,7 @@ export function isTokenExpired(token: string, marginSec = 30): boolean {
  */
 export async function getValidAccessToken(): Promise<string | null> {
   const token = getStoredAccessToken();
-  const refreshToken = localStorage.getItem("admin_refresh_token");
+  const refreshToken = safeLocalStorage.getItem("admin_refresh_token");
 
   // Se já temos token e ele NÃO está expirado, retorna diretamente
   if (token && !isTokenExpired(token)) {
@@ -152,7 +174,7 @@ export function schedulePreventiveTokenRefresh() {
     preventiveTimerId = null;
   }
 
-  const token = localStorage.getItem("admin_token");
+  const token = safeLocalStorage.getItem("admin_token");
   if (!token || token === "null" || token === "undefined") return;
 
   const exp = decodeJwtExp(token);
@@ -177,8 +199,9 @@ export function schedulePreventiveTokenRefresh() {
 }
 
 // Executa o agendador preventivo ao carregar o arquivo de API
+// Usa setTimeout 0 para garantir que o setup do ambiente (ex: testes) já foi executado
 if (typeof window !== "undefined") {
-  schedulePreventiveTokenRefresh();
+  setTimeout(() => schedulePreventiveTokenRefresh(), 0);
 }
 
 export async function fetchWithAuth(
@@ -237,9 +260,9 @@ export async function loginUser(username: string, password: string) {
   }
   const data = await res.json();
   if (data && data.access_token) {
-    localStorage.setItem("admin_token", data.access_token);
+    safeLocalStorage.setItem("admin_token", data.access_token);
     if (data.refresh_token) {
-      localStorage.setItem("admin_refresh_token", data.refresh_token);
+      safeLocalStorage.setItem("admin_refresh_token", data.refresh_token);
     }
     schedulePreventiveTokenRefresh();
   }
@@ -480,7 +503,7 @@ export async function fetchShowcaseData() {
 
 
 export function getUserTenant(): string {
-  const token = localStorage.getItem("admin_token");
+  const token = safeLocalStorage.getItem("admin_token");
   if (!token) return "default";
   try {
     const parts = token.split('.');
@@ -493,7 +516,7 @@ export function getUserTenant(): string {
 }
 
 export function getUserRole(): string {
-  const token = localStorage.getItem("admin_token");
+  const token = safeLocalStorage.getItem("admin_token");
   if (!token) return "";
   try {
     const parts = token.split('.');

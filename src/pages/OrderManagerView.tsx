@@ -534,7 +534,7 @@ export default function OrderManagerView() {
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-base text-zinc-900">
-                Pedido #{order.id.slice(0, 6).toUpperCase()}
+                Pedido <span>#{order.id.slice(0, 6).toUpperCase()}</span>
               </span>
               {isIncoming && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-500 text-white animate-pulse">
@@ -699,8 +699,7 @@ export default function OrderManagerView() {
           </button>
 
           <button
-            role="tab"
-            aria-selected={activeTab === 'history'}
+            aria-label="Histórico & Finalizados"
             onClick={() => setActiveTab('history')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'history'
@@ -972,7 +971,7 @@ export default function OrderManagerView() {
                   {incomingOrders.length === 0 ? (
                     <div className="flex flex-col items-center justify-center p-10 text-center bg-white border border-dashed border-zinc-200 rounded-2xl min-h-[220px]">
                       <Clock className="w-10 h-10 text-zinc-300 mb-2" />
-                      <p className="text-sm font-bold text-zinc-700">Nenhum pedido no momento.</p>
+                      <p className="text-sm font-bold text-zinc-700">Nenhum pedido novo no momento</p>
                       <p className="text-xs text-zinc-400 mt-0.5">Aguardando entradas e alertas neurais...</p>
                     </div>
                   ) : (
@@ -997,7 +996,7 @@ export default function OrderManagerView() {
                   {inProgressOrders.length === 0 ? (
                     <div className="flex flex-col items-center justify-center p-10 text-center bg-white border border-dashed border-zinc-200 rounded-2xl min-h-[220px]">
                       <ShoppingBag className="w-10 h-10 text-zinc-300 mb-2" />
-                      <p className="text-sm font-bold text-zinc-700">Nenhum pedido no momento.</p>
+                      <p className="text-sm font-bold text-zinc-700">Nenhum pedido em preparo ou rota</p>
                       <p className="text-xs text-zinc-400 mt-0.5">Os pedidos aceitos aparecerão listados aqui.</p>
                     </div>
                   ) : (
@@ -1039,7 +1038,7 @@ export default function OrderManagerView() {
                     <span className={`px-2 py-0.5 rounded-md border text-[10px] font-semibold ${getOrderStatusBadgeClass(order.status)}`}>
                       {statusLabels[order.status] || order.status}
                     </span>
-                    <span className="font-bold text-zinc-700">R$ {Number(order.total_amount || order.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span className="font-bold text-zinc-700">R$&nbsp;<span className="tabular-nums">{Number(order.total_amount || order.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
                   </span>
                 ))}
                 {finalizedOrders.length > 3 && (
@@ -1096,7 +1095,7 @@ export default function OrderManagerView() {
                 </div>
               </div>
               <div className="text-2xl font-bold text-zinc-900">
-                R$ {faturamentoConcluido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                R$&nbsp;<span className="tabular-nums">{faturamentoConcluido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <p className="text-[11px] text-purple-700 font-semibold mt-1">Total bruto faturado</p>
             </div>
