@@ -12,10 +12,10 @@ from pydantic import BaseModel
 from app.schemas.crm import Lead, LeadUpdate, Message, MessageSendPayload, CrmDashboardMetrics
 from app.services.n8n_service import (
     MOCK_CONVERSATIONS,
-    N8NIntegrationUnavailableError,
-    n8n_service,
+    ProgressiveContactCache,
 )
 from app.core.auth import get_current_user, check_crm_permission
+from app.services.crm_db import get_leads as db_get_leads, update_lead as db_update_lead, delete_lead as db_delete_lead, get_activities as db_get_activities, create_activity as db_create_activity
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -23,10 +23,6 @@ from app.models.user import User
 from app.services.whatsapp_service import send_whatsapp_message
 
 router = APIRouter()
-
-
-def _crm_integration_unavailable(exc: N8NIntegrationUnavailableError) -> HTTPException:
-    return HTTPException(status_code=503, detail=str(exc))
 
 
 def resolve_current_user_tenant(db: Session, current_user: str) -> tuple[User, str]:
@@ -48,13 +44,46 @@ async def read_leads(
     current_user: str = Depends(get_current_user),
 ):
     """
-    Fetch all leads from the n8n CRM webhook or fallback to direct WhatsApp API.
+    Fetch all leads from the database directly, without n8n dependency.
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    try:
-        return await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
-    except N8NIntegrationUnavailableError as exc:
-        raise _crm_integration_unavailable(exc) from exc
+    leads = db_get_leads(db, tenant_id=tenant_id)
+    # Map database leads to CRM schema format
+    mapped = []
+    for l in leads:
+        d = {
+            "id": l.get("lead_id") or l.get("id") or "",
+            "tenant_id": l.get("tenant_id") or tenant_id,
+            "push_name": l.get("empresa_nome") or l.get("nome") or "Contato Sem Nome",
+            "nome": l.get("empresa_nome") or l.get("nome") or "Contato Sem Nome",
+            "company_name": l.get("empresa_nome") or l.get("nome") or "Contato Sem Nome",
+            "empresa_nome": l.get("empresa_nome") or l.get("nome") or "Contato Sem Nome",
+            "display_phone": l.get("telefone_contato") or l.get("whatsapp") or "",
+            "whatsapp": l.get("telefone_contato") or l.get("whatsapp") or "",
+            "session_id": l.get("session_id") or "default",
+            "whatsapp_instance": l.get("session_id") or "default",
+            "contact_jid": l.get("contact_jid") or l.get("jid") or "",
+            "profile_pic_url": l.get("profile_pic_url") or "",
+            "instagram": l.get("instagram") or "",
+            "email": l.get("email_contato") or l.get("email") or "",
+            "email_contato": l.get("email_contato") or l.get("email") or "",
+            "status": l.get("status") or "Prospectado",
+            "origin": l.get("origem") or "Instagram",
+            "has_messages": False,
+            "notes": l.get("notes") or "",
+            "proposal": l.get("proposta_inicial") or "",
+            "responsible": l.get("responsible") or "Eliezer",
+            "last_interaction": l.get("updated_at") or l.get("data_coleta") or "",
+            "created_at": l.get("created_at") or l.get("data_coleta") or "",
+            "falha_identificada": l.get("falha_identificada") or "",
+            "segmento": l.get("nicho") or "",
+            "solucao_recomendada": l.get("solucao_recomendada") or "",
+            "mensagem_enviada": False,
+            "ultima_mensagem": "",
+            "payload": {}
+        }
+        mapped.append(d)
+    return mapped
 
 
 @router.get("/leads/{lead_id}", response_model=Lead)
@@ -67,14 +96,43 @@ async def read_lead(
     Fetch a single lead by its ID.
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    try:
-        leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
-    except N8NIntegrationUnavailableError as exc:
-        raise _crm_integration_unavailable(exc) from exc
-    lead = next((l for l in leads if str(l.get("id")) == str(lead_id)), None)
+    leads = db_get_leads(db, tenant_id=tenant_id)
+    lead = next((l for l in leads if str(l.get("lead_id")) == str(lead_id)), None)
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-    return lead
+    # Map database lead to CRM schema format
+    d = {
+        "id": lead.get("lead_id") or lead.get("id") or "",
+        "tenant_id": lead.get("tenant_id") or tenant_id,
+        "push_name": lead.get("empresa_nome") or lead.get("nome") or "Contato Sem Nome",
+        "nome": lead.get("empresa_nome") or lead.get("nome") or "Contato Sem Nome",
+        "company_name": lead.get("empresa_nome") or lead.get("nome") or "Contato Sem Nome",
+        "empresa_nome": lead.get("empresa_nome") or lead.get("nome") or "Contato Sem Nome",
+        "display_phone": lead.get("telefone_contato") or lead.get("whatsapp") or "",
+        "whatsapp": lead.get("telefone_contato") or lead.get("whatsapp") or "",
+        "session_id": lead.get("session_id") or "default",
+        "whatsapp_instance": lead.get("session_id") or "default",
+        "contact_jid": lead.get("contact_jid") or lead.get("jid") or "",
+        "profile_pic_url": lead.get("profile_pic_url") or "",
+        "instagram": lead.get("instagram") or "",
+        "email": lead.get("email_contato") or lead.get("email") or "",
+        "email_contato": lead.get("email_contato") or lead.get("email") or "",
+        "status": lead.get("status") or "Prospectado",
+        "origin": lead.get("origem") or "Instagram",
+        "has_messages": False,
+        "notes": lead.get("notes") or "",
+        "proposal": lead.get("proposta_inicial") or "",
+        "responsible": lead.get("responsible") or "Eliezer",
+        "last_interaction": lead.get("updated_at") or lead.get("data_coleta") or "",
+        "created_at": lead.get("created_at") or lead.get("data_coleta") or "",
+        "falha_identificada": lead.get("falha_identificada") or "",
+        "segmento": lead.get("nicho") or "",
+        "solucao_recomendada": lead.get("solucao_recomendada") or "",
+        "mensagem_enviada": False,
+        "ultima_mensagem": "",
+        "payload": {}
+    }
+    return d
 
 
 @router.put("/leads/{lead_id}", response_model=Lead)
@@ -88,15 +146,42 @@ async def update_lead(
     Update a lead's profile details.
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    try:
-        return await n8n_service.update_lead(
-            lead_id,
-            lead_in.model_dump(),
-            current_user=current_user,
-            tenant_id=tenant_id,
-        )
-    except N8NIntegrationUnavailableError as exc:
-        raise _crm_integration_unavailable(exc) from exc
+    updated = db_update_lead(db, lead_id=lead_id, tenant_id=tenant_id, data=lead_in.model_dump())
+    if not updated:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    # Map database lead to CRM schema format
+    d = {
+        "id": updated.get("lead_id") or updated.get("id") or "",
+        "tenant_id": updated.get("tenant_id") or tenant_id,
+        "push_name": updated.get("empresa_nome") or updated.get("nome") or "Contato Sem Nome",
+        "nome": updated.get("empresa_nome") or updated.get("nome") or "Contato Sem Nome",
+        "company_name": updated.get("empresa_nome") or updated.get("nome") or "Contato Sem Nome",
+        "empresa_nome": updated.get("empresa_nome") or updated.get("nome") or "Contato Sem Nome",
+        "display_phone": updated.get("telefone_contato") or updated.get("whatsapp") or "",
+        "whatsapp": updated.get("telefone_contato") or updated.get("whatsapp") or "",
+        "session_id": updated.get("session_id") or "default",
+        "whatsapp_instance": updated.get("session_id") or "default",
+        "contact_jid": updated.get("contact_jid") or updated.get("jid") or "",
+        "profile_pic_url": updated.get("profile_pic_url") or "",
+        "instagram": updated.get("instagram") or "",
+        "email": updated.get("email_contato") or updated.get("email") or "",
+        "email_contato": updated.get("email_contato") or updated.get("email") or "",
+        "status": updated.get("status") or "Prospectado",
+        "origin": updated.get("origem") or "Instagram",
+        "has_messages": False,
+        "notes": updated.get("notes") or "",
+        "proposal": updated.get("proposta_inicial") or "",
+        "responsible": updated.get("responsible") or "Eliezer",
+        "last_interaction": updated.get("updated_at") or updated.get("data_coleta") or "",
+        "created_at": updated.get("created_at") or updated.get("data_coleta") or "",
+        "falha_identificada": updated.get("falha_identificada") or "",
+        "segmento": updated.get("nicho") or "",
+        "solucao_recomendada": updated.get("solucao_recomendada") or "",
+        "mensagem_enviada": False,
+        "ultima_mensagem": "",
+        "payload": {}
+    }
+    return d
 
 
 @router.delete("/leads/{lead_id}")
@@ -109,14 +194,10 @@ async def delete_lead(
     Delete a lead.
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    try:
-        return await n8n_service.delete_lead(
-            lead_id,
-            user_id=current_user,
-            tenant_id=tenant_id,
-        )
-    except N8NIntegrationUnavailableError as exc:
-        raise _crm_integration_unavailable(exc) from exc
+    deleted = db_delete_lead(db, lead_id=lead_id, tenant_id=tenant_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return {"status": "success", "id": lead_id}
 
 
 # ---------------------------------------------------------------------------
@@ -134,25 +215,19 @@ async def get_contacts_action(
     Retorna a lista completa de contatos cadastrados.
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    try:
-        leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
-        contacts = []
-        for l in leads:
-            contacts.append({
-                "contact_jid": l.get("contact_jid") or l.get("jid") or l.get("id"),
-                "push_name": l.get("push_name") or l.get("nome") or "Contato Sem Nome",
-                "display_phone": l.get("display_phone") or l.get("whatsapp") or None,
-                "profile_pic_url": l.get("profile_pic_url") or "",
-                "created_at": l.get("created_at") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
-                "updated_at": l.get("updated_at") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
-                "tenant_id": tenant_id
-            })
-        return contacts
-    except N8NIntegrationUnavailableError as exc:
-        raise _crm_integration_unavailable(exc) from exc
-    except Exception as e:
-        print(f"[CRM] get_contacts_action error: {e}", flush=True)
-        return []
+    leads = db_get_leads(db, tenant_id=tenant_id)
+    contacts = []
+    for l in leads:
+        contacts.append({
+            "contact_jid": l.get("contact_jid") or l.get("jid") or l.get("lead_id"),
+            "push_name": l.get("empresa_nome") or l.get("nome") or "Contato Sem Nome",
+            "display_phone": l.get("telefone_contato") or l.get("whatsapp") or None,
+            "profile_pic_url": l.get("profile_pic_url") or "",
+            "created_at": l.get("created_at") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
+            "updated_at": l.get("updated_at") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
+            "tenant_id": tenant_id
+        })
+    return contacts
 
 
 @router.get("/conversations")
@@ -713,7 +788,7 @@ async def get_dashboard_metrics(
     Dynamically calculate CRM dashboard KPIs based on the leads list and messages for the user's tenant.
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    leads = await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
+    leads = db_get_leads(db, tenant_id=tenant_id)
     total_leads = len(leads)
     
     leads_novos = sum(1 for l in leads if l.get("status") == "Prospectado")
@@ -786,7 +861,7 @@ async def get_lead_activities(
     Get the timeline history of activities/events for a lead.
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    return await n8n_service.get_activities(lead_id, tenant_id=tenant_id)
+    return db_get_activities(db, lead_id=lead_id, tenant_id=tenant_id)
 
 
 @router.post("/leads/{lead_id}/activities")
@@ -800,4 +875,4 @@ async def log_lead_activity(
     Create a new activity log entry for a lead (e.g. proposal_opened).
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    return await n8n_service.create_activity(lead_id, payload.event_type, payload.metadata or {}, tenant_id=tenant_id)
+    return db_create_activity(db, lead_id=lead_id, event_type=payload.event_type, metadata=payload.metadata or {}, tenant_id=tenant_id)
