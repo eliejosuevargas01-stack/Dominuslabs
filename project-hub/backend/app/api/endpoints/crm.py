@@ -28,6 +28,7 @@ router = APIRouter()
 def _crm_integration_unavailable(exc: N8NIntegrationUnavailableError) -> HTTPException:
     return HTTPException(status_code=503, detail=str(exc))
 
+
 def resolve_current_user_tenant(db: Session, current_user: str) -> tuple[User, str]:
     """
     Resolve o usuário autenticado e seu tenant_id em modo estritamente fail-closed.
@@ -39,6 +40,7 @@ def resolve_current_user_tenant(db: Session, current_user: str) -> tuple[User, s
     if not tenant_id:
         raise HTTPException(status_code=403, detail="Acesso negado: usuário não possui tenant_id configurado.")
     return user, tenant_id
+
 
 @router.get("/leads", response_model=List[Lead])
 async def read_leads(
@@ -53,6 +55,7 @@ async def read_leads(
         return await n8n_service.get_leads(user_id=current_user, tenant_id=tenant_id)
     except N8NIntegrationUnavailableError as exc:
         raise _crm_integration_unavailable(exc) from exc
+
 
 @router.get("/leads/{lead_id}", response_model=Lead)
 async def read_lead(
@@ -72,6 +75,7 @@ async def read_lead(
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     return lead
+
 
 @router.put("/leads/{lead_id}", response_model=Lead)
 async def update_lead(
@@ -94,6 +98,7 @@ async def update_lead(
     except N8NIntegrationUnavailableError as exc:
         raise _crm_integration_unavailable(exc) from exc
 
+
 @router.delete("/leads/{lead_id}")
 async def delete_lead(
     lead_id: str,
@@ -113,9 +118,11 @@ async def delete_lead(
     except N8NIntegrationUnavailableError as exc:
         raise _crm_integration_unavailable(exc) from exc
 
+
 # ---------------------------------------------------------------------------
 # Omnichannel Actions (get_contacts, get_conversations, get_chat_history)
 # ---------------------------------------------------------------------------
+
 
 @router.get("/contacts")
 async def get_contacts_action(
@@ -146,6 +153,7 @@ async def get_contacts_action(
     except Exception as e:
         print(f"[CRM] get_contacts_action error: {e}", flush=True)
         return []
+
 
 @router.get("/conversations")
 async def get_conversations_action(
@@ -208,6 +216,50 @@ async def get_conversations_action(
             "tenant_id":                row.tenant_id,
         })
     return result
+
+
+@router.patch("/conversations/read")
+async def mark_conversation_as_read(
+    payload: "MarkConversationReadPayload",
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """
+    Marca uma conversa como lida (unread_count=0).
+    
+    Endpoint PATCH /api/v1/crm/conversations/read
+    
+    Body: { "jid": string, "session_id": optional_string }
+    Action: UPDATE conversations SET unread_count=0, updated_at=now() WHERE jid=body.jid AND tenant_id='admin'
+    Return: { "ok": true }
+    """
+    user, tenant_id = resolve_current_user_tenant(db, current_user)
+    
+    from sqlalchemy import text as sa_text
+    
+    q = """
+        UPDATE conversations
+        SET unread_count = 0,
+            updated_at = now()
+        WHERE contact_jid = :jid
+          AND tenant_id = :tenant_id
+    """
+    
+    params = {"jid": payload.jid, "tenant_id": tenant_id}
+    
+    if payload.session_id:
+        q += " AND session_id = :session_id"
+        params["session_id"] = payload.session_id
+    
+    try:
+        db.execute(sa_text(q), params)
+        db.commit()
+        return {"ok": True}
+    except Exception as e:
+        db.rollback()
+        print(f"[CRM] mark_conversation_as_read error: {e}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Falha ao marcar conversa como lida: {str(e)}")
+
 
 @router.get("/chat-history/{contact_jid}")
 @router.get("/conversations/{contact_jid}")
@@ -299,6 +351,7 @@ async def get_chat_history_action(
         })
     return result
 
+
 from fastapi.responses import RedirectResponse, Response
 
 @router.get("/avatar")
@@ -361,6 +414,7 @@ async def proxy_crm_avatar(
         print(f"[CRM-AVATAR] Aviso ao buscar avatar proxy para jid={jid}: {e}", flush=True)
 
     raise HTTPException(status_code=404, detail="Avatar não encontrado.")
+
 
 @router.get("/media")
 @router.get("/sessions/{session_id}/media")
@@ -428,8 +482,6 @@ async def proxy_crm_media(
 
 
 
-
-
 @router.get("/progressive/{contact_jid}")
 def get_progressive_assembled_profile(
     contact_jid: str,
@@ -446,18 +498,20 @@ def get_progressive_assembled_profile(
         raise HTTPException(status_code=404, detail="Perfil não encontrado no cache")
     return profile
 
+
 # ---------------------------------------------------------------------------
 # Preferência de sessão WhatsApp
 # ---------------------------------------------------------------------------
 
+
 class SessionPreferencePayload(BaseModel):
     """
     Classe SessionPreferencePayload.
-
     O que faz: Representa a estrutura de dados e operações para a entidade SessionPreferencePayload em o endpoint de API para crm.
     Impacto na regra de negócio: Centraliza o comportamento da entidade SessionPreferencePayload, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
     """
     session_id: str
+
 
 @router.get("/preferences/session")
 def get_session_preference(
@@ -469,6 +523,7 @@ def get_session_preference(
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     return {"session_id": user.preferred_session_id}
+
 
 @router.put("/preferences/session")
 @router.put("/session-preference")
@@ -509,9 +564,11 @@ def set_session_preference(
     db.commit()
     return {"session_id": user.preferred_session_id, "ok": True}
 
+
 # ---------------------------------------------------------------------------
 # Envio de mensagem com OAuth token
 # ---------------------------------------------------------------------------
+
 
 @router.post("/messages/send", response_model=Message)
 async def send_crm_whatsapp_message(
@@ -559,10 +616,11 @@ async def send_crm_whatsapp_message(
         )
     except HTTPException as he:
         raise he
+
+
 class MediaInputPayload(BaseModel):
     """
     Classe MediaInputPayload.
-
     O que faz: Representa a estrutura de dados e operações para a entidade MediaInputPayload em o endpoint de API para crm.
     Impacto na regra de negócio: Centraliza o comportamento da entidade MediaInputPayload, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
     """
@@ -571,10 +629,10 @@ class MediaInputPayload(BaseModel):
     fileName: Optional[str] = None
     data: str  # Base64 Data URL (data:mime;base64,...)
 
+
 class MessageSendMediaPayload(BaseModel):
     """
     Classe MessageSendMediaPayload.
-
     O que faz: Representa a estrutura de dados e operações para a entidade MessageSendMediaPayload em o endpoint de API para crm.
     Impacto na regra de negócio: Centraliza o comportamento da entidade MessageSendMediaPayload, permitindo que o sistema gerencie e persista esses dados de forma confiável e em conformidade com as regras de negócio.
     """
@@ -583,6 +641,7 @@ class MessageSendMediaPayload(BaseModel):
     text: Optional[str] = None
     caption: Optional[str] = None
     media: MediaInputPayload
+
 
 @router.post("/messages/send-media")
 async def send_crm_whatsapp_media(
@@ -698,8 +757,16 @@ async def get_dashboard_metrics(
         taxa_conversao=taxa_conversao
     )
 
-from pydantic import BaseModel
-from typing import Dict, Any, Optional
+
+class MarkConversationReadPayload(BaseModel):
+    """
+    Classe MarkConversationReadPayload.
+    O que faz: Representa a estrutura de dados para marcar uma conversa como lida.
+    Impacto na regra de negócio: Atualiza unread_count=0 no banco de dados quando o usuário abre uma conversa.
+    """
+    jid: str
+    session_id: Optional[str] = None
+
 
 class ActivityCreatePayload(BaseModel):
     """
@@ -707,6 +774,7 @@ class ActivityCreatePayload(BaseModel):
     """
     event_type: str
     metadata: Optional[Dict[str, Any]] = None
+
 
 @router.get("/leads/{lead_id}/activities")
 async def get_lead_activities(
@@ -719,6 +787,7 @@ async def get_lead_activities(
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
     return await n8n_service.get_activities(lead_id, tenant_id=tenant_id)
+
 
 @router.post("/leads/{lead_id}/activities")
 async def log_lead_activity(

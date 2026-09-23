@@ -20,6 +20,7 @@ import {
   fetchChatHistory, 
   sendOmnichannelMessage,
   sendOmnichannelMedia,
+  markConversationAsRead,
   fetchWhatsappSessions,
   API_BASE
 } from '../services/api';
@@ -1621,19 +1622,30 @@ function playOutgoingSound() {
   }, [selectedChat?.contact_jid, selectedChat?.session_id, realtimeReloadVersion]);
 
   // Fetch Action 3: get_chat_history when chat selected
-  const handleSelectChat = (chat: any) => {
+  const handleSelectChat = async (chat: any) => {
     const resolvedChatName = resolveContactName(chat);
     const enrichedChat = { ...chat, push_name: resolvedChatName };
     setSelectedChat(enrichedChat);
     setMobileChatOpen(true);
     
-    // Clear unread count on select
+    // Optimistically clear unread count in UI
     setConversations(prev => prev.map(c => {
       if (c.contact_jid === chat.contact_jid && c.session_id === chat.session_id) {
         return { ...c, unread_count: 0 };
       }
       return c;
     }));
+
+    // Call backend to persist the read status
+    try {
+      await markConversationAsRead({
+        jid: chat.contact_jid,
+        session_id: chat.session_id,
+      });
+    } catch (err) {
+      console.warn('Failed to mark conversation as read on backend:', err);
+      // Don't show toast - this is a non-critical operation
+    }
   };
 
   // Action 4: Send Message

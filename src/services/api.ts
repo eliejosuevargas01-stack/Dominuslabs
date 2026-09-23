@@ -790,6 +790,21 @@ export async function sendOmnichannelMedia(payload: {
   return res.json();
 }
 
+export async function markConversationAsRead(payload: {
+  jid: string;
+  session_id?: string;
+}) {
+  const res = await fetchWithAuth(`${API_BASE}/crm/conversations/read`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Falha ao marcar conversa como lida.");
+  }
+  return res.json();
+}
+
 
 
 // ---------------------------------------------------------------------------
