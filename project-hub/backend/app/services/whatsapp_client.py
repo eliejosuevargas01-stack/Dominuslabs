@@ -378,7 +378,9 @@ class WhatsAppClient:
             "X-Request-ID": request_id
         }
 
-        client = httpx.AsyncClient(timeout=60.0)
+        # Timeout mais baixo para fail-fast - não queremos esperar 60s se a mídia não existe
+        # A maioria das mídias válidas carrega em <10s
+        client = httpx.AsyncClient(timeout=30.0)
         try:
             req = client.build_request("GET", url, headers=headers, params={"messageId": message_id})
             response = await client.send(req, stream=True)

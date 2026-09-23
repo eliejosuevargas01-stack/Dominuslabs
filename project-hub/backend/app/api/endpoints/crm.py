@@ -489,11 +489,14 @@ async def proxy_crm_media(
     message_id: Optional[str] = None,
     session: Optional[str] = None,
     session_id: Optional[str] = None,
-    db: Session = Depends(get_db)
 ):
     """
     Proxy de mídia autenticado pelo Dominus via WhatsAppClient.
     Exige autenticação de usuário Dominus e resolução estrita de ownership.
+    
+    IMPORTANTE: Este endpoint NÃO usa Depends(get_db) para evitar manter conexão de banco
+    durante todo o streaming de mídia (que pode durar segundos/minutos).
+    A conexão é aberta, usada para autenticação/lookup, e fechada ANTES do streaming começar.
     """
     target_session = (session or session_id or "").strip()
     target_msg_id = messageId or message_id
@@ -514,14 +517,21 @@ async def proxy_crm_media(
     if not payload or not payload.get("sub"):
         raise HTTPException(status_code=401, detail="Token de autenticação inválido ou expirado.")
 
-    user = db.query(User).filter(User.email == payload["sub"]).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Usuário não encontrado.")
+    # Usar context manager explícito para fechar conexão ANTES do streaming
+    from app.core.database import SessionLocal
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == payload["sub"]).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="Usuário não encontrado.")
 
-    resolved_session = resolve_owned_whatsapp_session(user, target_session, db)
+        resolved_session = resolve_owned_whatsapp_session(user, target_session, db)
+        tenant_id = user.tenant_id  # Capturar antes de fechar
+    finally:
+        db.close()  # CRÍTICO: Liberar conexão ANTES do streaming começar
 
     response = await whatsapp_client.get_session_media(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         session_id=resolved_session,
         message_id=target_msg_id
     )

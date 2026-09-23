@@ -492,10 +492,13 @@ async def get_session_media(
     session_id: str,
     messageId: Optional[str] = None,
     message_id: Optional[str] = None,
-    db: Session = Depends(get_db)
 ):
     """
     Proxy de mídia (áudio, imagem, vídeo) autenticado pelo Dominus via WhatsAppClient.
+    
+    IMPORTANTE: Este endpoint NÃO usa Depends(get_db) para evitar manter conexão de banco
+    durante todo o streaming de mídia (que pode durar segundos/minutos).
+    A conexão é aberta, usada para autenticação/lookup, e fechada ANTES do streaming começar.
     """
     auth_header = request.headers.get("Authorization", "")
     effective_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None
@@ -510,21 +513,29 @@ async def get_session_media(
     if not sub:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido.")
 
-    sub_str = str(sub)
-    if sub_str.isdigit():
-        user = db.query(User).filter((User.email == sub_str) | (User.id == int(sub_str))).first()
-    else:
-        user = db.query(User).filter(User.email == sub_str).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado.")
+    # Usar context manager explícito para fechar conexão ANTES do streaming
+    from app.core.database import SessionLocal
+    db = SessionLocal()
+    try:
+        sub_str = str(sub)
+        if sub_str.isdigit():
+            user = db.query(User).filter((User.email == sub_str) | (User.id == int(sub_str))).first()
+        else:
+            user = db.query(User).filter(User.email == sub_str).first()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado.")
 
-    resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
+        resolved_session = resolve_owned_whatsapp_session(user, session_id, db)
+        tenant_id = user.tenant_id  # Capturar antes de fechar
+    finally:
+        db.close()  # CRÍTICO: Liberar conexão ANTES do streaming começar
+    
     target_msg_id = messageId or message_id
     if not target_msg_id:
         raise HTTPException(status_code=400, detail="Parâmetro 'messageId' é obrigatório.")
 
     response = await whatsapp_client.get_session_media(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         session_id=resolved_session,
         message_id=target_msg_id
     )

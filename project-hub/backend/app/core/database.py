@@ -17,8 +17,17 @@ engine_kwargs = {
     "pool_pre_ping": True,
 }
 if not is_sqlite:
-    engine_kwargs["pool_recycle"] = 1800
-    engine_kwargs["pool_timeout"] = 30
+    # Pool sizing otimizado para evitar QueuePool exhaustion
+    # - pool_size: conexões persistentes (deve ser >= concurrent DB operations)
+    # - max_overflow: burst headroom para picos
+    # - pool_timeout: fail fast em vez de esperar 30s bloqueando thread
+    # - pool_recycle: reciclar antes do idle timeout do Postgres
+    # - pool_use_lifo: permite server-side timeout fechar conexões ociosas
+    engine_kwargs["pool_size"] = 20          # De 5 para 20 conexões persistentes
+    engine_kwargs["max_overflow"] = 30       # De 10 para 30 overflow (total 50 max)
+    engine_kwargs["pool_timeout"] = 10       # De 30 para 10s - fail fast
+    engine_kwargs["pool_recycle"] = 1800     # Manter 30min
+    engine_kwargs["pool_use_lifo"] = True    # LIFO para melhor reuso
 
 engine = create_engine(
     settings.SQLALCHEMY_DATABASE_URI, 
