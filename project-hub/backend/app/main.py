@@ -400,9 +400,14 @@ if os.path.exists(static_dir):
             return FileResponse(local_file)
             
         # Fallback to index.html for React router SPA routing
+        # MUST be no-cache: after each deploy Vite generates new hashed filenames.
+        # If the browser caches index.html it will request stale JS chunks → white screen.
         index_file = os.path.join(static_dir, "index.html")
         if os.path.exists(index_file):
-            return FileResponse(index_file)
+            return FileResponse(
+                index_file,
+                headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+            )
             
         return {"message": "Welcome to Dominuslabs API"}
 else:
