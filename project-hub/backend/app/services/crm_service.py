@@ -83,7 +83,7 @@ async def get_conversations(db: Session, tenant_id: str) -> List[dict]:
             c.display_phone AS contact_display_phone,
             c.profile_pic_url AS contact_profile_pic_url
         FROM conversations conv
-        LEFT JOIN contacts c ON c.contact_jid = conv.contact_jid
+        LEFT JOIN contacts c ON c.contact_jid = conv.contact_jid AND c.tenant_id = conv.tenant_id
         WHERE conv.tenant_id = :tenant_id
         ORDER BY conv.last_message_timestamp DESC NULLS LAST
     """

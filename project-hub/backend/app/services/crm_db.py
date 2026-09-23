@@ -126,6 +126,7 @@ def update_lead(db: Session, lead_id: str, tenant_id: str, data: dict) -> Option
     }
     
     row = db.execute(sa_text(q), params).fetchone()
+    db.commit()
     if not row:
         return None
     d = dict(row._mapping)
