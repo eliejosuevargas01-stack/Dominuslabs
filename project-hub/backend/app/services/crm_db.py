@@ -53,6 +53,13 @@ def get_leads(db: Session, tenant_id: str) -> List[dict]:
         d = dict(row._mapping)
         d["id"] = d.get("lead_id") or d.get("id") or d.get("contact_jid", "")
         d["tenant_id"] = tenant_id  # Inject tenant_id for compatibility
+        # Convert datetime fields to ISO strings for Pydantic validation
+        for field in ("created_at", "updated_at", "data_coleta"):
+            if field in d and d[field] is not None:
+                if hasattr(d[field], "isoformat"):
+                    d[field] = d[field].isoformat()
+                else:
+                    d[field] = str(d[field])
         result.append(d)
     return result
 
