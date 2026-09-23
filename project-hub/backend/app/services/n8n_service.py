@@ -4,7 +4,6 @@ Documentação do módulo n8n_service.py.
 O que faz: Implementa a lógica estrutural e funcional para o serviço de domínio n8n_service.
 Impacto na regra de negócio: É responsável por garantir que as operações e validações relacionadas a o serviço de domínio n8n_service funcionem corretamente e mantenham a integridade dos dados da aplicação.
 """
-import httpx
 import logging
 import json
 import copy
@@ -13,8 +12,13 @@ import time
 import os
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
-from app.core.crypto import encrypt_payload, decrypt_payload
+from app.core.database import get_db
 from datetime import datetime, timezone
+
+# CRM Service for direct database access (replaces n8n webhook)
+from app.services.crm_service import get_contacts as crm_get_contacts
+from app.services.crm_service import get_conversations as crm_get_conversations
+from app.services.crm_service import get_messages as crm_get_messages
 
 RAW_LEADS_CACHE = {}
 
@@ -1183,81 +1187,37 @@ class N8NService:
     @staticmethod
     async def get_leads(user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> List[dict]:
         """
-        Recuperação de leads isolada estritamente por tenant_id.
+        Recuperação de leads isolada estritamente por tenant_id via acesso direto ao banco.
+        Substitui chamada de webhook n8n para get_contacts.
         """
         if not tenant_id:
             logger.error("[Zero-Trust] get_leads chamado sem tenant_id!")
             raise ValueError("[Zero-Trust] tenant_id é obrigatório para get_leads")
 
-        url = settings.CRM_GET_LEADS_WEBHOOK_URL
-        # Check tenant-specific cache
+        # Check tenant-specific cache before database query
         tenant_cache = N8NService._leads_cache.get(tenant_id)
         if tenant_cache is not None:
             if time.time() - tenant_cache.get("time", 0.0) < N8NService.CACHE_TTL:
-                if tenant_cache.get("url") == url:
-                    logger.info(f"Returning CRM Leads from in-memory cache for tenant_id={tenant_id}.")
-                    return copy.deepcopy(tenant_cache.get("data", []))
+                logger.info(f"Returning CRM Leads from in-memory cache for tenant_id={tenant_id}.")
+                return copy.deepcopy(tenant_cache.get("data", []))
 
-        if not url:
-            if tenant_cache is not None and isinstance(tenant_cache.get("data"), list):
-                logger.warning(
-                    "CRM_GET_LEADS_WEBHOOK_URL not configured; returning previously validated cache for tenant_id=%s.",
-                    tenant_id,
-                )
-                return copy.deepcopy(tenant_cache["data"])
-            raise N8NIntegrationUnavailableError(
-                "Integração CRM indisponível: webhook de leads não configurado."
-            )
+        # Use CRMService for direct database access
+        from app.services.crm_db import get_leads as db_get_leads
+        
+        db = next(get_db())
+        try:
+            raw_leads = db_get_leads(db, tenant_id=tenant_id)
+        finally:
+            db.close()
 
-        outgoing_body = N8NService._enrich_payload({"action": "get_contacts"}, user_id=user_id, tenant_id=tenant_id)
-        encrypted_body = encrypt_payload(outgoing_body, "n8n")
-        raw_leads = None
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            try:
-                response = await client.post(url, json=encrypted_body, timeout=30.0)
-                if response.status_code >= 400:
-                    logger.warning(f"[N8N-STEALTH] POST request to {url} returned status {response.status_code}. Ensure the n8n Webhook node HTTP Method is set to POST.")
-                response.raise_for_status()
-                data = response.json()
-                data = decrypt_payload(data)
-                if isinstance(data, list):
-                    raw_leads = data
-                elif isinstance(data, dict) and "leads" in data:
-                    raw_leads = data["leads"]
-                elif isinstance(data, dict) and "mensagens" in data:
-                    raw_leads = [data]
-            except Exception as exc:
-                if tenant_cache is not None and isinstance(tenant_cache.get("data"), list):
-                    logger.warning(
-                        "CRM leads webhook failed; returning previously validated cache for tenant_id=%s: %s",
-                        tenant_id,
-                        exc,
-                    )
-                    return copy.deepcopy(tenant_cache["data"])
-                logger.error("Error calling POST leads webhook: %s", exc, exc_info=True)
-                raise N8NIntegrationUnavailableError(
-                    "Integração CRM indisponível ao consultar leads."
-                ) from exc
-
-        if raw_leads is None:
-            if tenant_cache is not None and isinstance(tenant_cache.get("data"), list):
-                logger.warning(
-                    "CRM leads webhook returned an unsupported payload; using validated cache for tenant_id=%s.",
-                    tenant_id,
-                )
-                return copy.deepcopy(tenant_cache["data"])
-            raise N8NIntegrationUnavailableError(
-                "Integração CRM retornou uma resposta de leads inválida."
-            )
-
-        raw_leads = unpack_n8n_raw_leads(raw_leads)
+        if not raw_leads:
+            raw_leads = []
+        
+        # Process raw leads (similar to unpack_n8n_raw_leads + map_n8n_lead)
+        # For DB leads, we apply minimal transformation since they're already structured
         mapped_leads = []
         for l in raw_leads:
             if not isinstance(l, dict):
-                continue
-            l_tenant = l.get("tenant_id")
-            if l_tenant and tenant_id and str(l_tenant).strip() != str(tenant_id).strip():
-                logger.error(f"SECURITY_TENANT_MISMATCH: Dropping lead {l.get('id')} from tenant '{l_tenant}' (expected '{tenant_id}')")
                 continue
             try:
                 mapped_leads.append(map_n8n_lead(l, tenant_id=tenant_id))
@@ -1265,10 +1225,11 @@ class N8NService:
                 logger.error(f"SECURITY_TENANT_MISMATCH caught during get_leads: {e}")
                 continue
 
+        # Sort leads
         mapped_leads.sort(key=lambda x: x.get("last_interaction") or "", reverse=True)
         mapped_leads.sort(key=lambda x: x.get("mensagem_enviada", False), reverse=True)
-        
-        # Step 1: Cache basic info by contact_jid scoped by tenant
+
+        # Cache basic info by contact_jid scoped by tenant
         for m in mapped_leads:
             c_jid = m.get("contact_jid") or m.get("jid") or m.get("id")
             if c_jid:
@@ -1277,79 +1238,37 @@ class N8NService:
         N8NService._leads_cache[tenant_id] = {
             "data": mapped_leads,
             "time": time.time(),
-            "url": url
+            "url": "direct_db"
         }
         return mapped_leads
 
     @staticmethod
     async def get_conversations(user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> List[dict]:
         """
-        Obtém a lista de conversas ativas via action=get_conversations no webhook CRM com Zero-Trust.
+        Obtém a lista de conversas ativas direto do banco com Zero-Trust.
+        Substitui chamada de webhook n8n para get_conversations.
         """
         if not tenant_id:
             logger.error("[Zero-Trust] get_conversations chamado sem tenant_id!")
             raise ValueError("[Zero-Trust] tenant_id é obrigatório para get_conversations")
 
-        url = settings.CRM_GET_MESSAGES_WEBHOOK_URL or settings.CRM_GET_LEADS_WEBHOOK_URL
-        if not url:
+        # Use CRMService for direct database access
+        from app.services.crm_service import get_conversations as crm_get_conversations
+        
+        try:
+            # Call CRMService.get_conversations with tenant_id
+            mapped = await crm_get_conversations(tenant_id=tenant_id)
+            
+            # Sort conversations descending (newest last_message_timestamp first)
+            mapped.sort(
+                key=lambda x: str(x.get("last_message_timestamp") or x.get("updated_at") or x.get("last_interaction") or ""),
+                reverse=True
+            )
+            
+            return mapped
+        except Exception as e:
+            logger.error(f"Error calling CRMService.get_conversations: {e}")
             return []
-
-        outgoing_body = N8NService._enrich_payload({"action": "get_conversations"}, user_id=user_id, tenant_id=tenant_id)
-        encrypted_body = encrypt_payload(outgoing_body, "n8n")
-
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            try:
-                response = await client.post(url, json=encrypted_body, timeout=30.0)
-                if response.status_code >= 400:
-                    logger.warning(f"[N8N-STEALTH] POST request to {url} returned status {response.status_code}. Ensure the n8n Webhook node HTTP Method is set to POST.")
-                response.raise_for_status()
-                data = response.json()
-                data = decrypt_payload(data)
-
-                raw_convs = []
-                if isinstance(data, list):
-                    raw_convs = data
-                elif isinstance(data, dict):
-                    raw_convs = data.get("conversas") or data.get("conversations") or data.get("leads") or [data]
-                
-                unpacked = unpack_n8n_raw_leads(raw_convs)
-                mapped = []
-                for l in unpacked:
-                    if not isinstance(l, dict):
-                        continue
-                    l_tenant = l.get("tenant_id")
-                    if l_tenant and tenant_id and str(l_tenant).strip() != str(tenant_id).strip():
-                        logger.error(f"SECURITY_TENANT_MISMATCH: Dropping conversation {l.get('id')} from tenant '{l_tenant}' (expected '{tenant_id}')")
-                        continue
-                    try:
-                        mapped.append(map_n8n_lead(l, tenant_id=tenant_id))
-                    except SecurityTenantMismatchError as e:
-                        logger.error(f"SECURITY_TENANT_MISMATCH caught during get_conversations: {e}")
-                        continue
-                
-                # Step 2: Append conversation inbox state to cached contact profile & compute last_message_preview
-                for m in mapped:
-                    if not m.get("last_message_preview"):
-                        msgs = m.get("mensagens") or m.get("messages") or []
-                        if isinstance(msgs, list) and len(msgs) > 0:
-                            last_msg = msgs[0] if isinstance(msgs[0], dict) else {}
-                            m["last_message_preview"] = extract_text_content(last_msg) or last_msg.get("content") or last_msg.get("message") or ""
-                            if not m.get("last_message_timestamp") and last_msg.get("message_timestamp"):
-                                m["last_message_timestamp"] = last_msg["message_timestamp"]
-                    c_jid = m.get("contact_jid") or m.get("jid") or m.get("id")
-                    if c_jid:
-                        ProgressiveContactCache.set_conversation(c_jid, m, tenant_id=tenant_id)
-
-                # Sort conversations descending (newest last_message_timestamp first)
-                mapped.sort(
-                    key=lambda x: str(x.get("last_message_timestamp") or x.get("updated_at") or x.get("last_interaction") or ""),
-                    reverse=True
-                )
-
-                return mapped
-            except Exception as e:
-                logger.error(f"Error calling POST conversations webhook: {e}")
-                return []
 
     @staticmethod
     async def update_lead(lead_id: str, payload: dict, current_user: Optional[str] = None, tenant_id: Optional[str] = None) -> dict:
@@ -1490,14 +1409,11 @@ class N8NService:
     @staticmethod
     async def get_messages(lead_id: str, user_id: Optional[str] = None, tenant_id: Optional[str] = None) -> List[dict]:
         """
-        Função/Método get_messages.
-
-        O que faz: Recuperação de dados cadastrados para get_messages recebendo os parâmetros (lead_id, user_id, tenant_id) no contexto de o serviço de domínio n8n_service.
-        Impacto na regra de negócio: Assegura que o fluxo da operação get_messages seja validado, processado corretamente, e garanta a correta aplicação das restrições de negócio.
+        Recupera mensagens de um contato direto do banco.
+        Substitui chamada de webhook n8n para get_chat_history.
         """
         cache_k = f"{tenant_id}:{lead_id}" if tenant_id else str(lead_id)
         all_msgs = list(MOCK_CONVERSATIONS.get(cache_k, []))
-        url = settings.CRM_GET_MESSAGES_WEBHOOK_URL
 
         target_id_str = str(lead_id).strip()
         target_jid = target_id_str
@@ -1507,130 +1423,38 @@ class N8NService:
             target_jid = parts[0]
             target_session = parts[1]
 
-        cached_lead = RAW_LEADS_CACHE.get(cache_k)
-        if not cached_lead:
-            cached_lead = RAW_LEADS_CACHE.get(f"{tenant_id}:{target_jid}" if tenant_id else target_jid)
-        if cached_lead and "mensagens" in cached_lead and isinstance(cached_lead["mensagens"], list):
-            embedded_msgs = []
-            seen_keys = set()
-            lead_channel = cached_lead.get("origin", "whatsapp").lower()
-            for m in cached_lead["mensagens"]:
-                if not isinstance(m, dict):
-                    continue
-                try:
-                    mapped_list = map_n8n_message(m, lead_channel, tenant_id=tenant_id)
-                except SecurityTenantMismatchError as e:
-                    logger.error(f"SECURITY_TENANT_MISMATCH caught during embedded cached messages: {e}")
-                    continue
-                for mapped_msg in mapped_list:
-                    msg_id = str(mapped_msg.get("id") or mapped_msg.get("message_id") or "")
-                    content = str(mapped_msg.get("content") or mapped_msg.get("message") or "").strip()
-                    is_from_me = mapped_msg.get("is_from_me", False)
-                    ts = str(mapped_msg.get("timestamp") or mapped_msg.get("message_timestamp") or "")
-                    if msg_id and not msg_id.startswith("temp_") and msg_id.lower() not in ("none", "null", ""):
-                        dedup_key = f"id:{msg_id}"
-                    else:
-                        dedup_key = f"msg:{content}:{is_from_me}:{ts[:16]}"
-                    if dedup_key not in seen_keys:
-                        seen_keys.add(dedup_key)
-                        embedded_msgs.append(mapped_msg)
+        if not tenant_id:
+            logger.error("[Zero-Trust] get_messages chamado sem tenant_id!")
+            raise ValueError("[Zero-Trust] tenant_id é obrigatório para get_messages")
+        
+        if not target_jid:
+            logger.error("[Zero-Trust] get_messages chamado sem lead_id!")
+            raise ValueError("[Zero-Trust] lead_id é obrigatório para get_messages")
 
-            embedded_msgs.sort(key=lambda x: x.get("timestamp") or "")
-            if len(embedded_msgs) > 0:
-                MOCK_CONVERSATIONS[cache_k] = embedded_msgs
-        if not url:
+        # Use CRMService for direct database access
+        from app.services.crm_service import get_messages as crm_get_messages
+        
+        try:
+            # Call CRMService.get_messages with required parameters
+            fresh_msgs = await crm_get_messages(
+                contact_jid=target_jid,
+                session_id=target_session or "default",
+                tenant_id=tenant_id
+            )
+            
+            # Sort messages chronologically (oldest first)
+            fresh_msgs.sort(key=lambda x: x.get("timestamp") or "")
+            
+            # Update cached contact profile with messages
+            ProgressiveContactCache.set_messages(target_jid, fresh_msgs, tenant_id=tenant_id)
+            if len(fresh_msgs) > 0:
+                MOCK_CONVERSATIONS[cache_k] = fresh_msgs
+                return fresh_msgs
+
             return MOCK_CONVERSATIONS.get(cache_k, all_msgs)
-
-        lid = None
-        if cached_lead:
-            lid = cached_lead.get("lid") or cached_lead.get("LID") or cached_lead.get("Lid")
-
-        outgoing_body = {
-            "action": "get_chat_history",
-            "lead_id": target_jid,
-            "contact_jid": target_jid,
-            "session_id": target_session
-        }
-        if lid:
-            outgoing_body["lid"] = lid
-        outgoing_body = N8NService._enrich_payload(outgoing_body, user_id=user_id, tenant_id=tenant_id)
-        encrypted_body = encrypt_payload(outgoing_body, "n8n")
-
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            try:
-                response = await client.post(url, json=encrypted_body, timeout=30.0)
-                if response.status_code >= 400:
-                    logger.warning(f"[N8N-STEALTH] POST request to {url} returned status {response.status_code}. Ensure the n8n Webhook node HTTP Method is set to POST.")
-                response.raise_for_status()
-                body = response.text.strip()
-                raw_msgs = []
-                if body:
-                    data = response.json()
-                    data = decrypt_payload(data)
-                    if isinstance(data, list):
-                        for d in data:
-                            if isinstance(d, dict):
-                                d_sess = str(d.get("session_id") or d.get("whatsapp_instance") or "")
-                                if target_session and d_sess and normalize_session_name(d_sess) != normalize_session_name(target_session):
-                                    continue
-                                if "messages" in d and isinstance(d["messages"], list):
-                                    raw_msgs.extend(d["messages"])
-                                elif "mensagens" in d and isinstance(d["mensagens"], list):
-                                    raw_msgs.extend(d["mensagens"])
-                                else:
-                                    raw_msgs.append(d)
-                    elif isinstance(data, dict):
-                        raw_msgs = data.get("messages") or data.get("conversas") or data.get("historico") or data.get("history") or []
-                        if not isinstance(raw_msgs, list):
-                            raw_msgs = [data]
-
-                lead_channel = "whatsapp"
-                if cached_lead and cached_lead.get("origin"):
-                    lead_channel = cached_lead["origin"].lower()
-
-                fresh_msgs = []
-                seen_keys = set()
-                for m in raw_msgs:
-                    if isinstance(m, dict):
-                        m_tenant = m.get("tenant_id")
-                        if m_tenant and tenant_id and str(m_tenant).strip() != str(tenant_id).strip():
-                            logger.error(f"SECURITY_TENANT_MISMATCH: Skipping message {m.get('id')} from tenant '{m_tenant}' (expected '{tenant_id}')")
-                            continue
-                        try:
-                            mapped_list = map_n8n_message(m, lead_channel, tenant_id=tenant_id)
-                        except SecurityTenantMismatchError as e:
-                            logger.error(f"SECURITY_TENANT_MISMATCH caught during get_messages: {e}")
-                            continue
-                        for mapped_msg in mapped_list:
-                            msg_session = str(mapped_msg.get("session_id") or m.get("session_id") or "")
-                            if target_session and msg_session:
-                                if normalize_session_name(msg_session) != normalize_session_name(target_session):
-                                    continue
-
-                            msg_id = str(mapped_msg.get("id") or mapped_msg.get("message_id") or "")
-                            content = str(mapped_msg.get("content") or mapped_msg.get("message") or "").strip()
-                            is_from_me = mapped_msg.get("is_from_me", False)
-                            ts = str(mapped_msg.get("timestamp") or mapped_msg.get("message_timestamp") or "")
-                            if msg_id and not msg_id.startswith("temp_") and msg_id.lower() not in ("none", "null", ""):
-                                dedup_key = f"id:{msg_id}"
-                            else:
-                                dedup_key = f"msg:{content}:{is_from_me}:{ts[:16]}"
-                            if dedup_key not in seen_keys:
-                                seen_keys.add(dedup_key)
-                                fresh_msgs.append(mapped_msg)
-
-                fresh_msgs.sort(key=lambda x: x.get("timestamp") or "")
-                
-                # Step 3: Append full chat history to cached contact profile scoped by tenant
-                ProgressiveContactCache.set_messages(target_jid, fresh_msgs, tenant_id=tenant_id)
-                if len(fresh_msgs) > 0:
-                    MOCK_CONVERSATIONS[cache_k] = fresh_msgs
-                    return fresh_msgs
-
-                return MOCK_CONVERSATIONS.get(cache_k, [])
-            except Exception as e:
-                logger.error(f"Error calling GET messages webhook: {e}. Returning cached.")
-                return MOCK_CONVERSATIONS.get(cache_k, all_msgs)
+        except Exception as e:
+            logger.error(f"Error calling CRMService.get_messages: {e}. Returning cached.")
+            return MOCK_CONVERSATIONS.get(cache_k, all_msgs)
 
     @staticmethod
     def _extract_n8n_error_message(resp_data) -> Optional[str]:

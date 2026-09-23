@@ -2,6 +2,7 @@
 
 from app.models.asset import ProjectAsset
 from app.models.company_setting import CompanySetting
+from app.models.crm import Contact, Conversation, Message, Lead
 from app.models.feedback import Feedback
 from app.models.logs import CommitLog, DeployLog
 from app.models.order_manager import OrderManagerOrder, OrderManagerOrderItem
@@ -16,8 +17,12 @@ from app.models.whatsapp_account import WhatsappAccount
 __all__ = [
     "CommitLog",
     "CompanySetting",
+    "Contact",
+    "Conversation",
     "DeployLog",
     "Feedback",
+    "Lead",
+    "Message",
     "OrderManagerOrder",
     "OrderManagerOrderItem",
     "Product",
