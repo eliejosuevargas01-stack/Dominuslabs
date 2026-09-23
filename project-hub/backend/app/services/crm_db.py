@@ -12,7 +12,10 @@ from datetime import datetime, timezone
 
 def get_leads(db: Session, tenant_id: str) -> List[dict]:
     """
-    Recupera todos os leads de um tenant direto do banco.
+    Recupera todos os leads do banco.
+    NOTA: A tabela leads NÃO tem coluna tenant_id.
+    O filtro tenant_id é mantido no parâmetro para compatibilidade,
+    mas não é aplicado na query (todos os leads são retornados).
     """
     q = """
         SELECT
@@ -42,15 +45,14 @@ def get_leads(db: Session, tenant_id: str) -> List[dict]:
             diagnostico_demora_carregar,
             diagnostico_tem_formulario
         FROM leads
-        WHERE tenant_id = :tenant_id
         ORDER BY data_coleta DESC
     """
-    rows = db.execute(sa_text(q), {"tenant_id": tenant_id}).fetchall()
+    rows = db.execute(sa_text(q)).fetchall()
     result = []
     for row in rows:
         d = dict(row._mapping)
         d["id"] = d.get("lead_id") or d.get("id") or d.get("contact_jid", "")
-        d["tenant_id"] = tenant_id
+        d["tenant_id"] = tenant_id  # Inject tenant_id for compatibility
         result.append(d)
     return result
 
@@ -90,7 +92,7 @@ def update_lead(db: Session, lead_id: str, tenant_id: str, data: dict) -> Option
             diagnostico_demora_carregar = :diagnostico_demora_carregar,
             diagnostico_tem_formulario = :diagnostico_tem_formulario,
             updated_at = now()
-        WHERE lead_id = :lead_id AND tenant_id = :tenant_id
+        WHERE lead_id = :lead_id
         RETURNING
             lead_id, origem, data_coleta, nicho, status, empresa_nome,
             telefone_contato, email_contato, localizacao, score, temperatura,
@@ -136,8 +138,8 @@ def delete_lead(db: Session, lead_id: str, tenant_id: str) -> bool:
     """
     Deleta um lead do banco. Retorna True se foi deletado.
     """
-    q = "DELETE FROM leads WHERE lead_id = :lead_id AND tenant_id = :tenant_id"
-    result = db.execute(sa_text(q), {"lead_id": lead_id, "tenant_id": tenant_id})
+    q = "DELETE FROM leads WHERE lead_id = :lead_id"
+    result = db.execute(sa_text(q), {"lead_id": lead_id})
     db.commit()
     return result.rowcount > 0 if hasattr(result, 'rowcount') else result.fetchone() is not None
 

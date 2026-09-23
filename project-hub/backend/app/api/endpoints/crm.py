@@ -16,6 +16,7 @@ from app.services.n8n_service import (
 )
 from app.core.auth import get_current_user, check_crm_permission
 from app.services.crm_db import get_leads as db_get_leads, update_lead as db_update_lead, delete_lead as db_delete_lead, get_activities as db_get_activities, create_activity as db_create_activity
+from app.services.crm_service import get_contacts as db_get_contacts
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -215,18 +216,7 @@ async def get_contacts_action(
     Retorna a lista completa de contatos cadastrados.
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    leads = db_get_leads(db, tenant_id=tenant_id)
-    contacts = []
-    for l in leads:
-        contacts.append({
-            "contact_jid": l.get("contact_jid") or l.get("jid") or l.get("lead_id"),
-            "push_name": l.get("empresa_nome") or l.get("nome") or "Contato Sem Nome",
-            "display_phone": l.get("telefone_contato") or l.get("whatsapp") or None,
-            "profile_pic_url": l.get("profile_pic_url") or "",
-            "created_at": l.get("created_at") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
-            "updated_at": l.get("updated_at") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
-            "tenant_id": tenant_id
-        })
+    contacts = await db_get_contacts(db, tenant_id=tenant_id)
     return contacts
 
 
