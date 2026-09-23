@@ -209,34 +209,31 @@ def test_unauthenticated_request_never_impersonates_admin(client):
 
 @pytest.mark.anyio
 async def test_crm_leads_cache_multi_tenant_isolation():
-    """Valida que o cache de leads do n8n_service isola estritamente os tenants."""
-    from unittest.mock import patch, AsyncMock
-    import httpx
+    """Valida que o cache de leads do N8NService isola estritamente os tenants.
+    
+    Após a migração do CRM para acesso direto ao banco, o N8NService.get_leads
+    agora usa crm_db.get_leads em vez de chamadas HTTP ao n8n.
+    Este teste valida o isolamento do cache in-memory por tenant_id.
+    """
+    from unittest.mock import patch, MagicMock
     from app.services.n8n_service import N8NService
-    from app.core.crypto import encrypt_payload
 
     N8NService._leads_cache.clear()
 
-    async def fake_post(url, **kwargs):
-        # Descriptografa body para descobrir o tenant_id da requisição
-        body = kwargs.get("json", {})
-        from app.core.crypto import decrypt_payload
-        dec = decrypt_payload(body) if isinstance(body, dict) and body.get("_encrypted") else body
-        t_id = dec.get("tenant_id") if isinstance(dec, dict) else None
+    def fake_db_get_leads(db, tenant_id):
+        """Mock de crm_db.get_leads que retorna leads diferentes por tenant."""
+        if tenant_id == "tenant_alpha":
+            return [{"lead_id": "lead_alpha_1", "empresa_nome": "Alpha Corp", "status": "Prospectado", "tenant_id": "tenant_alpha"}]
+        elif tenant_id == "tenant_beta":
+            return [{"lead_id": "lead_beta_1", "empresa_nome": "Beta Corp", "status": "Qualificado", "tenant_id": "tenant_beta"}]
+        return []
 
-        if t_id == "tenant_alpha":
-            raw = [{"id": "lead_alpha_1", "empresa_nome": "Alpha Corp", "status": "Prospectado"}]
-        else:
-            raw = [{"id": "lead_beta_1", "empresa_nome": "Beta Corp", "status": "Qualificado"}]
-
-        enc_resp = encrypt_payload(raw, target="dominus")
-        return httpx.Response(200, json=enc_resp, request=httpx.Request("POST", url))
-
-    mock_client = AsyncMock()
-    mock_client.post = fake_post
-
-    with patch("httpx.AsyncClient") as mock_async_client_cls:
-        mock_async_client_cls.return_value.__aenter__.return_value = mock_client
+    mock_db = MagicMock()
+    
+    # Patch no módulo original onde a função está definida
+    with patch("app.services.crm_db.get_leads", side_effect=fake_db_get_leads), \
+         patch("app.core.database.get_db") as mock_get_db:
+        mock_get_db.return_value = iter([mock_db])
 
         # 1. Tenant Alpha busca leads
         leads_alpha = await N8NService.get_leads(user_id="user_a", tenant_id="tenant_alpha")
