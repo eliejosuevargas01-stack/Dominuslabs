@@ -45,41 +45,67 @@ async def read_leads(
     current_user: str = Depends(get_current_user),
 ):
     """
-    Fetch all leads from the database directly, without n8n dependency.
+    Fetch all contacts from the database directly, without n8n dependency.
+    Returns contacts from the 'contacts' table (saved by dominus_resposta_lead flow).
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    leads = db_get_leads(db, tenant_id=tenant_id)
-    # Map database leads to CRM schema format
+    
+    # Query contacts table directly (saved by dominus_resposta_lead)
+    from sqlalchemy import text as sa_text
+    q = """
+        SELECT
+            contact_jid,
+            push_name,
+            display_phone,
+            profile_pic_url,
+            created_at,
+            updated_at,
+            tenant_id
+        FROM contacts
+        WHERE tenant_id = :tenant_id
+        ORDER BY updated_at DESC
+    """
+    rows = db.execute(sa_text(q), {"tenant_id": tenant_id}).fetchall()
+    
     mapped = []
-    for l in leads:
+    for row in rows:
+        c = dict(row._mapping)
+        # Convert datetime to string if needed
+        created_at = c.get("created_at")
+        updated_at = c.get("updated_at")
+        if hasattr(created_at, "isoformat"):
+            created_at = created_at.isoformat()
+        if hasattr(updated_at, "isoformat"):
+            updated_at = updated_at.isoformat()
+        
         d = {
-            "id": l.get("lead_id") or l.get("id") or "",
-            "tenant_id": l.get("tenant_id") or tenant_id,
-            "push_name": l.get("empresa_nome") or l.get("nome") or "Contato Sem Nome",
-            "nome": l.get("empresa_nome") or l.get("nome") or "Contato Sem Nome",
-            "company_name": l.get("empresa_nome") or l.get("nome") or "Contato Sem Nome",
-            "empresa_nome": l.get("empresa_nome") or l.get("nome") or "Contato Sem Nome",
-            "display_phone": l.get("telefone_contato") or l.get("whatsapp") or "",
-            "whatsapp": l.get("telefone_contato") or l.get("whatsapp") or "",
-            "session_id": l.get("session_id") or "default",
-            "whatsapp_instance": l.get("session_id") or "default",
-            "contact_jid": l.get("contact_jid") or l.get("jid") or "",
-            "profile_pic_url": l.get("profile_pic_url") or "",
-            "instagram": l.get("instagram") or "",
-            "email": l.get("email_contato") or l.get("email") or "",
-            "email_contato": l.get("email_contato") or l.get("email") or "",
-            "status": l.get("status") or "Prospectado",
-            "origin": l.get("origem") or "Instagram",
-            "has_messages": False,
-            "notes": l.get("notes") or "",
-            "proposal": l.get("proposta_inicial") or "",
-            "responsible": l.get("responsible") or "Eliezer",
-            "last_interaction": l.get("updated_at") or l.get("data_coleta") or "",
-            "created_at": l.get("created_at") or l.get("data_coleta") or "",
-            "falha_identificada": l.get("falha_identificada") or "",
-            "segmento": l.get("nicho") or "",
-            "solucao_recomendada": l.get("solucao_recomendada") or "",
-            "mensagem_enviada": False,
+            "id": c.get("contact_jid") or "",
+            "tenant_id": c.get("tenant_id") or tenant_id,
+            "push_name": c.get("push_name") or "Contato Sem Nome",
+            "nome": c.get("push_name") or "Contato Sem Nome",
+            "company_name": c.get("push_name") or "Contato Sem Nome",
+            "empresa_nome": c.get("push_name") or "Contato Sem Nome",
+            "display_phone": c.get("display_phone") or "",
+            "whatsapp": c.get("display_phone") or "",
+            "session_id": "default",
+            "whatsapp_instance": "default",
+            "contact_jid": c.get("contact_jid") or "",
+            "profile_pic_url": c.get("profile_pic_url") or "",
+            "instagram": "",
+            "email": "",
+            "email_contato": "",
+            "status": "Em Atendimento",
+            "origin": "WhatsApp",
+            "has_messages": True,
+            "notes": "",
+            "proposal": "",
+            "responsible": "Eliezer",
+            "last_interaction": str(updated_at) if updated_at else "",
+            "created_at": str(created_at) if created_at else "",
+            "falha_identificada": "",
+            "segmento": "",
+            "solucao_recomendada": "",
+            "mensagem_enviada": True,
             "ultima_mensagem": "",
             "payload": {}
         }
