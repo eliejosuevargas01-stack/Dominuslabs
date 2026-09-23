@@ -215,35 +215,50 @@ function getAvatarSrc(url?: string, session_id?: string, jid?: string, allowProx
 
   if (url && typeof url === 'string') {
     const trimmed = url.trim();
-    if (isPrivateProxyReference(trimmed, 'avatar')) {
-      if (!allowProxy) return null;
+    
+    // URLs diretas do CDN do WhatsApp - usar diretamente
+    if (trimmed.includes('pps.whatsapp.net') || trimmed.includes('fbcdn.net')) {
+      return trimmed;
+    }
+    
+    // Data URLs (base64)
+    if (trimmed.startsWith('data:image')) {
+      return trimmed;
+    }
+    
+    // URLs HTTP(S) externas completas - usar diretamente
+    if ((trimmed.startsWith('http://') || trimmed.startsWith('https://')) 
+        && !trimmed.includes('/api/') && !trimmed.includes('/sessions/')) {
+      return trimmed;
+    }
+    
+    // Referências de proxy (relativas ou absolutas) - extrair session/jid e construir URL completa
+    if (isPrivateProxyReference(trimmed, 'avatar') || trimmed.startsWith('/avatar')) {
       try {
         const parsed = new URL(trimmed, window.location.origin);
         const qSession = parsed.searchParams.get('session') || parsed.searchParams.get('session_id');
         const qJid = parsed.searchParams.get('jid');
         const pathSession = parsed.pathname.match(/\/sessions\/([^/]+)\/avatar$/)?.[1];
+        
+        // Extrair session e jid da URL de proxy
         if (qSession && qSession.toLowerCase() !== 'default') targetSession = qSession;
         if (pathSession && pathSession.toLowerCase() !== 'default') targetSession = decodeURIComponent(pathSession);
         if (qJid) targetJid = qJid;
+        
+        // Se conseguimos extrair session e jid, construir a URL de proxy completa
+        // Isso é seguro porque já existe uma referência de avatar no banco
+        if (targetJid && targetSession && targetSession.toLowerCase() !== 'default') {
+          return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(targetSession)}/avatar?jid=${encodeURIComponent(targetJid)}`;
+        }
       } catch {
-        return null;
-      }
-    } else {
-      if (trimmed.includes('pps.whatsapp.net') || trimmed.includes('fbcdn.net')) {
-        return trimmed;
-      }
-      if (trimmed.startsWith('data:image')) {
-        return trimmed;
-      }
-      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-        return trimmed;
+        // URL malformada, continuar para fallback
       }
     }
   }
 
-  // Only attempt dynamic proxy for the explicitly active chat header if allowProxy is true.
-  // Never construct dynamic proxy for sidebar items without a real image URL,
-  // preventing 50 simultaneous slow proxy requests that exhaust the backend.
+  // Proxy dinâmico APENAS quando allowProxy=true (usado no header do chat ativo)
+  // Isso permite carregar avatar mesmo sem URL prévia, mas é restrito para evitar
+  // 50 requisições simultâneas da sidebar
   if (allowProxy) {
     if (targetJid && targetSession && targetSession.toLowerCase() !== 'default') {
       return `${API_BASE}/whatsapp/sessions/${encodeURIComponent(targetSession)}/avatar?jid=${encodeURIComponent(targetJid)}`;
