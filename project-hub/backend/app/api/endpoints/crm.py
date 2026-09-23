@@ -811,17 +811,27 @@ async def get_dashboard_metrics(
     current_user: str = Depends(get_current_user)
 ):
     """
-    Dynamically calculate CRM dashboard KPIs based on the leads list and messages for the user's tenant.
+    Dynamically calculate CRM dashboard KPIs based on contacts (saved by dominus_resposta_lead).
     """
     user, tenant_id = resolve_current_user_tenant(db, current_user)
-    leads = db_get_leads(db, tenant_id=tenant_id)
-    total_leads = len(leads)
     
-    leads_novos = sum(1 for l in leads if l.get("status") == "Prospectado")
-    conversas_iniciadas = sum(1 for l in leads if l.get("mensagem_enviada") is True or l.get("status") == "Abordagem Enviada")
-    propostas_enviadas = sum(1 for l in leads if l.get("status") == "Diagnóstico/Proposta")
-    negociacoes = sum(1 for l in leads if l.get("status") == "Negociando/Objeção")
-    clientes_fechados = sum(1 for l in leads if l.get("status") == "Fechado (Win)")
+    # Query contacts table (same as /crm/leads endpoint)
+    from sqlalchemy import text as sa_text
+    q = """
+        SELECT contact_jid, push_name, display_phone, profile_pic_url, created_at, updated_at
+        FROM contacts
+        WHERE tenant_id = :tenant_id
+    """
+    rows = db.execute(sa_text(q), {"tenant_id": tenant_id}).fetchall()
+    contacts = [dict(row._mapping) for row in rows]
+    total_leads = len(contacts)
+    
+    # For contacts from WhatsApp, all are "Em Atendimento" by default
+    leads_novos = 0  # No "Prospectado" for WhatsApp contacts
+    conversas_iniciadas = total_leads  # All contacts have conversations
+    propostas_enviadas = 0
+    negociacoes = 0
+    clientes_fechados = 0
     
     # Calculate sent/received from our conversations scoped strictly by tenant
     tenant_msgs_list = [
@@ -833,15 +843,12 @@ async def get_dashboard_metrics(
     
     # Count pending responses
     respostas_pendentes = 0
-    for lead in leads:
-        l_id = lead.get("id")
-        cache_k = f"{tenant_id}:{l_id}"
+    for contact in contacts:
+        c_jid = contact.get("contact_jid")
+        cache_k = f"{tenant_id}:{c_jid}"
         conv = MOCK_CONVERSATIONS.get(cache_k)
-        if lead.get("status") == "RESPONDED":
+        if conv and conv[-1].get("sender") == "lead":
             respostas_pendentes += 1
-        elif conv:
-            if conv[-1].get("sender") == "lead":
-                respostas_pendentes += 1
                 
     taxa_conversao = round((clientes_fechados / total_leads * 100), 1) if total_leads > 0 else 0.0
     
