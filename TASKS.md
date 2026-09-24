@@ -1,9 +1,13 @@
-# DominusLabs — Task Backlog
-> Gerado automaticamente em 22/09/2026. Atualizar ao completar cada tarefa.
+# DominusLabs — Refoundation Task Backlog
+
+> Gerado: 23/09/2026 — Dominus Product & Architecture Refoundation
+> Substitui backlog anterior. Documentos: docs/refoundation/GOAL.md, PLAN.md, CONTRACTS.md
+> Nenhuma task será executada sem visto positivo do usuário.
 
 ---
 
 ## Legenda
+
 - 🔴 Crítico / Bloqueante
 - 🟡 Importante
 - 🟢 Melhoria
@@ -13,237 +17,305 @@
 
 ---
 
+# FASE 0 — INVENTÁRIO E BASELINE
+
+## 🚧 ARCH-000 — Congelar estado atual
+🔴 Crítico | Sequencial: primeira tarefa
+
+**Objetivo**: Documentar baseline antes de qualquer alteração estrutural.
+
+**Repositórios**: Dominuslabs, IDC_Dominuslabs, api-whatsapp-service
+
+**Subtarefas**:
+1. Registrar commit SHA dos 3 repos
+2. Listar workflows n8n envolvidos (IDs e nomes)
+3. Registrar variáveis de ambiente necessárias (sem valores)
+4. Registrar endpoints atualmente utilizados (backend + WA API)
+5. Registrar eventos emitidos (WA API → n8n → Dominus)
+6. Registrar eventos consumidos (SSE, webhooks)
+7. Executar suites existentes e registrar resultados
+8. Registrar problemas já reproduzidos (16 itens do baseline)
+
+**Aceite**: Baseline documentado em `docs/refoundation/BASELINE.md`.
+
+---
+
+# FASE 1 — AUDITORIA DE FALLBACKS E FAIL-CLOSED
+
+## ⬜ ARCH-001 — Inventário de fallbacks
+🔴 Crítico | Sequencial: após ARCH-000
+
+**Objetivo**: Auditar os 3 repos + n8n buscando padrões de fallback.
+
+**Padrões a buscar**: `||`, `??`, ternários, `DEFAULT_`, `default=`, `os.getenv(..., "valor")`, `process.env.X || "valor"`, catch vazio, `except: pass`, mock value, hardcoded tenant/credential/endpoint.
+
+**Classificação**: SAFE_UI_DEFAULT, SAFE_FORMATTING_DEFAULT, RETRY, DANGEROUS_FALLBACK, SECURITY_FALLBACK, DATA_INTEGRITY_FALLBACK, SESSION_FALLBACK, CONFIG_FALLBACK, LEGACY_COMPATIBILITY.
+
+**Aceite**: Relatório classificado antes de remoção.
+
+## ⬜ ARCH-002 — Configuração obrigatória
+🔴 Crítico | Paralelo com: ARCH-001
+
+**Objetivo**: Criar schemas de environment por aplicação. Startup falha sem config necessária.
+
+## ⬜ ARCH-003 — Remover defaults sensíveis
+🔴 Crítico | Sequencial: após ARCH-001
+
+**Objetivo**: Eliminar defaults como admin123, secrets previsíveis, URLs reais em Docker Compose/source.
+
+## ⬜ ARCH-004 — Auditoria do .env versionado
+🔴 Crítico | Paralelo com: ARCH-003
+
+**Objetivo**: Verificar se .env no Git contém/conteve credenciais. Rotacionar, remover do tracking.
+
+**Aceite Fase 1**: Nenhum secret tem fallback funcional; startup falha sem config; inventário produzido.
+
+---
+
+# FASE 2 — CORREÇÃO DA INTEGRIDADE DOS DADOS
+
+## ⬜ DATA-001 — Corrigir "Pedidos Hoje"
+🟡 Importante | Sequencial: após Fase 1
+
+**Arquivo**: `src/pages/DashboardOperationalView.tsx`, backend analytics endpoints
+
+**Problema**: `todayList.length > 0 ? todayList : rawList` — histórico como fallback.
+
+**Aceite**: Hoje sem pedidos → 0.
+
+## ⬜ DATA-002 — Remover métricas inventadas
+🟡 Importante | Paralelo com: DATA-001
+
+**Problema**: `iaCount || 14`, `pctIa > 0 ? pctIa : 88`
+
+**Aceite**: Sem dado → "—" ou "Dados ainda não disponíveis" ou 0.
+
+## ⬜ DATA-003 — Período real de métricas
+🟡 Importante | Sequencial: após DATA-001
+
+**Objetivo**: Backend analítico `GET /analytics/overview?period=today|7d|30d` com timezone do tenant.
+
+## ⬜ DATA-004 — Pedidos recentes respeitam filtro
+🟡 Importante | Sequencial: após DATA-003
+
+**Aceite**: Lista reflete período selecionado ou declara independência clara.
+
+---
+
+# FASE 3 — CONTRATO ÚNICO DE EVENTOS
+
+## ⬜ EVT-001 — Catalogar eventos atuais
+🔴 Crítico | Sequencial: após Fase 2
+
+**Objetivo**: Mapear eventos em WA API, n8n Switch/IFs, Dominus endpoints. Identificar duplicações semânticas.
+
+## ⬜ EVT-002 — Schema SystemEvent
+🔴 Crítico | Sequencial: após EVT-001
+
+**Objetivo**: Contrato versionado com event_id, type, tenant_id, session_id, occurred_at, payload.
+
+## ⬜ EVT-003 — Tipos canônicos
+🔴 Crítico | Paralelo com: EVT-002
+
+**Tipos**: message.created, message.status.updated, message.reaction.updated, conversation.updated, media.*, session.*, order.*
+
+## ⬜ EVT-004 — Event Ingress único
+🔴 Crítico | Sequencial: após EVT-002 + EVT-003
+
+**Objetivo**: `POST /webhooks/events` — ponto único de entrada com signature validation, idempotency, routing.
+
+## ⬜ EVT-005 — Event Router
+🟡 Importante | Sequencial: após EVT-004
+
+**Objetivo**: `app/events/` com schemas, registry, router, handlers por tipo.
+
+## ⬜ EVT-006 — Regra fundamental de mensagem
+🔴 Crítico | Paralelo com: EVT-005
+
+**Regra**: message.status.updated NUNCA incrementa unread, cria mensagem, toca som ou emite notification.
+
+## ⬜ EVT-007 — n8n como router
+🟡 Importante | Sequencial: após EVT-004
+
+**Objetivo**: Switch n8n usa `type` diretamente, não reconstrói tipo.
+
+## ⬜ EVT-008 — Deprecar endpoints antigos
+🟡 Importante | Sequencial: após migração completa de EVT-004..007
+
+---
+
+# FASE 4 — MÍDIA
+
+## ⬜ MEDIA-001 — Media state machine na WA API
+🟡 Importante | Sequencial: após Fase 3
+
+**Objetivo**: pending → downloading → ready → failed. Persistência em `/app/data/media/{tenant}/{session}/`.
+
+## ⬜ MEDIA-002 — Frontend usa URLs internas
+🟡 Importante | Sequencial: após MEDIA-001
+
+**Objetivo**: Frontend nunca depende de pps.whatsapp.net/fbcdn.net.
+
+---
+
+# FASE 5 — PAGINAÇÃO
+
+## ⬜ PAG-001 — Cursor pagination conversas
+🟡 Importante | Sequencial: após Fase 4
+
+## ⬜ PAG-002 — Cursor pagination mensagens
+🟡 Importante | Paralelo com: PAG-001
+
+---
+
+# FASE 6 — REALTIME GLOBAL
+
+## ⬜ RT-001 — RealtimeProvider global
+🔴 Crítico | Sequencial: após Fase 5
+
+**Objetivo**: SSE/realtime montado na app autenticada, não dentro do OmnichannelView.
+
+## ⬜ RT-002 — Sound Engine + Notification Engine
+🟡 Importante | Sequencial: após RT-001
+
+**Regra**: Som somente para message.created AND incoming AND não processado.
+
+---
+
+# FASE 7 — OMNICHANNEL
+
+## ⬜ OMN-001 — Decomposição OmnichannelView.tsx (2725 linhas)
+🔴 Crítico | Sequencial: após Fase 6
+
+## ⬜ OMN-002 — Media renderers específicos
+🟡 Importante | Paralelo com: OMN-001
+
+## ⬜ OMN-003 — MediaViewer global (image zoom/pan, video fullscreen, sticker)
+🟡 Importante | Sequencial: após OMN-002
+
+## ⬜ OMN-004 — ConversationAvatar unificado
+🟡 Importante | Paralelo com: OMN-001
+
+---
+
+# FASE 8 — ERROR UX
+
+## ⬜ ERR-001 — Contrato AppError
+🟡 Importante | Sequencial: após Fase 7
+
+## ⬜ ERR-002 — Eliminar .catch(() => {})
+🟡 Importante | Paralelo com: ERR-001
+
+---
+
+# FASE 9 — APP SHELL + MOBILE
+
+## ⬜ SHELL-001 — Mobile shell com bottom navigation
+🟡 Importante | Sequencial: após Fase 8
+
+## ⬜ SHELL-002 — Desktop shell + menu renomeado
+🟡 Importante | Paralelo com: SHELL-001
+
+## ⬜ SHELL-003 — Browser Notifications
+🟡 Importante | Sequencial: após RT-002
+
+---
+
+# FASE 10 — ORDER MANAGER + DASHBOARD + MINHA EMPRESA
+
+## ⬜ OM-001 — OrderManagerView.tsx refactor (1353 linhas)
+🟡 Importante | Sequencial: após Fase 9
+
+## ⬜ DASH-001 — Dashboard métricas reais
+🟡 Importante | Paralelo com: OM-001
+
+## ⬜ EMP-001 — CompanySettingsView.tsx refactor (1297 linhas) → "Minha Empresa"
+🟡 Importante | Paralelo com: OM-001
+
+---
+
+# FASE 11 — FUNCIONÁRIO DIGITAL + PERFIL
+
+## ⬜ FD-001 — Conceito "Funcionário Digital" substitui IA
+🟢 Melhoria | Sequencial: após Fase 10
+
+## ⬜ PERF-001 — Página "Meu Perfil"
+🟢 Melhoria | Paralelo com: FD-001
+
+---
+
+# FASE 12 — DECOMPOSIÇÃO FINAL
+
+## ⬜ DEC-001 — session.manager.js decomposição (2347 linhas)
+🟡 Importante | Sequencial: após Fase 11
+
+## ⬜ DEC-002 — webhooks.py decomposição (1178 linhas)
+🟡 Importante | Paralelo com: DEC-001
+
+## ⬜ DEC-003 — n8n_service.py decomposição (1524 linhas)
+🟡 Importante | Paralelo com: DEC-001
+
+---
+
+# FASE 13 — E2E / REGRESSÃO
+
+## ⬜ E2E-001 — Suite Playwright completa
+🔴 Crítico | Sequencial: após Fase 12
+
+**Breakpoints**: 375x812, 390x844, 414x896, 768x1024, 1366x768, 1440x900, 1920x1080
+
+---
+
+# FASE 14 — DESIGN SYSTEM SKILL
+
+## ⬜ SKILL-001 — Criar dominus-frontend SKILL.md
+🟢 Melhoria | Paralelo com: qualquer fase
+
+---
+
 ## Grafo de Dependências
 
 ```
-T1 ──► T2 ──► T3 ──► T10
-       │
-T5 ────┤ (paralelo com T1)
-T6 ────┤ (paralelo com tudo)
-T7 ────┤
-T8 ────┤
-T11 ───┤ (paralelo com T3)
-T4 ────┘ (docs, totalmente paralelo)
-T9 ─────  (paralelo com T6)
-T12 ────  (qualquer momento)
+ARCH-000
+  ↓
+ARCH-001 ←→ ARCH-002
+  ↓            ↓
+ARCH-003 ←→ ARCH-004
+  ↓
+DATA-001 ←→ DATA-002
+  ↓
+DATA-003 → DATA-004
+  ↓
+EVT-001 → EVT-002 ←→ EVT-003
+                ↓
+           EVT-004 → EVT-005
+                ↓        ↓
+           EVT-006    EVT-007
+                ↓
+           EVT-008
+  ↓
+MEDIA-001 → MEDIA-002
+  ↓
+PAG-001 ←→ PAG-002
+  ↓
+RT-001 → RT-002
+  ↓
+OMN-001 ←→ OMN-002 ←→ OMN-004
+              ↓
+           OMN-003
+  ↓
+ERR-001 ←→ ERR-002
+  ↓
+SHELL-001 ←→ SHELL-002
+  ↓
+OM-001 ←→ DASH-001 ←→ EMP-001
+  ↓
+FD-001 ←→ PERF-001
+  ↓
+DEC-001 ←→ DEC-002 ←→ DEC-003
+  ↓
+E2E-001
 ```
-
----
-
-## T1 — 🔴 [WA API] Mídia: persistência + link customizado
-**Status:** ⬜ Pendente  
-**Bloqueia:** T2, T3, T10  
-**Paralelo com:** T4, T5, T6, T7, T8
-
-### Contexto
-- `/app/data` já está em bind mount persistente (confirmado: `bind /app/data → /app/data`)
-- O WA API já baixa mídias via `cacheMediaBuffer` e `resolveMediaDelegate`
-- Porém o webhook é disparado **antes** do download completar em mensagens recebidas (`handleMessagesUpsert`)
-- O `media_url` enviado no webhook é `/api/sessions/{sessionId}/media?messageId={id}` (correto), mas o n8n salva `JSON.stringify(media)` no banco
-
-### O que fazer
-1. Em `handleMessagesUpsert`: aguardar `resolveMessageMedia(storedMessage)` antes de `dispatchWebhookMessage`
-2. Renomear arquivo salvo para: `{sessionId}_{jid_clean}_{timestamp}.{ext}`
-   - Exemplo: `eliezer-sc_178189703839815@lid_1790113823.jpg`
-   - `jid_clean` = JID/LID sem caracteres especiais para filesystem
-3. Garantir que `media.url` no payload do webhook sempre aponta para o link interno
-4. Verificar que volume `/app/data` sobrevive a deploys no Coolify
-
-### Arquivos
-- `src/managers/session.manager.js` — `handleMessagesUpsert`, `resolveMediaDelegate`
-- `src/models/message.model.js` — `serializeMediaForClient`
-
----
-
-## T2 — 🔴 [n8n] Corrigir `salva mensagem1` — media_url como link, não objeto
-**Status:** ⬜ Pendente  
-**Depende de:** T1  
-**Paralelo com:** T3
-
-### Contexto
-- Nó `salva mensagem1` no workflow `SpQwyDZsOo3ozXuE` salva:
-  ```
-  media_url = JSON.stringify(payload.message.media)  ← ERRADO
-  ```
-- Deveria salvar:
-  ```
-  media_url = payload.message.media.url  ← /api/sessions/.../media?messageId=...
-  ```
-
-### O que fazer
-1. Editar o nó `salva mensagem1` no n8n
-2. Alterar `media_url` para `={{ $('Validar HMAC').item.json.payload.message.media?.url ?? null }}`
-
----
-
-## T3 — 🟡 [Frontend] Renderização de mídia — media_url é JSON object, não URL
-**Status:** ⬜ Pendente  
-**Depende de:** T2  
-**Paralelo com:** T5, T11
-
-### Contexto
-- O banco `messages.media_url` contém JSON stringificado do objeto media
-- `OmnichannelView.tsx` tenta usar como URL diretamente → falha ao renderizar imagens/vídeos
-
-### O que fazer
-1. No helper `DeMediaUrl` / `serializeMediaForClient` do frontend:
-   - Tentar `JSON.parse(media_url)` → se sucesso, usar `.url` do objeto
-   - Se for string começando com `/api/`, usar diretamente
-2. Testar renderização de imagem, vídeo, áudio e documento
-
-### Arquivos
-- `src/pages/OmnichannelView.tsx` — função `Ae` (renderização de mídia)
-
----
-
-## T4 — 🟢 [DOCS] Documentação completa do sistema
-**Status:** ⬜ Pendente  
-**Paralelo com:** tudo  
-**Subagentes:** Low, um arquivo por vez (evitar limite TPM)
-
-### Arquivos a criar em `/home/eliezer/Escritorio/dominuslabs/docs/`
-| Arquivo | Conteúdo |
-|---|---|
-| `architecture.md` | Visão geral, containers, fluxo de dados, portas, rede |
-| `wa-api.md` | Endpoints, auth JWT, webhook payload format, exemplos |
-| `frontend-omnichannel.md` | Componentes, SSE flow, dedup logic, scroll behavior |
-| `n8n-workflows.md` | dominuslabs_respostas_leads, dominuslabs_crm, Dominus AI |
-| `media-pipeline.md` | Download, persist, link format, serve, volume |
-| `deployment.md` | Coolify, volumes, health checks, env vars, rollback |
-
----
-
-## T5 — 🟡 [WA API + Backend + Frontend] Status em tempo real (sent→delivered→read)
-**Status:** ⬜ Pendente  
-**Paralelo com:** T1, T4
-
-### Contexto
-- Após envio, status fica preso em `sent`
-- `handleMessagesUpdate` no Baileys recebe ACKs de entrega/leitura mas pode não estar disparando webhook
-
-### O que fazer
-1. **WA API**: confirmar que `handleMessagesUpdate` chama `dispatchWebhookMessage(sessionId, msg, 'message.updated')`
-2. **Backend**: `_process_update_chat` aceitar `action='message.updated'` e emitir SSE com apenas `{message_id, status}`
-3. **Frontend**: SSE handler — ao receber `message.updated`, atualizar `status` de mensagem existente em `chatMessages` sem inserir nova
-
-### Arquivos
-- `src/managers/session.manager.js` — `handleMessagesUpdate`
-- `project-hub/backend/app/api/endpoints/webhooks.py` — `_process_update_chat`
-- `src/pages/OmnichannelView.tsx` — SSE handler
-
----
-
-## T6 — 🟡 [n8n] Análise end-to-end: Dominus AI + Dominus AI Buffer
-**Status:** ⬜ Pendente  
-**Paralelo com:** tudo
-
-### Workflows alvo
-- `YqDBFFzJ1L4FRAvz` — Dominus AI (ativo)
-- `4ANz4lSb80pCuAT4` — Dominus AI Buffer (ativo)
-
-### O que fazer
-1. Mapear todos os nós de cada workflow com função e dependências
-2. Verificar execuções recentes: erros, timeouts, falhas silenciosas
-3. Testar todos os casos: texto, áudio, imagem, lead novo, lead existente, grupo
-4. Verificar credenciais (API keys, tokens), retries, tratamento de erros
-5. Identificar e documentar cada problema
-6. Aplicar fixes para cada problema encontrado
-
----
-
-## T7 — 🟡 [WA API] app:null em createSessionManager — logs silenciados
-**Status:** ⬜ Pendente  
-**Paralelo com:** T1, T8
-
-### Contexto
-- `src/index.js` cria `sessionManager` com `app: null` antes de `createApp()`
-- Resultado: `safeLog = { info: noop, warn: noop, error: noop }` — logs internos silenciados
-
-### O que fazer
-1. Criar método `sessionManager.setLogger(logger)` em `session.manager.js`
-2. Em `src/index.js`, após `createApp()`: `sessionManager.setLogger(app.log)`
-3. Ou: criar logger Pino standalone e passar na criação
-
-### Arquivos
-- `src/index.js`
-- `src/managers/session.manager.js`
-
----
-
-## T8 — 🟡 [WA API] me=null após restart de container
-**Status:** ⬜ Pendente  
-**Paralelo com:** T7
-
-### Contexto
-- Após deploy/restart, sessões conectam (`status=connected`) mas `me=null`
-- `state.me = state.socket?.user` — WA só envia o `user` no `connection.update` open
-- O PG grava `me` mas na reconexão pode não estar sendo atualizado
-
-### O que fazer
-1. Em `handleConnectionUpdate` quando `connection === 'open'`: garantir `state.me = state.socket?.user || state.me`
-2. Em `persistSessions`: salvar `me` no PG ao conectar
-3. Em `loadStoresFromPg`: restaurar `state.me` do PG na inicialização
-
----
-
-## T9 — 🟢 [Backend] Investigar/desativar workflow legado dominuslabs_crm
-**Status:** ⬜ Pendente  
-**Paralelo com:** T6
-
-### Contexto
-- Workflow `WJ37gGiodnAJVkBN` (dominuslabs_crm) está ativo
-- Função unclear — pode ser legado sem dependências ativas
-
-### O que fazer
-1. Verificar triggers e webhooks do workflow
-2. Verificar se algum endpoint do backend o chama
-3. Se sem dependências: desativar no n8n
-4. Documentar decisão
-
----
-
-## T10 — 🟢 [Order Manager] Implementação completa
-**Status:** ⬜ Pendente  
-**Depende de:** T1 + T2 + T3 + T5 finalizados  
-**Escopo:** a definir com o usuário
-
-### Contexto
-- Tarefa 2 original do projeto, adiada desde o início
-- PDV completo para operadores de restaurante/delivery
-
----
-
-## T11 — 🟢 [Frontend] Contador de não-lidas não zera em todos os casos
-**Status:** ⬜ Pendente  
-**Paralelo com:** T3
-
-### Contexto
-- Ao abrir chat, `unread_count` não zera após recarregar página
-- Falta endpoint `PATCH /crm/conversations/{jid}/read` ou similar
-
-### O que fazer
-1. Em `handleSelectChat`: chamar endpoint para marcar conversa como lida
-2. Criar endpoint `POST /api/v1/crm/conversations/mark-read` no backend
-3. Atualizar sidebar localmente via `setConversations`
-
----
-
-## T12 — 🟢 [WA API] Limpeza de logs de debug residuais
-**Status:** ⬜ Pendente  
-**Paralelo com:** qualquer tarefa
-
-### O que fazer
-1. Verificar `src/routes/messages.routes.js` — `fastify.log.error` no catch (manter, útil)
-2. Verificar `src/managers/session.manager.js` — algum `console.error` esquecido?
-3. Remover apenas logs temporários de debugging, manter os de produção
-
----
-
-## Histórico de Conclusões
-
-| Data | ID | Descrição |
-|---|---|---|
-| 22/09/2026 | — | Backlog criado a partir do estado do sistema |
 
 ---
 
@@ -258,6 +330,7 @@ T12 ────  (qualquer momento)
 ### Repositórios
 - Frontend + Backend: `/home/eliezer/Escritorio/dominuslabs`
 - WA API: `/home/eliezer/Escritorio/api-whatsapp-service`
+- IDC: `/home/eliezer/Escritorio/idc-dominuslabs`
 
 ### n8n
 - URL: `https://myn8n.seommerce.shop`
@@ -270,3 +343,11 @@ T12 ────  (qualquer momento)
 - `/app/sessions` — credenciais Baileys
 - `/app/data` — mídia, mensagens, conversas
 - `/app/keys` — chaves criptográficas
+
+---
+
+## Histórico de Conclusões
+
+| Data | ID | Descrição |
+|---|---|---|
+| 23/09/2026 | — | Backlog refeito para Refoundation. Antigo backlog (T1-T12) absorvido nas fases macro. |
