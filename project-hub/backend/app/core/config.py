@@ -6,8 +6,6 @@ Impacto na regra de negócio: É responsável por garantir que as operações e 
 """
 import os
 from dotenv import load_dotenv
-if os.path.exists(".env.example"):
-    load_dotenv(".env.example")
 if os.path.exists(".env"):
     # Keep explicitly supplied environment variables authoritative. This lets
     # local/dev runners select SQLite and service endpoints without rewriting
@@ -38,10 +36,13 @@ class Settings(BaseSettings):
 
     # Authentication
     ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
+    # ADMIN_PASSWORD: No safe default - fail-closed if missing
     ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")
     ADMIN_TENANT_ID: str = os.getenv("ADMIN_TENANT_ID", os.getenv("MASTER_TENANT_ID", "admin"))
     VIEWER_USERNAME: str = os.getenv("VIEWER_USERNAME", "patrik182rodrigues@gmail.com")
+    # VIEWER_PASSWORD: No safe default - fail-closed if missing
     VIEWER_PASSWORD: str = os.getenv("VIEWER_PASSWORD", "")
+    # SECRET_KEY: No safe default - fail-closed if missing
     SECRET_KEY: str = os.getenv("JWT_SECRET", "")
 
     # LiteLLM TTS

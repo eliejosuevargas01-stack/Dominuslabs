@@ -11,11 +11,13 @@ from slowapi.errors import RateLimitExceeded
 from app.core.limiter import limiter
 from sqlalchemy.orm import Session
 import os
+import sys
 
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.database import Base, engine, get_db
 from app.core.middleware import AuditLoggingMiddleware, DecryptionMiddleware
+from app.core.startup_validator import validate_startup_config, StartupValidationError
 
 # Import all models to ensure they are registered on Base.metadata
 from app.models.project import Project
@@ -26,6 +28,17 @@ from app.models.feedback import Feedback
 from app.models.user import User
 from app.models.whatsapp_account import WhatsappAccount
 from app.models.order_manager import OrderManagerOrder, OrderManagerOrderItem
+
+# Fail-closed startup validation - runs BEFORE any app initialization
+# Skip when SKIP_STARTUP_VALIDATION=1 (set by test conftest)
+if os.environ.get("SKIP_STARTUP_VALIDATION") != "1":
+    print("[STARTUP] Validating configuration...", file=sys.stderr)
+    try:
+        validate_startup_config(settings)
+        print("[STARTUP] Configuration validation PASSED", file=sys.stderr)
+    except StartupValidationError as e:
+        print("[STARTUP] Configuration validation FAILED", file=sys.stderr)
+        sys.exit(1)
 
 # Create persistent upload folders and database tables
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "images"), exist_ok=True)
