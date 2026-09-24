@@ -49,7 +49,6 @@ export interface OrderItem {
 
 // API imports (DATA-003)
 import { fetchOperationalDashboard } from '../services/api';
-import type { OperationalDashboardResponse } from '../services/api';
 
 interface DashboardOperationalProps {
   metrics?: MetricData;

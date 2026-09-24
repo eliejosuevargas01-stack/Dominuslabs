@@ -151,36 +151,36 @@ async def get_operational_dashboard(
     # 1. Métricas de Pedidos                                                  #
     # ======================================================================== #
     
-    # Pedidos do dia (filtrado por tenant)
+    # Pedidos do período (filtrado por tenant e range de datas)
     stmt_pedidos_hoje = sa_text("""
         SELECT COUNT(*) as total
         FROM order_manager_orders
         WHERE tenant_id = :tenant_id
-        AND DATE(created_at) = DATE(:hoje)
-    """).bindparams(tenant_id=tenant_id, hoje=inicio_dia)
+        AND created_at >= :inicio AND created_at <= :fim
+    """).bindparams(tenant_id=tenant_id, inicio=inicio_dia, fim=fim_dia)
     
     result = db.execute(stmt_pedidos_hoje).fetchone()
     pedidos_hoje = result[0] if result else 0
     
-    # Ticket médio do dia
+    # Ticket médio do período
     stmt_ticket_medio = sa_text("""
         SELECT AVG(total) as avg_total
         FROM order_manager_orders
         WHERE tenant_id = :tenant_id
-        AND DATE(created_at) = DATE(:hoje)
-    """).bindparams(tenant_id=tenant_id, hoje=inicio_dia)
+        AND created_at >= :inicio AND created_at <= :fim
+    """).bindparams(tenant_id=tenant_id, inicio=inicio_dia, fim=fim_dia)
     
     result = db.execute(stmt_ticket_medio).fetchone()
     ticket_medio = float(result[0] or 0)
     
-    # Faturamento do dia
+    # Faturamento do período
     stmt_faturamento = sa_text("""
         SELECT SUM(total) as sum_total
         FROM order_manager_orders
         WHERE tenant_id = :tenant_id
-        AND DATE(created_at) = DATE(:hoje)
+        AND created_at >= :inicio AND created_at <= :fim
         AND status = 'delivered'
-    """).bindparams(tenant_id=tenant_id, hoje=inicio_dia)
+    """).bindparams(tenant_id=tenant_id, inicio=inicio_dia, fim=fim_dia)
     
     result = db.execute(stmt_faturamento).fetchone()
     faturamento_dia = float(result[0] or 0)
@@ -191,9 +191,9 @@ async def get_operational_dashboard(
             SELECT COUNT(*) as total
             FROM order_manager_orders
             WHERE tenant_id = :tenant_id
-            AND DATE(created_at) = DATE(:hoje)
+            AND created_at >= :inicio AND created_at <= :fim
             AND status IN ('delivered', 'completed')
-        """).bindparams(tenant_id=tenant_id, hoje=inicio_dia)
+        """).bindparams(tenant_id=tenant_id, inicio=inicio_dia, fim=fim_dia)
         
         result = db.execute(stmt_concluidos).fetchone()
         concluidos = result[0] if result else 0
@@ -221,9 +221,9 @@ async def get_operational_dashboard(
         FROM order_manager_orders o
         LEFT JOIN order_manager_order_items i ON o.id = i.order_manager_order_id
         WHERE o.tenant_id = :tenant_id
-        AND o.created_at >= :hoje
+        AND o.created_at >= :inicio AND o.created_at <= :fim
         AND i.id IS NOT NULL
-    """).bindparams(tenant_id=tenant_id, hoje=inicio_dia)
+    """).bindparams(tenant_id=tenant_id, inicio=inicio_dia, fim=fim_dia)
     
     result = db.execute(stmt_ia_resolved).fetchone()
     atendimentos_ia = result[0] if result else 0  # Sem dados → 0, nunca inventado
@@ -247,9 +247,10 @@ async def get_operational_dashboard(
         SELECT id, pedido_id, customer_name, total, status, created_at
         FROM order_manager_orders
         WHERE tenant_id = :tenant_id
+        AND created_at >= :inicio AND created_at <= :fim
         ORDER BY created_at DESC
         LIMIT 10
-    """).bindparams(tenant_id=tenant_id)
+    """).bindparams(tenant_id=tenant_id, inicio=inicio_dia, fim=fim_dia)
     
     orders_results = db.execute(stmt_orders).fetchall()
     
