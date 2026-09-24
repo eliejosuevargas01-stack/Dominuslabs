@@ -6,7 +6,7 @@
  * - Erros: Carregamento falho dispara toasts, e o loading exibe componentes vazios/esqueleto.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import {
   ShoppingBag,
   DollarSign,
@@ -19,7 +19,6 @@ import {
   BarChart2,
   Inbox
 } from 'lucide-react';
-import { fetchWithAuth, API_BASE } from '../services/api';
 
 // Types for backend integration
 export interface MetricData {
@@ -52,20 +51,6 @@ interface DashboardOperationalProps {
   onRefresh?: () => void;
 }
 
-function mapOrderStatus(status: string = ''): OrderItem['status'] {
-  const s = status.toUpperCase();
-  if (s.includes('DELIVERED') || s.includes('COMPLETED') || s.includes('CONCLUIDO') || s.includes('ENTREGUE')) {
-    return 'CONCLUIDO';
-  }
-  if (s.includes('CANCEL') || s.includes('REJECT') || s.includes('RECUSADO')) {
-    return 'CANCELADO';
-  }
-  if (s.includes('READY') || s.includes('OUT') || s.includes('PREPARO') || s.includes('ACCEPTED') || s.includes('ACEITO')) {
-    return 'EM_PREPARO';
-  }
-  return 'NOVO';
-}
-
 export default function DashboardOperationalView({
   metrics,
   efficiency,
@@ -74,139 +59,16 @@ export default function DashboardOperationalView({
   onRefresh
 }: DashboardOperationalProps) {
   const [filterPeriod, setFilterPeriod] = useState<'hoje' | '7d' | '30d'>('hoje');
-  const [internalOrders, setInternalOrders] = useState<OrderItem[]>([]);
-  const [internalMetrics, setInternalMetrics] = useState<MetricData | null>(null);
-  const [internalEfficiency, setInternalEfficiency] = useState<EfficiencyData | null>(null);
-  const [internalLoading, setInternalLoading] = useState<boolean>(false);
 
-  const loadOperationalData = useCallback(async (isMountedCheck?: () => boolean) => {
-    // Se já foram passados dados completos via props, não precisa fazer fetch
-    if (metrics && orders && orders.length > 0) return;
-
-    try {
-      if (isMountedCheck ? isMountedCheck() : true) {
-        setInternalLoading(true);
-      }
-      const res = await fetchWithAuth(`${API_BASE}/orders`);
-      if (!res || !res.ok) {
-        throw new Error('Falha ao buscar pedidos da API');
-      }
-      const data = await res.json();
-      const rawList: any[] = Array.isArray(data?.orders)
-        ? data.orders
-        : Array.isArray(data)
-          ? data
-          : [];
-
-      // Mapear para OrderItem
-      const mappedOrders: OrderItem[] = rawList.map((raw: any) => {
-        const id = String(raw.id || '').slice(0, 8).toUpperCase() || 'PEDIDO';
-        const clienteNome = raw.customerName || raw.customer_name || raw.client_name || raw.client || 'Cliente';
-        const valorTotal = Number(raw.total_amount ?? raw.total ?? raw.amount ?? 0);
-        const status = mapOrderStatus(raw.status);
-        const dateObj = raw.createdAt || raw.created_at ? new Date(raw.createdAt || raw.created_at) : new Date();
-        const horaPedido = !isNaN(dateObj.getTime())
-          ? dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-          : '--:--';
-        return {
-          id,
-          clienteNome,
-          valorTotal,
-          status,
-          tempoAtendimento: '5 min',
-          horaPedido
-        };
-      });
-
-      // Cálculo de Métricas
-      const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-
-      const todayList = rawList.filter((o: any) => {
-        const d = o.createdAt || o.created_at;
-        if (!d) return false;
-        const time = new Date(d).getTime();
-        return !isNaN(time) && time >= startOfToday;
-      });
-
-      const activeSet = todayList.length > 0 ? todayList : rawList;
-      const pedidosHoje = activeSet.length;
-
-      const nonCancelled = activeSet.filter((o: any) => {
-        const st = String(o.status || '').toUpperCase();
-        return !st.includes('CANCEL') && !st.includes('REJECT') && !st.includes('RECUSADO');
-      });
-
-      const concluidos = activeSet.filter((o: any) => {
-        const st = String(o.status || '').toUpperCase();
-        return st.includes('DELIVERED') || st.includes('COMPLETED') || st.includes('CONCLUIDO') || st.includes('ENTREGUE');
-      });
-
-      const faturamentoDia = nonCancelled.reduce((sum: number, o: any) => {
-        const val = Number(o.total_amount ?? o.total ?? o.amount ?? 0);
-        return sum + (isNaN(val) ? 0 : val);
-      }, 0);
-
-      const ticketMedio = nonCancelled.length > 0
-        ? faturamentoDia / nonCancelled.length
-        : pedidosHoje > 0
-          ? faturamentoDia / pedidosHoje
-          : 0;
-
-      const taxaConversao = pedidosHoje > 0
-        ? (concluidos.length > 0 ? (concluidos.length / pedidosHoje) * 100 : (nonCancelled.length / pedidosHoje) * 100)
-        : 0;
-
-      if (isMountedCheck ? isMountedCheck() : true) {
-        setInternalOrders(mappedOrders);
-        setInternalMetrics({
-          pedidosHoje,
-          ticketMedio,
-          faturamentoDia,
-          taxaConversao
-        });
-      }
-
-      // Eficiência de IA
-      const totalCount = rawList.length || 1;
-      const iaCount = rawList.filter((o: any) => o.created_by !== 'human' && !o.manual_entry).length;
-      const humanCount = Math.max(0, rawList.length - iaCount);
-      const pctIa = Math.round((iaCount / totalCount) * 100);
-
-      if (isMountedCheck ? isMountedCheck() : true) {
-        setInternalEfficiency({
-          atendimentosIa: iaCount || 14,
-          atendimentosHumanos: humanCount || 2,
-          porcentagemIa: pctIa > 0 ? pctIa : 88
-        });
-      }
-    } catch (err) {
-      console.warn('[DashboardOperationalView] Aviso ao carregar pedidos operacionais:', err);
-    } finally {
-      if (isMountedCheck ? isMountedCheck() : true) {
-        setInternalLoading(false);
-      }
-    }
-  }, [metrics, orders]);
-
-  useEffect(() => {
-    let isMounted = true;
-    loadOperationalData(() => isMounted);
-    return () => {
-      isMounted = false;
-    };
-  }, [loadOperationalData]);
-
-  const effectiveMetrics = metrics || internalMetrics;
-  const effectiveEfficiency = efficiency || internalEfficiency;
-  const effectiveOrders = (orders && orders.length > 0) ? orders : internalOrders;
-  const effectiveLoading = loading || internalLoading;
+  const effectiveMetrics = metrics;
+  const effectiveEfficiency = efficiency;
+  const effectiveOrders = orders && orders.length > 0 ? orders : [];
+  const effectiveLoading = loading;
 
   const handleRefresh = () => {
     if (onRefresh) {
       onRefresh();
     }
-    loadOperationalData();
   };
 
   // Status Badge Helper
