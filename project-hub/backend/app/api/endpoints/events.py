@@ -77,26 +77,5 @@ async def ingest_event(request: Request):
     )
 
 
-@router.post("/webhooks/events/test", response_model=Dict[str, Any])
-async def test_event_ingress():
-    """
-    Endpoint de teste para o Event Ingress.
-    Retorna um exemplo de evento válido.
-    """
-    return {
-        "example_event": {
-            "version": 1,
-            "event_id": str(uuid.uuid4()),
-            "type": "message.created",
-            "tenant_id": "tenant-123",
-            "session_id": "session-456",
-            "occurred_at": datetime.now(timezone.utc).isoformat(),
-            "payload": {
-                "message_id": "msg-789",
-                "from": "5511999999999",
-                "body": "Exemplo de mensagem",
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-        },
-        "valid_types": [e.value for e in SystemEventType]
-    }
+# REMOVIDO: Endpoint de teste não deve ficar exposto em produção
+# Para testes, usar pytest com fixtures ou ambiente de desenvolvimento isolado

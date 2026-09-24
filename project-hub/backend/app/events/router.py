@@ -33,7 +33,6 @@ class EventRouter:
     
     def __init__(self):
         self._handlers: Dict[SystemEventType, Callable] = {}
-        self._fallback_handler: Optional[Callable] = None
     
     def register_handler(
         self,
@@ -52,15 +51,6 @@ class EventRouter:
         self._handlers[event_type] = handler
         logger.info(f"Registered handler for {event_type}")
     
-    def register_fallback_handler(
-        self,
-        handler: Callable[[SystemEvent], EventHandlerResult]
-    ) -> None:
-        """
-        Registra handler para eventos sem handler específico.
-        """
-        self._fallback_handler = handler
-    
     def route(self, event: SystemEvent) -> EventHandlerResult:
         """
         Roteia um evento para o handler apropriado.
@@ -70,21 +60,26 @@ class EventRouter:
             
         Returns:
             EventHandlerResult com resultado do processamento
+            
+        Raises:
+            UNHANDLED_EVENT_TYPE: Se não houver handler registrado para o tipo
         """
         handler = self._handlers.get(event.type)
         
         if handler is None:
-            if self._fallback_handler:
-                logger.info(f"Using fallback handler for {event.type}")
-                handler = self._fallback_handler
-            else:
-                logger.error(f"No handler registered for {event.type}")
-                return EventHandlerResult(
-                    success=False,
-                    event_id=event.event_id,
-                    handler="none",
-                    error=f"No handler for event type: {event.type}"
-                )
+            # SEM fallback — erro explícito para tipo sem handler
+            logger.error(
+                f"UNHANDLED_EVENT_TYPE: {event.type} | "
+                f"event_id={event.event_id} | "
+                f"tenant_id={event.tenant_id} | "
+                f"session_id={event.session_id}"
+            )
+            return EventHandlerResult(
+                success=False,
+                event_id=event.event_id,
+                handler="none",
+                error=f"UNHANDLED_EVENT_TYPE: {event.type}"
+            )
         
         try:
             result = handler(event)
@@ -112,10 +107,12 @@ event_router = EventRouter()
 
 
 # Handlers padrão (placeholders para implementação futura)
+# NOTA: MessageEventHandler requer injeção de dependências (repository, realtime, notification)
+# Será integrado quando o repositório real estiver disponível
 
 def handle_message_created(event: SystemEvent) -> EventHandlerResult:
     """Handler para message.created."""
-    # TODO: Implementar lógica de negócio
+    # TODO: Integrar com MessageEventHandler quando repositório estiver disponível
     return EventHandlerResult(
         success=True,
         event_id=event.event_id,
@@ -125,11 +122,21 @@ def handle_message_created(event: SystemEvent) -> EventHandlerResult:
 
 def handle_message_status_updated(event: SystemEvent) -> EventHandlerResult:
     """Handler para message.status.updated."""
-    # TODO: Implementar lógica de negócio
+    # TODO: Integrar com MessageEventHandler quando repositório estiver disponível
     return EventHandlerResult(
         success=True,
         event_id=event.event_id,
         handler="handle_message_status_updated"
+    )
+
+
+def handle_message_reaction_updated(event: SystemEvent) -> EventHandlerResult:
+    """Handler para message.reaction.updated."""
+    # TODO: Integrar com MessageEventHandler quando repositório estiver disponível
+    return EventHandlerResult(
+        success=True,
+        event_id=event.event_id,
+        handler="handle_message_reaction_updated"
     )
 
 
@@ -143,7 +150,30 @@ def handle_session_connected(event: SystemEvent) -> EventHandlerResult:
     )
 
 
+def handle_session_disconnected(event: SystemEvent) -> EventHandlerResult:
+    """Handler para session.disconnected."""
+    # TODO: Implementar lógica de negócio
+    return EventHandlerResult(
+        success=True,
+        event_id=event.event_id,
+        handler="handle_session_disconnected"
+    )
+
+
+def handle_session_qr_updated(event: SystemEvent) -> EventHandlerResult:
+    """Handler para session.qr.updated."""
+    # TODO: Implementar lógica de negócio
+    return EventHandlerResult(
+        success=True,
+        event_id=event.event_id,
+        handler="handle_session_qr_updated"
+    )
+
+
 # Registrar handlers padrão
 event_router.register_handler(SystemEventType.MESSAGE_CREATED, handle_message_created)
 event_router.register_handler(SystemEventType.MESSAGE_STATUS_UPDATED, handle_message_status_updated)
+event_router.register_handler(SystemEventType.MESSAGE_REACTION_UPDATED, handle_message_reaction_updated)
 event_router.register_handler(SystemEventType.SESSION_CONNECTED, handle_session_connected)
+event_router.register_handler(SystemEventType.SESSION_DISCONNECTED, handle_session_disconnected)
+event_router.register_handler(SystemEventType.SESSION_QR_UPDATED, handle_session_qr_updated)
