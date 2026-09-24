@@ -350,7 +350,7 @@ export default function DashboardOperationalView({
             <div>
               <h2 className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
                 <ShoppingBag className="w-4 h-4 text-purple-600" />
-                Fila de Pedidos Recentes
+                Pedidos do Período
               </h2>
             </div>
             <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">
