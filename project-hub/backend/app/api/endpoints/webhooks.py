@@ -480,7 +480,7 @@ async def _process_update_chat(
         "active_clients_connected": len(tenant_chat_listeners),
     }
 
-@router.post("/crm/update-chat")
+@router.post("/crm/update-chat", deprecated=True)
 async def update_chat_webhook_post(
     request: Request,
     contact_id: Optional[str] = None,
@@ -556,7 +556,7 @@ async def _process_update_chat_message_status(
     return {"status": "success", "message_id": message_id, "status": status}
 
 
-@router.post("/crm/message-status")
+@router.post("/crm/message-status", deprecated=True)
 async def webhook_message_status(
     request: Request,
     tenant_id: str = Body(..., embed=True),
@@ -948,7 +948,7 @@ async def deploy_webhook(request: Request, db: Session = Depends(get_db)):
 
     return {"status": "success"}
 
-@router.post("/inbound/whatsapp")
+@router.post("/inbound/whatsapp", deprecated=True)
 async def whatsapp_inbound_webhook(request: Request):
     """
     Inbound webhook for WhatsApp messages via n8n.
@@ -999,7 +999,7 @@ async def whatsapp_inbound_webhook(request: Request):
     return {"status": "success", "message": new_msg}
 
 
-@router.post("/inbound/instagram")
+@router.post("/inbound/instagram", deprecated=True)
 async def instagram_inbound_webhook(request: Request):
     """
     Inbound webhook for Instagram messages via n8n.
@@ -1050,7 +1050,7 @@ async def instagram_inbound_webhook(request: Request):
     return {"status": "success", "message": new_msg}
 
 
-@router.post("/waha/session-status")
+@router.post("/waha/session-status", deprecated=True)
 async def waha_session_status_webhook(request: Request):
     """
     Endpoint to receive session status updates via n8n.
