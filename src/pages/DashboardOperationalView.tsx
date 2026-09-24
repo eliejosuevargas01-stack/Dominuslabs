@@ -60,15 +60,18 @@ interface DashboardOperationalProps {
 }
 
 export default function DashboardOperationalView({
-  metrics,
-  efficiency,
-  orders,
+  metrics: propMetrics,
+  efficiency: propEfficiency,
+  orders: propOrders,
   loading = false,
   onRefresh
 }: DashboardOperationalProps) {
   const [filterPeriod, setFilterPeriod] = useState<'hoje' | '7d' | '30d'>('hoje');
   const [apiLoading, setApiLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [apiMetrics, setApiMetrics] = useState<MetricData | null>(null);
+  const [apiEfficiency, setApiEfficiency] = useState<EfficiencyData | null>(null);
+  const [apiOrders, setApiOrders] = useState<OrderItem[]>([]);
 
   // Fetch from backend when component mounts or filter changes
   useEffect(() => {
@@ -77,15 +80,14 @@ export default function DashboardOperationalView({
       setApiError(null);
       try {
         const data = await fetchOperationalDashboard(filterPeriod);
-        // Merge with any props passed from parent (allows testing with mock data)
-        // For production, use data directly
-        if (!metrics) metrics = data.metrics;
-        if (!efficiency) efficiency = data.efficiency;
-        if (!orders) orders = data.orders;
+        setApiMetrics(data.metrics);
+        setApiEfficiency(data.efficiency);
+        setApiOrders(data.orders);
       } catch (err: any) {
-        setApiError(err?.message || 'Falha ao carregar dados operacionais');
+        const errorMsg = err?.message || 'Falha ao carregar dados operacionais';
+        setApiError(errorMsg);
         console.error('DashboardOperationalView load error:', err);
-        toast.error(apiError || 'Erro ao carregar dados');
+        toast.error(errorMsg);
       } finally {
         setApiLoading(false);
       }
@@ -93,9 +95,10 @@ export default function DashboardOperationalView({
     loadData();
   }, [filterPeriod]);
 
-  const effectiveMetrics = metrics;
-  const effectiveEfficiency = efficiency;
-  const effectiveOrders = orders && orders.length > 0 ? orders : [];
+  // Props override API data (allows testing with mock data)
+  const effectiveMetrics = propMetrics ?? apiMetrics;
+  const effectiveEfficiency = propEfficiency ?? apiEfficiency;
+  const effectiveOrders = propOrders ?? apiOrders;
   const effectiveLoading = loading || apiLoading;
 
   const handleRefresh = async () => {
@@ -107,12 +110,14 @@ export default function DashboardOperationalView({
     setApiError(null);
     try {
       const data = await fetchOperationalDashboard(filterPeriod);
-      if (!metrics) metrics = data.metrics;
-      if (!efficiency) efficiency = data.efficiency;
-      if (!orders) orders = data.orders;
+      setApiMetrics(data.metrics);
+      setApiEfficiency(data.efficiency);
+      setApiOrders(data.orders);
     } catch (err: any) {
-      setApiError(err?.message || 'Falha ao atualizar dados operacionais');
+      const errorMsg = err?.message || 'Falha ao atualizar dados operacionais';
+      setApiError(errorMsg);
       console.error('Refresh error:', err);
+      toast.error(errorMsg);
     } finally {
       setApiLoading(false);
     }

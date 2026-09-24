@@ -110,12 +110,17 @@ def calcular_tempo_atendimento(data_hora: datetime, status: str) -> str:
     return "-"
 
 
-def get_today_range() -> tuple[datetime, datetime]:
-    """Retorna início e fim do dia atual (UTC)."""
+def get_periodo_range(periodo: str) -> tuple[datetime, datetime]:
+    """Retorna início e fim do período solicitado (UTC)."""
     now = datetime.utcnow()
-    inicio_dia = datetime(now.year, now.month, now.day, 0, 0, 0)
-    fim_dia = datetime(now.year, now.month, now.day, 23, 59, 59)
-    return inicio_dia, fim_dia
+    if periodo == "7d":
+        inicio = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0)
+    elif periodo == "30d":
+        inicio = (now - timedelta(days=30)).replace(hour=0, minute=0, second=0)
+    else:  # hoje
+        inicio = now.replace(hour=0, minute=0, second=0)
+    fim = now.replace(hour=23, minute=59, second=59)
+    return inicio, fim
 
 
 # ============================================================================ #
@@ -140,7 +145,7 @@ async def get_operational_dashboard(
     user, tenant_id = resolve_current_user_tenant(db, current_user)
     
     periodo = request.query_params.get("periodo", "hoje")
-    inicio_dia, fim_dia = get_today_range()
+    inicio_dia, fim_dia = get_periodo_range(periodo)
     
     # ======================================================================== #
     # 1. Métricas de Pedidos                                                  #
@@ -221,13 +226,10 @@ async def get_operational_dashboard(
     """).bindparams(tenant_id=tenant_id, hoje=inicio_dia)
     
     result = db.execute(stmt_ia_resolved).fetchone()
-    atendimentos_ia = result[0] if result else 14  # Valor simulado para demo
+    atendimentos_ia = result[0] if result else 0  # Sem dados → 0, nunca inventado
     
     # Atendimentos humanos (restante)
-    atendimentos_humanos = pedidos_hoje - atendimentos_ia
-    if atendimentos_humanos < 0:
-        atendimentos_humanos = 2  # Valor simulado
-        atendimentos_ia = pedidos_hoje - atendimentos_humanos
+    atendimentos_humanos = max(0, pedidos_hoje - atendimentos_ia)
     
     porcentagem_ia = round((atendimentos_ia / (atendimentos_ia + atendimentos_humanos)) * 100, 1) if (atendimentos_ia + atendimentos_humanos) > 0 else 0.0
     
@@ -292,9 +294,10 @@ async def get_operational_dashboard(
 async def get_operational_metrics(
     request: Request,
     db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
 ):
     """GET apenas as métricas de pedidos."""
-    result = await get_operational_dashboard(request, db)
+    result = await get_operational_dashboard(request, db, current_user)
     return result.metrics
 
 
@@ -302,9 +305,10 @@ async def get_operational_metrics(
 async def get_operational_efficiency(
     request: Request,
     db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
 ):
     """GET apenas a eficiência da IA."""
-    result = await get_operational_dashboard(request, db)
+    result = await get_operational_dashboard(request, db, current_user)
     return result.efficiency
 
 
@@ -312,8 +316,9 @@ async def get_operational_efficiency(
 async def get_operational_orders(
     request: Request,
     db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
 ):
     """GET apenas os pedidos recentes."""
-    result = await get_operational_dashboard(request, db)
+    result = await get_operational_dashboard(request, db, current_user)
     return result.orders
 
