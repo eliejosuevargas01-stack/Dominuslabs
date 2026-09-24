@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from app.events.schemas import SystemEvent, EventValidationError, validate_event
 from app.events.types import SystemEventType
 from app.events.registry import get_event_metadata
+from app.events.router import event_router, EventHandlerResult
 
 router = APIRouter()
 
@@ -59,11 +60,17 @@ async def ingest_event(request: Request):
             detail=f"Unknown event type: {event.type}"
         )
     
-    # TODO: Enfileirar evento para processamento assíncrono
-    # Por enquanto, apenas retornar sucesso
+    # Rotear evento para handler apropriado
+    result: EventHandlerResult = event_router.route(event)
+    
+    if not result.success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Event processing failed: {result.error}"
+        )
     
     return EventIngressResponse(
-        status="accepted",
+        status="processed",
         event_id=event.event_id,
         type=event.type.value,
         received_at=datetime.now(timezone.utc)
