@@ -9,6 +9,7 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from decimal import Decimal
+import pytz
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -62,10 +63,10 @@ class MetricDataResponse(BaseModel):
 
 
 class EfficiencyDataResponse(BaseModel):
-    """Eficiência do atendimento: IA vs Humano."""
-    atendimentosIa: int
-    atendimentosHumanos: int
-    porcentagemIa: float
+    """Eficiência do atendimento: IA vs Humano. Null quando não calculável."""
+    atendimentosIa: Optional[int] = None
+    atendimentosHumanos: Optional[int] = None
+    porcentagemIa: Optional[float] = None
 
 
 class OrderItemResponse(BaseModel):
@@ -90,8 +91,13 @@ class OperationalDashboardResponse(BaseModel):
 # ============================================================================ #
 
 def calcular_tempo_atendimento(data_hora: datetime, status: str) -> str:
-    """Calcula o tempo de atendimento decorrido."""
-    now = datetime.utcnow()
+    """Calcula o tempo de atendimento decorrido. Sem hardcode de estimativas."""
+    tz = pytz.timezone("America/Sao_Paulo")
+    now = datetime.now(tz)
+    
+    # Garantir que data_hora é timezone-aware
+    if data_hora.tzinfo is None:
+        data_hora = tz.localize(data_hora)
     
     if status == "NOVO":
         delta = now - data_hora
@@ -101,25 +107,41 @@ def calcular_tempo_atendimento(data_hora: datetime, status: str) -> str:
         horas = minutos // 60
         return f"{horas}h {minutos % 60}min"
     
-    # Para pedidos concluídos ou em preparo, aproximar baseado no status
-    if status == "EM_PREPARO":
-        return "5-10 min"
-    if status == "CONCLUIDO":
-        return "15-30 min"
+    # Para pedidos em preparo ou concluídos, calcular tempo desde criação
+    if status in ("EM_PREPARO", "CONCLUIDO"):
+        delta = now - data_hora
+        minutos = int(delta.total_seconds() // 60)
+        if minutos < 60:
+            return f"{minutos} min"
+        horas = minutos // 60
+        return f"{horas}h {minutos % 60}min"
     
-    return "-"
+    return "—"
 
 
-def get_periodo_range(periodo: str) -> tuple[datetime, datetime]:
-    """Retorna início e fim do período solicitado (UTC)."""
-    now = datetime.utcnow()
+def get_tenant_timezone(tenant_id: Optional[str]) -> str:
+    """Retorna o timezone do tenant. Default: America/Sao_Paulo."""
+    # TODO: Buscar timezone real do tenant no banco quando o campo existir
+    # Por enquanto, usa o timezone padrão do Brasil
+    return "America/Sao_Paulo"
+
+
+def get_periodo_range(periodo: str, tenant_id: str = None) -> tuple[datetime, datetime]:
+    """
+    Retorna início e fim do período solicitado no timezone do tenant.
+    O "hoje" é definido pelo timezone do tenant, não por UTC arbitrário.
+    """
+    tz_str = get_tenant_timezone(tenant_id) if tenant_id else "America/Sao_Paulo"
+    tz = pytz.timezone(tz_str)
+    now = datetime.now(tz)
+    
     if periodo == "7d":
-        inicio = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0)
+        inicio = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
     elif periodo == "30d":
-        inicio = (now - timedelta(days=30)).replace(hour=0, minute=0, second=0)
+        inicio = (now - timedelta(days=30)).replace(hour=0, minute=0, second=0, microsecond=0)
     else:  # hoje
-        inicio = now.replace(hour=0, minute=0, second=0)
-    fim = now.replace(hour=23, minute=59, second=59)
+        inicio = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    fim = now.replace(hour=23, minute=59, second=59, microsecond=999999)
     return inicio, fim
 
 
@@ -145,7 +167,7 @@ async def get_operational_dashboard(
     user, tenant_id = resolve_current_user_tenant(db, current_user)
     
     periodo = request.query_params.get("periodo", "hoje")
-    inicio_dia, fim_dia = get_periodo_range(periodo)
+    inicio_dia, fim_dia = get_periodo_range(periodo, tenant_id)
     
     # ======================================================================== #
     # 1. Métricas de Pedidos                                                  #
@@ -211,27 +233,15 @@ async def get_operational_dashboard(
     # ======================================================================== #
     # 2. Eficiência da IA vs Humano                                           #
     # ======================================================================== #
-    # NOTA: Esta é uma aproximação baseada em métricas simuladas até que
-    # tenhamos dados reais de atendimentos por canal no banco.
-    # Em produção, isso deveria contar atendimentos por sessão com flag 'ia_resolved'
+    # NOTA: Esta métrica conta pedidos com items (proxy de "pedido estruturado"),
+    # NÃO é uma métrica real de atendimento por IA. Quando houver dados reais
+    # de atendimentos (ex: flag 'ia_resolved' na conversa), substituir esta query.
+    # Até lá, os valores são null/indisponíveis para não apresentar proxy como verdade.
     
-    # Contar pedidos que chegaram via IA (ex: order_created via webhook do n8n)
-    stmt_ia_resolved = sa_text("""
-        SELECT COUNT(DISTINCT o.id) as total
-        FROM order_manager_orders o
-        LEFT JOIN order_manager_order_items i ON o.id = i.order_manager_order_id
-        WHERE o.tenant_id = :tenant_id
-        AND o.created_at >= :inicio AND o.created_at <= :fim
-        AND i.id IS NOT NULL
-    """).bindparams(tenant_id=tenant_id, inicio=inicio_dia, fim=fim_dia)
-    
-    result = db.execute(stmt_ia_resolved).fetchone()
-    atendimentos_ia = result[0] if result else 0  # Sem dados → 0, nunca inventado
-    
-    # Atendimentos humanos (restante)
-    atendimentos_humanos = max(0, pedidos_hoje - atendimentos_ia)
-    
-    porcentagem_ia = round((atendimentos_ia / (atendimentos_ia + atendimentos_humanos)) * 100, 1) if (atendimentos_ia + atendimentos_humanos) > 0 else 0.0
+    # Sem dados reais de atendimento → null/indisponível
+    atendimentos_ia = None
+    atendimentos_humanos = None
+    porcentagem_ia = None
     
     efficiency = EfficiencyDataResponse(
         atendimentosIa=atendimentos_ia,

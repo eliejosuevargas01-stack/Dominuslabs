@@ -34,15 +34,12 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
-    # Authentication
-    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
-    # ADMIN_PASSWORD: No safe default - fail-closed if missing
+    # Authentication — fail-closed, no defaults for sensitive values
+    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "")
     ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")
-    ADMIN_TENANT_ID: str = os.getenv("ADMIN_TENANT_ID", os.getenv("MASTER_TENANT_ID", "admin"))
-    VIEWER_USERNAME: str = os.getenv("VIEWER_USERNAME", "patrik182rodrigues@gmail.com")
-    # VIEWER_PASSWORD: No safe default - fail-closed if missing
+    ADMIN_TENANT_ID: str = os.getenv("ADMIN_TENANT_ID", os.getenv("MASTER_TENANT_ID", ""))
+    VIEWER_USERNAME: str = os.getenv("VIEWER_USERNAME", "")
     VIEWER_PASSWORD: str = os.getenv("VIEWER_PASSWORD", "")
-    # SECRET_KEY: No safe default - fail-closed if missing
     SECRET_KEY: str = os.getenv("JWT_SECRET", "")
 
     # LiteLLM TTS
@@ -91,9 +88,9 @@ class Settings(BaseSettings):
     CRM_CREATE_ACTIVITY_WEBHOOK_URL: str = os.getenv("CRM_CREATE_ACTIVITY_WEBHOOK_URL", "")
     ACCEPT_ORDER_WEBHOOK_URL: str = os.getenv("ACCEPT_ORDER_WEBHOOK_URL", "")
     
-    WHATSAPP_API_URL: str = os.getenv("WHATSAPP_API_URL", "http://localhost:3000")
-    WHATSAPP_PUBLIC_URL: str = os.getenv("WHATSAPP_PUBLIC_URL", "https://dominuslabs.online")
-    IDENTITY_WORKER_URL: str = os.getenv("IDENTITY_WORKER_URL", "https://idc-dominuslabs.eliejosuevargas01.workers.dev")
+    WHATSAPP_API_URL: str = os.getenv("WHATSAPP_API_URL", "")
+    WHATSAPP_PUBLIC_URL: str = os.getenv("WHATSAPP_PUBLIC_URL", "")
+    IDENTITY_WORKER_URL: str = os.getenv("IDENTITY_WORKER_URL", "")
 
     # Hybrid Encryption Keys (Zero-Trust)
     DOMINUS_PRIVATE_KEY: str = os.getenv("DOMINUS_PRIVATE_KEY", "")

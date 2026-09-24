@@ -33,9 +33,9 @@ export interface MetricData {
 }
 
 export interface EfficiencyData {
-  atendimentosIa: number;
-  atendimentosHumanos: number;
-  porcentagemIa: number;
+  atendimentosIa: number | null;
+  atendimentosHumanos: number | null;
+  porcentagemIa: number | null;
 }
 
 export interface OrderItem {
@@ -294,7 +294,7 @@ export default function DashboardOperationalView({
                 <Bot className="w-4 h-4 text-purple-600" />
                 Eficiência da IA
               </h2>
-              {effectiveEfficiency && (
+              {effectiveEfficiency?.porcentagemIa != null && (
                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
                   {effectiveEfficiency.porcentagemIa}% Auto
                 </span>
@@ -306,7 +306,7 @@ export default function DashboardOperationalView({
           </div>
 
           {/* UI Container */}
-          {effectiveEfficiency ? (
+          {effectiveEfficiency?.atendimentosIa != null && effectiveEfficiency?.atendimentosHumanos != null ? (
             <div className="space-y-4">
               <div className="flex flex-col gap-2 text-xs font-medium text-zinc-600">
                 <div className="flex items-center justify-between">
@@ -328,11 +328,11 @@ export default function DashboardOperationalView({
               <div className="w-full h-2.5 bg-zinc-100 rounded-full overflow-hidden flex">
                 <div
                   className="h-full bg-purple-600 rounded-full"
-                  style={{ width: `${Math.min(Math.max(effectiveEfficiency.porcentagemIa, 0), 100)}%` }}
+                  style={{ width: `${Math.min(Math.max(effectiveEfficiency.porcentagemIa ?? 0, 0), 100)}%` }}
                 />
                 <div
                   className="h-full bg-transparent rounded-full"
-                  style={{ width: `${100 - Math.min(Math.max(effectiveEfficiency.porcentagemIa, 0), 100)}%` }}
+                  style={{ width: `${100 - Math.min(Math.max(effectiveEfficiency.porcentagemIa ?? 0, 0), 100)}%` }}
                 />
               </div>
             </div>
