@@ -854,3 +854,63 @@ export const deleteProduct = async (id: string, tenantId: string = 'default'): P
   });
   if (!response.ok) throw new Error('Erro ao deletar produto');
 };
+
+// ============================================================================
+// Operational Dashboard API (DATA-003)
+// ============================================================================
+
+export interface OperationalMetrics {
+  pedidosHoje: number;
+  ticketMedio: number;
+  faturamentoDia: number;
+  taxaConversao: number;
+}
+
+export interface OperationalEfficiency {
+  atendimentosIa: number;
+  atendimentosHumanos: number;
+  porcentagemIa: number;
+}
+
+export interface OperationalOrder {
+  id: string;
+  clienteNome: string;
+  valorTotal: number;
+  status: 'NOVO' | 'EM_PREPARO' | 'CONCLUIDO' | 'CANCELADO';
+  tempoAtendimento: string;
+  horaPedido: string;
+}
+
+export interface OperationalDashboardResponse {
+  metrics: OperationalMetrics;
+  efficiency: OperationalEfficiency;
+  orders: OperationalOrder[];
+}
+
+export async function fetchOperationalDashboard(periodo?: 'hoje' | '7d' | '30d'): Promise<OperationalDashboardResponse> {
+  const params = periodo ? `?periodo=${periodo}` : '';
+  const res = await fetchWithAuth(`${API_BASE}/operational/dashboard${params}`);
+  if (!res.ok) throw new Error('Falha ao buscar métricas operacionais');
+  return res.json();
+}
+
+export async function fetchOperationalMetrics(periodo?: 'hoje' | '7d' | '30d'): Promise<OperationalMetrics> {
+  const params = periodo ? `?periodo=${periodo}` : '';
+  const res = await fetchWithAuth(`${API_BASE}/operational/metrics${params}`);
+  if (!res.ok) throw new Error('Falha ao buscar métricas de pedidos');
+  return res.json();
+}
+
+export async function fetchOperationalEfficiency(periodo?: 'hoje' | '7d' | '30d'): Promise<OperationalEfficiency> {
+  const params = periodo ? `?periodo=${periodo}` : '';
+  const res = await fetchWithAuth(`${API_BASE}/operational/efficiency${params}`);
+  if (!res.ok) throw new Error('Falha ao buscar eficiência da IA');
+  return res.json();
+}
+
+export async function fetchOperationalOrders(periodo?: 'hoje' | '7d' | '30d'): Promise<OperationalOrder[]> {
+  const params = periodo ? `?periodo=${periodo}` : '';
+  const res = await fetchWithAuth(`${API_BASE}/operational/orders${params}`);
+  if (!res.ok) throw new Error('Falha ao buscar pedidos');
+  return res.json();
+}

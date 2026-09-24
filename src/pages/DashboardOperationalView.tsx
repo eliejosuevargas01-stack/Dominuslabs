@@ -1,12 +1,13 @@
 /**
- * Documentation-Driven Testing:
+ * DATA-003: Conectado ao backend via data pipeline (fetchOperationalDashboard).
  * O comportamento esperado para DashboardOperationalView.tsx:
  * - Botão 'Nova Ação': Exibe ou abre um modal conforme o contexto.
  * - Animações: Cartões de estatísticas (`StatCard`) usam transições Tailwind para hover e skeleton loaders.
  * - Erros: Carregamento falho dispara toasts, e o loading exibe componentes vazios/esqueleto.
+ * - Backend: Busca dados operacionais via API /api/v1/operational/dashboard.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ShoppingBag,
   DollarSign,
@@ -17,10 +18,13 @@ import {
   Clock,
   RefreshCw,
   BarChart2,
-  Inbox
+  Inbox,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
+import { toast } from 'sonner';
 
-// Types for backend integration
+// Types for backend integration (mirrored from api.ts)
 export interface MetricData {
   pedidosHoje: number;
   ticketMedio: number;
@@ -43,6 +47,9 @@ export interface OrderItem {
   horaPedido: string;
 }
 
+// API imports (DATA-003)
+import { fetchOperationalDashboard, OperationalDashboardResponse } from '../services/api';
+
 interface DashboardOperationalProps {
   metrics?: MetricData;
   efficiency?: EfficiencyData;
@@ -59,15 +66,54 @@ export default function DashboardOperationalView({
   onRefresh
 }: DashboardOperationalProps) {
   const [filterPeriod, setFilterPeriod] = useState<'hoje' | '7d' | '30d'>('hoje');
+  const [apiLoading, setApiLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  // Fetch from backend when component mounts or filter changes
+  useEffect(() => {
+    const loadData = async () => {
+      setApiLoading(true);
+      setApiError(null);
+      try {
+        const data = await fetchOperationalDashboard(filterPeriod);
+        // Merge with any props passed from parent (allows testing with mock data)
+        // For production, use data directly
+        if (!metrics) metrics = data.metrics;
+        if (!efficiency) efficiency = data.efficiency;
+        if (!orders) orders = data.orders;
+      } catch (err: any) {
+        setApiError(err?.message || 'Falha ao carregar dados operacionais');
+        console.error('DashboardOperationalView load error:', err);
+        toast.error(apiError || 'Erro ao carregar dados');
+      } finally {
+        setApiLoading(false);
+      }
+    };
+    loadData();
+  }, [filterPeriod]);
 
   const effectiveMetrics = metrics;
   const effectiveEfficiency = efficiency;
   const effectiveOrders = orders && orders.length > 0 ? orders : [];
-  const effectiveLoading = loading;
+  const effectiveLoading = loading || apiLoading;
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     if (onRefresh) {
       onRefresh();
+    }
+    // Reload from API
+    setApiLoading(true);
+    setApiError(null);
+    try {
+      const data = await fetchOperationalDashboard(filterPeriod);
+      if (!metrics) metrics = data.metrics;
+      if (!efficiency) efficiency = data.efficiency;
+      if (!orders) orders = data.orders;
+    } catch (err: any) {
+      setApiError(err?.message || 'Falha ao atualizar dados operacionais');
+      console.error('Refresh error:', err);
+    } finally {
+      setApiLoading(false);
     }
   };
 
@@ -89,6 +135,34 @@ export default function DashboardOperationalView({
 
   return (
     <div className="space-y-6 pb-12">
+      {/* Loading State */}
+      {effectiveLoading && !apiError && (
+        <div className="flex items-center justify-center py-20">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+            <p className="text-sm text-zinc-500">Carregando métricas operacionais...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Error State */}
+      {apiError && !effectiveLoading && (
+        <div className="flex flex-col items-center justify-center py-12 bg-white rounded-xl border border-zinc-200">
+          <AlertCircle className="w-10 h-10 text-rose-500 mb-3" />
+          <h3 className="text-sm font-semibold text-zinc-900">Falha ao carregar dados</h3>
+          <p className="text-xs text-zinc-500 mt-1 mb-4">{apiError}</p>
+          <button
+            onClick={() => {
+              setApiError(null);
+              setApiLoading(true);
+            }}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg transition-colors"
+          >
+            Tentar Novamente
+          </button>
+        </div>
+      )}
+
       {/* Header Area */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

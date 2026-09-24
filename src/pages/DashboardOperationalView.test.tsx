@@ -4,6 +4,19 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 
 import DashboardOperationalView from './DashboardOperationalView';
 
+// Mock the API module so fetchOperationalDashboard is controllable in tests
+vi.mock('../services/api', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../services/api')>();
+  return {
+    ...original,
+    fetchOperationalDashboard: vi.fn().mockResolvedValue({
+      metrics: { pedidosHoje: 0, ticketMedio: 0, faturamentoDia: 0, taxaConversao: 0 },
+      efficiency: { atendimentosIa: 0, atendimentosHumanos: 0, porcentagemIa: 0 },
+      orders: [],
+    }),
+  };
+});
+
 const todayISO = new Date().toISOString();
 
 const baseMetrics = {
@@ -61,9 +74,15 @@ describe('DashboardOperationalView Component', () => {
     expect(screen.getByText('Nenhum pedido mapeado na sessão atual.')).toBeInTheDocument();
   });
 
-  it('calls onRefresh callback when refresh button is clicked', () => {
+  it('calls onRefresh callback when refresh button is clicked', async () => {
     const onRefreshMock = vi.fn();
     render(<DashboardOperationalView metrics={baseMetrics} efficiency={baseEfficiency} orders={fakeOrders} onRefresh={onRefreshMock} />);
+
+    // Wait for initial fetch to complete so button is enabled
+    await waitFor(() => {
+      const refreshBtn = screen.getByTitle('Atualizar Dados Operacionais');
+      expect(refreshBtn).not.toBeDisabled();
+    });
 
     const refreshBtn = screen.getByTitle('Atualizar Dados Operacionais');
     act(() => {
