@@ -1,276 +1,141 @@
 # Auditoria de Documentação — Dominus Ecosystem
 
-> **Status:** AUDIT REPORT
-> **Data:** 2026-09-25
-> **Escopo:** Dominuslabs, IDC_Dominuslabs, api_whatsapp_v1.2
+> **Status:** HISTORICAL / AUDIT ARTIFACT  
+> **Data original:** 2026-09-25  
+> **Security note:** este arquivo preserva as conclusões da auditoria sem repetir IPs, hostnames operacionais, IDs de workflow/container ou outros detalhes de deployment.
 
----
+## Objetivo
 
-## Sumário Executivo
+Identificar documentação canônica, documentação histórica e arquivos que precisavam ser reescritos para o Dominus Product & Architecture Refoundation.
 
-Esta auditoria classifica todos os documentos dos 3 repositórios do ecossistema Dominus. O objetivo é preparar o saneamento documental conforme o **Refoundation Plan**.
+Este relatório **não é fonte de arquitetura**. Use:
 
----
+1. `docs/refoundation/GOAL.md`
+2. `docs/refoundation/CONTRACTS.md`
+3. `docs/architecture.md`
+4. `docs/refoundation/PLAN.md`
+5. READMEs canônicos de IDPW e Whats API
 
-## 1. FONTES CANÔNICAS PRINCIPAIS
+## Resultado da auditoria
 
-| Arquivo | Repo | Status | Descrição |
-|---------|------|--------|-----------|
-| `docs/refoundation/GOAL.md` | dominuslabs | CANONICAL | Visão e princípios da refoundation |
-| `docs/refoundation/CONTRACTS.md` | dominuslabs | CANONICAL | Contratos de arquitetura |
-| `docs/refoundation/PLAN.md` | dominuslabs | CURRENT_PLAN | Plano de implementação |
-| `TASKS.md` | dominuslabs | CURRENT_PLAN | Backlog de tasks |
-| `IDC_Dominuslabs/README.md` | idc-dominuslabs | CANONICAL | Documentação do IDPW |
-| `api_whatsapp_v1.2/README.md` | api-whatsapp-service | CANONICAL | Documentação da Whats API |
-| `INTEGRATION_GUIDE.md` | dominuslabs | CANONICAL | Guia de integração M2M |
+### Documentos canônicos
 
----
+| Arquivo | Papel |
+|---|---|
+| `docs/refoundation/GOAL.md` | visão e princípios |
+| `docs/refoundation/CONTRACTS.md` | invariantes |
+| `docs/architecture.md` | arquitetura global |
+| `docs/refoundation/PLAN.md` | ordem de implementação |
+| `TASKS.md` | backlog de execução |
+| `INTEGRATION_GUIDE.md` | integração entre serviços |
+| `IDC_Dominuslabs/README.md` | contrato do IDPW |
+| `api_whatsapp_v1.2/README.md` | contrato do Resource Server |
 
-## 2. DOCUMENTOS REESCREVER COMPLETAMENTE
+### Documentos reescritos
 
-### 2.1 `docs/architecture.md` — REWRITE
+| Arquivo | Problema identificado | Papel após saneamento |
+|---|---|---|
+| `README.md` | template Vite | índice do produto |
+| `docs/architecture.md` | arquitetura M2M/eventos antiga | arquitetura canônica |
+| `docs/frontend-omnichannel.md` | realtime local e fallback de sessão | arquitetura frontend target |
+| `docs/wa-api.md` | duas especificações conflitantes | visão única da integração Dominus↔Whats API |
+| `docs/n8n-workflows.md` | CURRENT/TARGET misturados | runtime + migração explicitamente separados |
+| `docs/deployment.md` | runbook operacional público | guia genérico de deployment |
+| `docs/media-pipeline.md` | contrato de mídia incompleto | CURRENT + target state machine |
+| `api_whatsapp_v1.2/ARCHITECTURE.md` | proposta histórica | arquitetura do Resource Server |
 
-**Problemas identificados:**
-- Contém IP real: `72.60.247.157:5430`
-- Descreve autenticação M2M antiga (JWT_SECRET_KEY entre Backend ↔ WA API)
-- Confia em tenant_id do browser
-- Não menciona IDPW como autoridade M2M
-- Fluxo n8n descrito como arquitetura oficial sem distinção CURRENT/TARGET
-- Não representa EventIngress nem RealtimeProvider
+### Documentos históricos
 
-**Ação:** Reescrever completamente representando a arquitetura canônica do GOAL.md
+```text
+BASELINE.md
+FALLBACK_AUDIT.md
+EVT_CATALOG.md
+CHECKPOINT_ARCH.md
+CHECKPOINT_DATA.md
+CHECKPOINT_EVENTS.md
+```
 
----
+Eles preservam evidência de uma fase específica e não devem orientar arquitetura futura.
 
-### 2.2 `docs/frontend-omnichannel.md` — REWRITE
+### Migration specs não canônicas
 
-**Problemas identificados:**
-- Contém fallback proibido de sessão: `availableSessions[0]`
-- Documenta SSE montado somente quando Omnichannel está aberto
-- Descreve monólito como arquitetura
-- Não separa features/omnichannel/ de realtime/
+```text
+N8N_ROUTER_SPEC.md
+EVT_DEPRECATION.md
+EVT_LEGACY_AUDIT.md
+```
 
-**Ação:** Reescrever descrevendo arquitetura alvo por feature
+São úteis para execução/migração, mas não substituem GOAL/CONTRACTS/PLAN.
 
----
+## Contradições que motivaram a reescrita
 
-### 2.3 `docs/wa-api.md` — REWRITE
+### M2M
 
-**Problemas identificados:**
-- Descreve scopes antigos (`whatsapp:media:read`)
-- Documenta JWT_SECRET_KEY como mecanismo de autenticação
-- Não menciona IDPW nem JWKS
-- Contém URL real: `whats.dominuslabs.online`
-- Duplica especificação que deveria estar no README da Whats API
+Documentos antigos atribuíam à Whats API responsabilidade de assinatura/gestão de JWT. O contrato correto é:
 
-**Ação:** Reescrever como visão de integração do ponto de vista do Dominus
+```text
+IDPW = M2M authority
+Whats API = Resource Server
+Dominus = business/control plane
+Browser = sem autoridade M2M
+```
 
----
+### Session fallback
 
-### 2.4 `docs/n8n-workflows.md` — REWRITE
+A lógica equivalente a:
 
-**Problemas identificados:**
-- Documenta pipeline legado como arquitetura principal
-- Não distingue CURRENT de TARGET
-- Contém URLs reais: `myn8n.seommerce.shop`
-- Workflow IDs expostos
+```text
+workingSession || availableSessions[0]
+```
 
-**Ação:** Reescrever distinguindo current runtime de target event contract
+não é comportamento válido.
 
----
+### Eventos
 
-### 2.5 `README.md` — REWRITE
+`message.status.updated` não pode se transformar em `message.created` e não pode disparar som/unread/browser notification de nova mensagem.
 
-**Problemas identificados:**
-- É o template Vite padrão
-- Não representa o produto
-- Nenhuma informação útil sobre Dominus
+### Realtime
 
-**Ação:** Reescrever como índice e descrição do produto
+Realtime pertence à aplicação autenticada, não ao lifecycle do `OmnichannelView`.
 
----
+### Mídia
 
-### 2.6 `docs/deployment.md` — REWRITE + SECURITY CLEANUP
+Whats API é proprietária do lifecycle; frontend não depende de URL temporária do WhatsApp.
 
-**Problemas identificados:**
-- Contém IP real: `72.60.247.157`
-- Contém porta SSH real: `2222`
-- Contém usuário SSH: `root`
-- Contém container IDs
-- Contém App IDs
-- Contém URLs operacionais privadas
-- Contém comandos específicos de infraestrutura real
+## Segurança documental
 
-**Ação:** Reescrever como documentação genérica de deployment. Remover todos os dados operacionais reais.
+A auditoria detectou documentação com:
 
----
+- endereços de infraestrutura;
+- hostnames físicos;
+- portas administrativas;
+- nomes/IDs de containers;
+- IDs de aplicação;
+- IDs de workflow;
+- comandos específicos de administração.
 
-### 2.7 `api_whatsapp_v1.2/ARCHITECTURE.md` — REWRITE
+A política adotada é:
 
-**Problemas identificados:**
-- Documenta proposta histórica de modularização
-- Não reflete o target do Refoundation
-- Deveria distinguir CURRENT de TARGET
+```text
+public repository
+→ contratos, arquitetura e placeholders
 
-**Ação:** Reescrever refletindo arquitetura alvo
+private operations inventory
+→ topologia concreta, hosts, IDs e comandos administrativos
+```
 
----
+Este relatório deliberadamente não reproduz os valores removidos.
 
-## 3. DOCUMENTOS PARCIALMENTE CORRETOS
+## Observação sobre CURRENT vs TARGET
 
-### 3.1 `docs/media-pipeline.md` — PARTIAL UPDATE
+Documentos canônicos podem descrever a arquitetura target, desde que deixem claro quando o código/runtime ainda está em migração.
 
-**Preservar:**
-- Fluxo de download/persistência
-- Endpoint de mídia
+Nunca declarar uma feature como deployed apenas porque existe em um branch.
 
-**Corrigir:**
-- Caminho `/app/data/media/SESSION` → `/app/data/media/{tenant}/{session}`
-- State machine: pending → downloading → ready → failed
-- Remover JSON.parse como solução
+## Resultado
 
----
+A auditoria definiu a matriz usada pelo saneamento posterior. O relatório final e o estado atual estão em:
 
-### 3.2 `INTEGRATION_GUIDE.md` — PRESERVE + MINOR UPDATE
-
-**Status:** Majoritariamente correto
-**Ação:** Atualizar seções de events para refletir target contract
-
----
-
-## 4. DOCUMENTOS CANÔNICOS A PRESERVAR
-
-| Arquivo | Status | Ação |
-|---------|--------|------|
-| `docs/refoundation/GOAL.md` | CANONICAL | Preservar |
-| `docs/refoundation/CONTRACTS.md` | CANONICAL | Preservar |
-| `docs/refoundation/BASELINE.md` | HISTORICAL | Adicionar banner |
-| `docs/refoundation/FALLBACK_AUDIT.md` | HISTORICAL | Adicionar banner |
-| `docs/refoundation/EVT_CATALOG.md` | HISTORICAL | Adicionar banner |
-| `docs/refoundation/CHECKPOINT_ARCH.md` | HISTORICAL | Adicionar banner |
-| `docs/refoundation/CHECKPOINT_DATA.md` | HISTORICAL | Adicionar banner |
-| `IDC_Dominuslabs/README.md` | CANONICAL | Preservar |
-| `api_whatsapp_v1.2/README.md` | CANONICAL | Preservar |
-
----
-
-## 5. PROBLEMAS DE SEGURANÇA IDENTIFICADOS
-
-| Arquivo | Tipo | Localização | Ação |
-|---------|------|-------------|------|
-| `docs/architecture.md` | IP público | `72.60.247.157:5430` | Remover |
-| `docs/deployment.md` | IP público | `72.60.247.157` | Remover |
-| `docs/deployment.md` | Porta SSH | `2222` | Remover |
-| `docs/deployment.md` | Usuário SSH | `root` | Remover |
-| `docs/deployment.md` | Container IDs | `sjrweu7rw8e3nywm5stef2ri`, `hkossco0sggwwwss0cwk4w0s` | Remover |
-| `docs/deployment.md` | App IDs | `38`, `32` | Remover |
-| `docs/deployment.md` | URLs operacionais | `myn8n.seommerce.shop` | Remover |
-| `docs/wa-api.md` | URL real | `whats.dominuslabs.online` | Usar placeholder |
-| `docs/n8n-workflows.md` | URLs reais | `myn8n.seommerce.shop` | Remover |
-| `docs/n8n-workflows.md` | Workflow IDs | `SpQwyDZsOo3ozXuE`, etc. | Remover |
-
----
-
-## 6. CONTRADIÇÕES ENCONTRADAS
-
-### 6.1 Autenticação M2M
-
-| Documento | Versão |
-|-----------|--------|
-| `docs/architecture.md` | JWT_SECRET_KEY entre Backend ↔ WA API |
-| `docs/wa-api.md` | JWT_SECRET_KEY como mecanismo |
-| `INTEGRATION_GUIDE.md` | IDPW como autoridade M2M ✅ |
-| `api_whatsapp_v1.2/README.md` | IDPW + JWKS ✅ |
-
-**Contradição:** Documentos antigos descrevem JWT interno, fontes canônicas descrevem IDPW.
-
----
-
-### 6.2 Session Fallback
-
-| Documento | Versão |
-|-----------|--------|
-| `docs/frontend-omnichannel.md` | `workingSession || availableSessions[0]` |
-| `docs/refoundation/GOAL.md` | Fallback proibido |
-
-**Contradição:** Documento documenta comportamento proibido como válido.
-
----
-
-### 6.3 Event Semantics
-
-| Documento | Versão |
-|-----------|--------|
-| `docs/n8n-workflows.md` | n8n upsert DB + chama backend |
-| `docs/refoundation/GOAL.md` | EventIngress unificado |
-
-**Contradição:** Pipeline antigo documentado como arquitetura oficial.
-
----
-
-## 7. MATRIZ DE CLASSIFICAÇÃO
-
-### Dominuslabs
-
-| Arquivo | Status | Ação |
-|---------|--------|------|
-| `README.md` | REWRITE | Reescrever completamente |
-| `INTEGRATION_GUIDE.md` | CANONICAL | Preservar + minor update |
-| `docs/architecture.md` | REWRITE | Reescrever completamente |
-| `docs/deployment.md` | REWRITE | Reescrever + security cleanup |
-| `docs/frontend-omnichannel.md` | REWRITE | Reescrever completamente |
-| `docs/wa-api.md` | REWRITE | Reescrever como visão de integração |
-| `docs/n8n-workflows.md` | REWRITE | Reescrever com CURRENT/TARGET |
-| `docs/media-pipeline.md` | PARTIAL_UPDATE | Atualizar paths e state machine |
-| `docs/refoundation/GOAL.md` | CANONICAL | Preservar |
-| `docs/refoundation/CONTRACTS.md` | CANONICAL | Preservar |
-| `docs/refoundation/PLAN.md` | CURRENT_PLAN | Preservar |
-| `docs/refoundation/BASELINE.md` | HISTORICAL | Adicionar banner |
-| `docs/refoundation/FALLBACK_AUDIT.md` | HISTORICAL | Adicionar banner |
-| `docs/refoundation/EVT_CATALOG.md` | HISTORICAL | Adicionar banner |
-| `docs/refoundation/CHECKPOINT_ARCH.md` | HISTORICAL | Adicionar banner |
-| `docs/refoundation/CHECKPOINT_DATA.md` | HISTORICAL | Adicionar banner |
-| `docs/refoundation/N8N_ROUTER_SPEC.md` | HISTORICAL | Adicionar banner |
-| `docs/refoundation/*.md` (restante) | HISTORICAL | Adicionar banner |
-| `TASKS.md` | CURRENT_PLAN | Preservar |
-| `features/open-delivery/*.md` | FEATURE_PARALLEL | Preservar (não é core) |
-| `features/pedidos10-bridge/*.md` | FEATURE_PARALLEL | Preservar (não é core) |
-
-### IDC_Dominuslabs
-
-| Arquivo | Status | Ação |
-|---------|--------|------|
-| `README.md` | CANONICAL | Preservar |
-| `goal.md` | CANONICAL | Preservar |
-
-### api_whatsapp_v1.2
-
-| Arquivo | Status | Ação |
-|---------|--------|------|
-| `README.md` | CANONICAL | Preservar |
-| `ARCHITECTURE.md` | REWRITE | Reescrever com CURRENT/TARGET |
-| `src/routes/README.md` | INVENTORY | Preservar com aviso |
-
----
-
-## 8. PRÓXIMOS PASSOS
-
-1. **Executar saneamento** reescrevendo os documentos identificados
-2. **Adicionar banners** de status (CANONICAL, HISTORICAL, CURRENT_RUNTIME)
-3. **Remover dados sensíveis** dos documentos públicos
-4. **Criar links cruzados** entre documentos
-5. **Validar consistência** com fontes canônicas
-
----
-
-## 9. CRITÉRIOS DE PRONTO
-
-- [ ] README.md não é mais template Vite
-- [ ] docs/architecture.md reflete arquitetura canônica
-- [ ] IDPW documentado como única M2M authority
-- [ ] Whats API documentada como Resource Server
-- [ ] Documentação distingue CURRENT de TARGET
-- [ ] Fallback de sessão não é documentado como válido
-- [ ] Documentação pública não contém IPs/ports/IDs reais
-- [ ] Arquivos históricos possuem banner HISTORICAL
-- [ ] Documentos canônicos possuem banner CANONICAL
+```text
+docs/DOCUMENTATION_SANEAMENTO_REPORT.md
+```
