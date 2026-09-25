@@ -1,6 +1,7 @@
 # EVT-001 — Catálogo de Eventos Atuais
 
 > **Status:** HISTORICAL / AUDIT ARTIFACT
+> **Security note:** workflow identifiers and operational endpoints are intentionally redacted.
 > This document records the system at a specific point in time.
 > It is NOT the canonical target architecture.
 > Canonical sources:
@@ -76,10 +77,10 @@ session.webhook = {
 
 | Workflow | ID | Status | Função |
 |----------|-----|--------|--------|
-| Dominus AI | YqDBFFzJ1L4FRAvz | Ativo | Processamento IA |
-| Dominus AI Buffer | 4ANz4lSb80pCuAT4 | Ativo | Buffer de mensagens |
-| dominuslabs_respostas_leads | SpQwyDZsOo3ozXuE | Ativo | Respostas automáticas |
-| dominuslabs_crm | WJ37gGiodnAJVkBN | Desativado | CRM |
+| Dominus AI | <private-workflow-id> | Ativo | Processamento IA |
+| Dominus AI Buffer | <private-workflow-id> | Ativo | Buffer de mensagens |
+| dominuslabs_respostas_leads | <private-workflow-id> | Ativo | Respostas automáticas |
+| dominuslabs_crm | <private-workflow-id> | Desativado | CRM |
 
 ### Eventos Roteados pelo n8n
 
