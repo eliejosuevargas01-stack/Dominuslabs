@@ -1,7 +1,7 @@
 # Pipeline de Mídia
 
-> **Status:** CURRENT_RUNTIME_ONLY — Este documento descreve o comportamento atual.
-> Para a arquitetura planejada, consulte `docs/architecture.md`.
+> **Status:** CURRENT + TARGET MEDIA GUIDE — NON-AUTHORITY
+> Este documento separa comportamento atual e arquitetura planejada. Contratos canônicos: `docs/refoundation/CONTRACTS.md` e `docs/architecture.md`.
 
 ---
 
