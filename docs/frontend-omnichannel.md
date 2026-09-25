@@ -1,149 +1,313 @@
-# Documentação do Componente OmnichannelView
+# Omnichannel — Arquitetura Frontend
+
+> **Status:** CANONICAL — Target Architecture
+
+Este documento descreve a arquitetura alvo do Omnichannel, não a implementação atual.
+
+---
 
 ## Visão Geral
 
-O componente `OmnichannelView` é a página principal da interface de chat omnichannel, responsável por gerenciar conversas entre diferentes canais de comunicação (WhatsApp, CRM, etc.) em tempo real. Ele utiliza uma arquitetura React com TypeScript, integrando-se com APIs backend via Axios e WebSocket (SSE) para atualizações instantâneas.
-
-### Tecnologias Principais
-- **React** (18+) com hooks funcionais
-- **TypeScript**
-- **TailwindCSS** para estilização
-- **Vite** como bundler/developer server
-- **SSE (Server-Sent Events)** para atualizações em tempo real
-- **Lucide React** para ícones
-- **Sonner** para notificações
-
-## Layout do Componente
-
-```
-┌────────────────────────────────────────────────────────┐
-│           HEADER - Controles e Sessões                 │
-├────────────────────────────────────────────────────────┤
-│                                                        │
-│  ┌─────────────┐    ┌─────────────────────────────────┐  │
-│  │   Sidebar   │    │        Painel de Chat           │  │
-│  │             │    │                                 │  │
-│  │ Conversas   │    │  ┌─────────────────────────────┐  │  │
-│  │ Contatos    │    │  │   Input de Mensagem         │  │  │
-│  │             │    │  └─────────────────────────────┘  │  │
-│  │             │    │  ┌─────────────────────────────┐  │  │
-│  │             │    │  │    Mensagens do Chat        │  │  │
-│  └─────────────┘    │  │                         │  │  │
-│                     │  │      Scroll Auto          │  │  │
-│                     │  │                         │  │  │
-│                     │  │      Arrow Down Button    │  │  │
-│                     │  └─────────────────────────────┘  │  │
-│                     └─────────────────────────────────┘  │
-└────────────────────────────────────────────────────────┘
-```
-
-## Estado React Principal
-
-| Nome                 | Tipo                           | Função |
-|----------------------|--------------------------------|--------|
-| conversations        | Conversation[]                | Lista de conversas do usuário |
-| chatMessages         | OmnichannelMessage[]          | Mensagens da conversa ativa |
-| selectedChat         | Conversation \| null          | Conversa atualmente selecionada |
-| selectedSession      | string                        | Filtro de sessão atual |
-| activeSendSession    | string                        | Sessão ativa para envio de mensagens |
-| isAtBottom           | boolean                       | Controla se chat está no final |
-| loadingList          | boolean                       | Indicador de carregamento da lista |
-| loadingHistory       | boolean                       | Indicador de carregamento do histórico |
-| sending              | boolean                       | Indicador de envio de mensagem |
-| searchTerm           | string                        | Termo de busca |
-| messageInput         | string                        | Texto digitado no campo de entrada |
-
-## Fluxo SSE - Mensagens em Tempo Real
-
-1. **Conexão**: Componente se conecta a `GET /api/v1/webhooks/events/crm-chats` via `SSEClient`
-2. **Recepção**: Backend envia eventos JSON em formato específico
-3. **Processamento**:
-   - Filtra por ação (`new_message`, `reload`, `session_disconnected`)
-   - Identifica se o evento afeta o chat atual ou apenas a sidebar
-   - Atualiza os estados correspondentes (`setChatMessages`, `setConversations`)
-4. **Notificação sonora**: Toca som ao receber novas mensagens
-
-## Pipeline de Deduplicação de Mensagens
-
-**Três Camadas de Deduplicação**
-
-1. **`knownMessageIds` (useRef)**:
-   - Conjunto de `message_id` vistos
-   - Previne replay de mensagens idênticas
-
-2. **Handler SSE (dentro do evento `onMessage`)**:
-   - Match exato de `message_id`
-   - Para mensagens `is_from_me`: deduplica pelo conteúdo (compara `content` entre `temp_xxx` e o real)
-
-3. **`sortedMessages` (useMemo)**:
-   - Exclui mensagens de reação duplicadas
-   - Deduplicação final por `message_id`
-   - Deduplicação por conteúdo (`fromMe`) quando ambos usam o mesmo `content`
-
-## Scroll Behavior
-
-### **Auto Scroll**
-- Ao abrir novo chat: scroll imediato para o final
-- Quando nova mensagem chegou e usuário está no final: scroll suave automático
-
-### **Botão de Scroll**
-- Nova mensagem enquanto usuário leu para cima: mostra botão flutuante para baixo
-- Comportamento controlado pelo `chatContainerRef` e `onScroll`
-
-## Seleção de Sessão e Enviador
-
-### **Filtro de Sessão**
-- Botoes de sessão no header: clicando muda `selectedSession` e limpa `selectedChat`
-- `filteredConversations` filtra conversas por `item.session_id === selectedSession`
-
-### **Envio de Mensagem**
-- Dropdown no header do chat ativo para escolher sessão de envio (`activeSendSession`)
-- Lógica de prioridade:
-  ```ts
-  (activeSendSession && !== 'default' ? activeSendSession : null) || selectedChat.session_id || availableSessions[0].id
-  ```
-
-## Envio de Mensagens
-
-1. **Estado Temporário**
-   - Insere `tempMessage` com `message_id: temp_{timestamp}` no `chatMessages`
-   - Status inicial: `'sending'`
-2. **API Call**
-   - Chama `sendOmnichannelMessage()` com payload
-3. **Backend Resposta**
-   - Retorna `realId` do message no backend (geralmente começa com `3EB`)
-4. **Atualização Final**
-   - SSE chega com ID real
-   - Handler substitui `tempMessage` pela versão confirmada (real ID + status)
-
-## Envio de Mídia
-
-### **Tipos de Mídia suportados**
-- Imagens
-- Vídeos
-- Áudio (gravado ao vivo)
-- Documentos
-
-### **Fluxo de Envio**
-1. **Gravação de Áudio**
-   - `startRecording()`: inicia gravação com `MediaRecorder`
-   - `stopAndSendRecording()`: faz `blobToBase64()` e chama `sendOmnichannelMedia()`
-2. **Upload de Arquivos**
-   - `handleFileUpload()`: converte `Blob` para `base64` e envia
-3. **Chamada API**
-   - `sendOmnichannelMedia()`: para todos os tipos de mídia
-   - Utiliza o mesmo pipeline de sessão de envio
-
-## Tabela de Endpoints API
-
-| Endpoint                                           | Método | Descrição                              |
-|----------------------------------------------------|--------|----------------------------------------|
-| `/api/v1/crm/messages/send`                       | POST   | Envia mensagem texto                   |
-| `/api/v1/crm/messages/send-media`                 | POST   | Envia mídia (img, video, audio)        |
-| `/api/v1/crm/conversations`                       | GET    | Busca lista de conversas               |
-| `/api/v1/crm/chat-history/{jid}`                  | GET    | Busca histórico de chat                |
-| `/api/v1/whatsapp/sessions`                       | GET    | Busca sessões WhatsApp disponíveis     |
+O Omnichannel é o módulo de atendimento multicanal do Dominus, projetado para funcionar como um aplicativo de mensagens profissional.
 
 ---
-**Status:** COMPLETED  
-**Arquivo criado:** /home/eliezer/Escritorio/dominuslabs/docs/frontend-omnichannel.md
+
+## Arquitetura Alvo
+
+```
+features/
+├── omnichannel/
+│   ├── components/
+│   │   ├── ConversationList/
+│   │   ├── Chat/
+│   │   ├── MessageBubble/
+│   │   ├── MediaViewer/
+│   │   ├── Avatar/
+│   │   └── SessionSelector/
+│   ├── hooks/
+│   │   ├── useConversations.ts
+│   │   ├── useMessages.ts
+│   │   ├── useMedia.ts
+│   │   └── useSession.ts
+│   ├── api/
+│   │   ├── conversations.ts
+│   │   ├── messages.ts
+│   │   └── media.ts
+│   ├── state/
+│   │   ├── conversationSlice.ts
+│   │   └── messageSlice.ts
+│   └── types/
+│       ├── conversation.ts
+│       ├── message.ts
+│       └── media.ts
+│
+├── realtime/
+│   ├── RealtimeProvider.tsx
+│   ├── useRealtime.ts
+│   └── handlers/
+│
+├── notifications/
+│   ├── NotificationEngine.ts
+│   ├── SoundEngine.ts
+│   └── BrowserNotifications.ts
+│
+└── shared/
+    ├── components/
+    ├── hooks/
+    └── utils/
+```
+
+---
+
+## Responsabilidades por Módulo
+
+### ConversationList
+
+- Lista de conversas (~30 iniciais)
+- Cursor pagination
+- IntersectionObserver para infinite scroll
+- Avatar com lazy loading
+- Preview da última mensagem
+- Indicador de unread
+
+### Chat
+
+- Lista de mensagens (~50 ao abrir)
+- Scroll para cima carrega anteriores
+- Mensagens prepend + scroll anchor
+- MessageBubble para cada tipo
+- Input de mensagem
+- Upload de mídia
+
+### MessageBubble
+
+- Renderer específico por tipo:
+  - `text`
+  - `image`
+  - `video`
+  - `audio`
+  - `document`
+  - `sticker`
+- Status indicators
+- Timestamp
+- Reply context
+
+### MediaViewer
+
+- Imagens: expandir, zoom, pan, fit, download, ESC
+- Vídeos: expandir, player grande, fullscreen, controls, download
+- Stickers: renderer próprio (128-160px)
+
+### Avatar
+
+- Componente único `ConversationAvatar`
+- Authenticated fetch
+- Lazy loading
+- Cache por `tenant_id + session_id + contact_jid`
+- Fallback visual com iniciais
+
+### SessionSelector
+
+- Lista de sessões disponíveis
+- Estado visual (WORKING, DISCONNECTED, etc.)
+- **NÃO seleciona sessão desconectada como fallback**
+
+---
+
+## Realtime
+
+### RealtimeProvider Global
+
+O realtime **NÃO** pertence ao OmnichannelView.
+
+```tsx
+// App.tsx
+function AuthenticatedApp() {
+  return (
+    <RealtimeProvider>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/atendimento" element={<Omnichannel />} />
+        <Route path="/pedidos" element={<Orders />} />
+      </Routes>
+    </RealtimeProvider>
+  );
+}
+```
+
+### Eventos Tratados
+
+| Evento | Ação |
+|--------|------|
+| `message.created` | Atualizar chat, notification, som |
+| `message.status.updated` | Atualizar status **SEM som** |
+| `conversation.updated` | Reordenar lista |
+| `session.connected` | Atualizar status |
+| `session.disconnected` | Atualizar status |
+
+---
+
+## Notificações
+
+### Som Principal
+
+**SOMENTE para:**
+- `message.created`
+- AND incoming
+- AND evento não processado anteriormente
+
+**NUNCA para:**
+- `message.status.updated`
+- `message.reaction.updated`
+- `media.ready`
+- Outgoing messages
+- Conversation updates
+
+### Browser Notification
+
+- API nativa do browser
+- Clique abre Dominus → Atendimento → sessão → conversa
+
+---
+
+## Pagination
+
+### Conversations
+
+```ts
+const useConversations = () => {
+  const [conversations, setConversations] = useState([]);
+  const [cursor, setCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+
+  const loadMore = async () => {
+    if (!hasMore) return;
+    const response = await api.getConversations({ cursor, limit: 30 });
+    setConversations(prev => [...prev, ...response.data]);
+    setCursor(response.nextCursor);
+    setHasMore(response.hasMore);
+  };
+
+  return { conversations, loadMore, hasMore };
+};
+```
+
+### Messages
+
+```ts
+const useMessages = (conversationId: string) => {
+  const [messages, setMessages] = useState([]);
+  const [cursor, setCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+
+  const loadOlder = async () => {
+    if (!hasMore) return;
+    const response = await api.getMessages(conversationId, { cursor, limit: 50 });
+    setMessages(prev => [...response.data, ...prev]); // prepend
+    setCursor(response.beforeCursor);
+    setHasMore(response.hasMore);
+  };
+
+  return { messages, loadOlder, hasMore };
+};
+```
+
+---
+
+## Session Selection Rules
+
+### Regras
+
+1. **Última sessão selecionada** — reutilizar SOMENTE se ainda estiver WORKING
+2. **Exatamente uma sessão WORKING** — pode selecionar conscientemente
+3. **Ambiguidade ou nenhuma válida** — mostrar estado explícito
+
+### PROIBIDO
+
+```ts
+// ❌ NUNCA
+const session = workingSession || availableSessions[0];
+```
+
+### CORRETO
+
+```ts
+// ✅
+const session = selectSession({
+  lastSelected: lastSessionId,
+  availableSessions,
+  requireWorking: true
+});
+
+if (!session) {
+  return <NoSessionAvailable />;
+}
+```
+
+---
+
+## Media Pipeline
+
+### Fluxo
+
+```
+Mensagem recebida
+  → media.state = 'pending'
+  → GET /api/sessions/{session}/media?messageId=...
+  → Se disponível: state = 'ready', serve arquivo
+  → Se falhar: state = 'failed', mostra erro
+```
+
+### Não Depender De
+
+- URLs temporárias do WhatsApp
+- `pps.whatsapp.net`
+- `fbcdn.net`
+
+---
+
+## Mobile
+
+### Design
+
+- TELA 1: Lista de conversas
+- TELA 2: Chat ocupa praticamente toda a tela
+
+### CSS
+
+```css
+.chat-container {
+  height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+```
+
+### Touch Targets
+
+- Mínimo 44x44px
+- Sem sobreposição de elementos
+
+---
+
+## Estados Obrigatórios
+
+Todo componente deve tratar:
+
+| Estado | Tratamento |
+|--------|------------|
+| Loading | Skeleton ou spinner |
+| Empty | Mensagem clara |
+| Success | Renderizar dados |
+| Partial | Dados incompletos, mostrar o que existe |
+| Error | Mensagem + retry action |
+| Offline | Indicador + modo offline |
+| Permission denied | Ação para obter permissão |
+| Disconnected | Estado da sessão |
+
+---
+
+## Referências
+
+- `docs/architecture.md` — Arquitetura geral
+- `docs/media-pipeline.md` — Pipeline de mídia
+- `docs/refoundation/GOAL.md` — Princípios do Refoundation

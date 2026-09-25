@@ -1,17 +1,184 @@
-# WA API (WhatsApp Web Multi-Device)
+# Integração com Whats API
 
-Base URL: `https://whats.dominuslabs.online`
+> **Status:** CANONICAL — Integration Guide
 
-## 1. Visao Geral
+Este documento descreve como o Dominus consome a Whats API. Para a especificação completa da API, consulte `api_whatsapp_v1.2/README.md`.
 
-A **WA API** e o servico de gateway WhatsApp Web do Dominuslabs. Ela permite criar sessoes independentes de WhatsApp, enviar/receber mensagens, consultar status de conexao e servir midias (imagens, audios, documentos) -- tudo via HTTP REST.
+---
 
-- **Tecnologia**: Node.js + Fastify
-- **Biblioteca de conexao**: [Baileys](https://github.com/WhiskeySockets/Baileys) (WhatsApp Web Multi-Device)
-- **Porta interna**: `3000`
-- **Porta publica**: `443` (via proxy reverso)
+## Visão Geral
 
-Baileys e uma implementacao nao oficial do protocolo WhatsApp Web Multi-Device, escrita em TypeScript para Node.js. Ela mantem uma conexao WebSocket com os servidores do WhatsApp e emite eventos (mensagens, conexao, presenca) que a WA API converte em webhooks e endpoints REST.
+A Whats API é o **Resource Server** WhatsApp do sistema Dominus. Ela é responsável por:
+- Gerenciar sessões WhatsApp via Baileys
+- Enviar e receber mensagens
+- Processar mídia
+- Disparar eventos para n8n
+
+### Autenticação
+
+Toda comunicação Dominus → Whats API utiliza **JWT M2M emitido pelo IDPW**.
+
+**Fluxo:**
+
+```
+Dominus
+  → Solicita JWT ao IDPW
+  → IDPW emite JWT RS256 curto (≤300s)
+  → Dominus chama Whats API com Bearer token
+  → Whats API valida JWT via JWKS
+```
+
+**O browser NUNCA acessa a Whats API diretamente.**
+
+---
+
+## Cliente Interno
+
+O acesso à Whats API é feito exclusivamente através de `app/services/whatsapp_client.py`.
+
+### Endpoints Principais
+
+| Endpoint | Método | Scope | Descrição |
+|----------|--------|-------|-----------|
+| `/api/sessions` | GET | `whatsapp:sessions:read` | Lista sessões |
+| `/api/sessions/{id}` | GET | `whatsapp:sessions:read` | Status da sessão |
+| `/api/sessions` | POST | `whatsapp:sessions:create` | Criar sessão |
+| `/api/sessions/{id}/connect` | POST | `whatsapp:sessions:write` | Conectar |
+| `/api/sessions/{id}/disconnect` | POST | `whatsapp:sessions:write` | Desconectar |
+| `/api/sessions/{id}` | DELETE | `whatsapp:sessions:delete` | Excluir sessão |
+| `/api/sessions/{id}/messages/send` | POST | `whatsapp:messages:send` | Enviar mensagem |
+| `/api/sessions/{id}/media` | GET | `whatsapp:sessions:read` | Obter mídia |
+
+---
+
+## Headers Obrigatórios
+
+```http
+Authorization: Bearer <JWT_M2M>
+X-Request-ID: <UUID>
+Content-Type: application/json
+Idempotency-Key: <UUID>  # Para operações mutáveis
+```
+
+---
+
+## Criptografia de Aplicação
+
+Dominus cifra cada corpo para a Whats API:
+
+```json
+{
+  "_encrypted": true,
+  "encryptedKey": "base64",
+  "iv": "base64",
+  "authTag": "base64",
+  "payload": "base64"
+}
+```
+
+### Protocolo
+
+- AES-256-GCM para payload
+- RSA-OAEP/SHA-256 para chave AES
+
+---
+
+## Eventos Recebidos
+
+A Whats API dispara webhooks para n8n. O Dominus os recebe via:
+
+### CURRENT RUNTIME
+
+```
+Whats API → n8n → POST /api/v1/webhooks/crm/update-chat
+```
+
+### TARGET (Refoundation)
+
+```
+Whats API → n8n → POST /webhooks/events (Event Ingress)
+```
+
+### Contrato de Evento
+
+```json
+{
+  "version": 1,
+  "event_id": "uuid",
+  "type": "message.created",
+  "tenant_id": "tenant",
+  "session_id": "session",
+  "occurred_at": "ISO-8601",
+  "payload": {}
+}
+```
+
+---
+
+## Mídia
+
+### Fluxo de Mídia Recebida
+
+```
+WhatsApp
+  → Mensagem com mídia
+  → Whats API: downloadMediaMessage()
+  → Persistência em /app/data/media/{tenant}/{session}/
+  → Evento para n8n com media.url
+  → Dominus serve via GET /api/sessions/{session}/media
+```
+
+### Estados
+
+| Estado | Descrição |
+|--------|-----------|
+| `pending` | Mídia ainda não processada |
+| `downloading` | Download em andamento |
+| `ready` | Arquivo disponível |
+| `failed` | Falha no processamento |
+
+### Acesso
+
+```http
+GET /api/sessions/{sessionId}/media?messageId={messageId}
+Authorization: Bearer <JWT_M2M>
+```
+
+---
+
+## Session Ownership
+
+Dominus é responsável por:
+
+1. Validar que a sessão pertence ao tenant atual
+2. Validar que o usuário tem permissão para operar a sessão
+3. NUNCA permitir operação em sessão desconectada sem ação consciente
+
+### Validação Server-Side
+
+```python
+def validate_session_owner(tenant_id: str, session_id: str) -> Session:
+    session = get_session(session_id)
+    if session.tenant_id != tenant_id:
+        raise ForbiddenError("Session does not belong to tenant")
+    if session.status == "disconnected":
+        raise ValidationError("Session is disconnected")
+    return session
+```
+
+---
+
+## Referências
+
+### Fonte Canônica
+
+- **`api_whatsapp_v1.2/README.md`** — Especificação completa da API
+
+### Contratos Relacionados
+
+- `INTEGRATION_GUIDE.md` — Guia de integração M2M
+- `docs/architecture.md` — Arquitetura geral
+- `docs/media-pipeline.md` — Pipeline de mídia
 
 ---
 
