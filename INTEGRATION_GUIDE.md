@@ -1,19 +1,33 @@
-# Guia de Integração: Dominus Backend ⇄ Sistemas Externos
+# Guia de Integração — Dominus ⇄ Serviços Externos
 
-Este guia descreve os contratos operacionais atuais. O backend é a fronteira de confiança para identidade humana, tenant e credenciais de serviço; o frontend nunca recebe credenciais M2M.
+> **Status:** CANONICAL — Integration Guide  
+> **Authority:** `docs/refoundation/GOAL.md` e `docs/refoundation/CONTRACTS.md`
 
-## 1. Identity Worker (IDPW)
+Este documento descreve os contratos entre Dominus, IDPW, Whats API e n8n. Ele separa explicitamente **contratos vigentes** de **migrações planejadas**.
 
-**Objetivo:** emitir JWT M2M de curta duração para as chamadas internas do Dominus à Whats API.
+## 1. Dominus → IDPW
 
-### Solicitação de token
+### Objetivo
 
-- **Endpoint do IDPW:** `POST /v1/tokens`.
-- **Cliente responsável:** somente `app/services/identity_client.py`.
-- **Headers definidos pela aplicação:** somente `Content-Type: application/json` e `X-Request-ID: <request_id>`; o cliente HTTP acrescenta os headers normais de transporte.
-- **Cache:** exclusivamente em memória, indexado por `(tenant_id, scope, aud)`; no executor HTTP comum, uma rejeição `401` ou `403` da Whats API invalida a entrada correspondente.
+Obter JWT M2M de curta duração para chamadas internas do Dominus à Whats API.
 
-O payload lógico assinado contém exatamente:
+### Responsabilidade
+
+Somente o Dominus solicita tokens M2M. O frontend não conhece o IDPW como mecanismo de autorização de negócio.
+
+Cliente responsável:
+
+```text
+project-hub/backend/app/services/identity_client.py
+```
+
+Endpoint:
+
+```http
+POST /v1/tokens
+```
+
+Payload lógico assinado:
 
 ```json
 {
@@ -22,54 +36,189 @@ O payload lógico assinado contém exatamente:
   "scope": "whatsapp:messages:send",
   "request_id": "<uuid>",
   "timestamp": 1900000000,
-  "nonce": "<hex-aleatorio>",
+  "nonce": "<random>",
   "jti": "<uuid>"
 }
 ```
 
-O Dominus serializa esse objeto em UTF-8 com chaves ordenadas e separadores compactos, assina-o com `DOMINUS_PRIVATE_KEY` usando RSA PKCS#1 v1.5 e SHA-256 e codifica a assinatura em Base64. O envelope lógico contém os sete campos acima, cópias idênticas em `payload`, mais `signature` e `algorithm: "RS256"`.
+O Dominus:
 
-O envelope é cifrado uma única vez para o IDPW por criptografia híbrida AES-256-GCM + RSA-OAEP/SHA-256. O transporte recebe `_encrypted: true` e os campos `encryptedKey`, `iv`, `authTag` e `payload` em Base64. Uma resposta HTTP `200` também deve ser cifrada para a chave pública do Dominus e, após descriptografada, conter `access_token` não vazio e `expires_in` inteiro positivo. Plaintext, campo ausente ou validade inválida são rejeitados sem fallback.
+1. serializa o payload canonicamente;
+2. assina com sua chave privada usando RSA PKCS#1 v1.5 + SHA-256;
+3. cifra o envelope para o IDPW com AES-256-GCM + RSA-OAEP/SHA-256;
+4. envia `X-Request-ID` apenas como correlação;
+5. rejeita resposta plaintext ou token inválido.
 
-### Scopes aceitos nesta integração
+O IDPW é a única autoridade M2M e publica JWKS para validação do JWT emitido.
 
-- `whatsapp:sessions:read`
-- `whatsapp:sessions:create`
-- `whatsapp:sessions:write`
-- `whatsapp:sessions:delete`
-- `whatsapp:messages:send`
+### Scopes aceitos
 
-## 2. Whats API
+```text
+whatsapp:sessions:read
+whatsapp:sessions:create
+whatsapp:sessions:write
+whatsapp:sessions:delete
+whatsapp:messages:send
+```
 
-**Objetivo:** gerenciar sessões WhatsApp e enviar/receber mensagens e mídias no modelo Omnichannel.
+## 2. Dominus → Whats API
 
-- Todo tráfego interno passa por `app/services/whatsapp_client.py`.
-- O backend resolve e valida positivamente o `tenant_id` e o ownership da sessão antes de delegar a operação.
-- As chamadas usam `Authorization: Bearer <JWT_M2M>` e `X-Request-ID`; operações mutáveis também usam `Idempotency-Key`.
-- Corpos JSON são cifrados uma vez para a Whats API. O JWT M2M não é salvo em banco, entidade, log, URL ou storage do browser.
-- Rotas funcionais do Dominus incluem `/api/v1/whatsapp/sessions` e `/api/v1/whatsapp/sessions/{session_id}/messages/send`; o CRM também compõe envios por `/api/v1/crm/messages/send`.
+### Objetivo
 
-## 3. n8n (automação de fluxos)
+Gerenciar recursos WhatsApp depois que o Dominus autenticou o usuário, resolveu tenant, aplicou regras de negócio e validou ownership.
 
-**Objetivo:** orquestrar integrações de CRM, notificações e campanhas.
+Fluxo:
 
-Webhooks inbound exigem `X-N8N-Signature`, `X-N8N-Timestamp` e `X-N8N-Event-Id`. A assinatura é o HMAC-SHA256 de `timestamp.event_id.body`, usando o corpo bruto. Timestamp fora da tolerância, evento repetido, segredo bruto, credencial em query string ou JWT de usuário humano são rejeitados.
+```text
+Browser
+→ Dominus
+→ human auth
+→ tenant
+→ permission
+→ session ownership
+→ IDPW JWT
+→ WhatsAppClient
+→ Whats API
+```
 
-Exemplo de corpo para `POST /api/v1/webhooks/inbound/instagram`:
+Cliente responsável:
+
+```text
+project-hub/backend/app/services/whatsapp_client.py
+```
+
+Regras:
+
+- `Authorization: Bearer <JWT_M2M>`;
+- `X-Request-ID` para correlação;
+- `Idempotency-Key` quando aplicável;
+- corpo cifrado pelo protocolo canônico;
+- nenhum token M2M em banco, URL, log ou storage do browser;
+- nenhuma sessão alternativa selecionada silenciosamente.
+
+A Whats API valida JWT via JWKS, deriva `tenant_id` do token verificado e aplica namespace por tenant/sessão.
+
+## 3. Whats API → n8n → Dominus
+
+### Segurança vigente
+
+Eventos entre serviços usam HMAC com timestamp e event ID. Segredos não são enviados em query string e não são reutilizados como JWT.
+
+### Current runtime
+
+O sistema ainda pode possuir workflows e endpoints históricos enquanto a migração é concluída.
+
+Esses caminhos devem ser tratados como **compatibilidade temporária**, não como arquitetura final.
+
+A fotografia dos consumidores legados está em:
+
+```text
+docs/refoundation/EVT_CATALOG.md
+docs/refoundation/EVT_DEPRECATION.md
+```
+
+### Target Refoundation
+
+O contrato canônico é `SystemEvent`:
 
 ```json
 {
-  "tenant_id": "tenant_123",
-  "lead_id": "lead_123",
-  "sender": "lead",
-  "message": "Gostaria de mais informações"
+  "version": 1,
+  "event_id": "uuid",
+  "type": "message.created",
+  "tenant_id": "tenant",
+  "session_id": "session",
+  "occurred_at": "ISO-8601",
+  "payload": {}
 }
 ```
 
-## Boas práticas
+Ingress planejado/canônico no Dominus:
 
-- Faça chamadas externas de forma assíncrona e mantenha timeout explícito.
-- Preserve `X-Request-ID` somente para correlação; ele não concede identidade, tenant ou autorização.
-- Trate erros de serviços sem expor tokens, chaves ou payloads sensíveis.
-- Mantenha schemas Pydantic e tipos TypeScript sincronizados antes de alterar payloads funcionais.
-- Mudanças em criptografia, scopes ou rotas válidas exigem um objetivo coordenado separado; não use mecanismos de compatibilidade como fallback.
+```http
+POST /api/v1/webhooks/events
+```
+
+Pipeline:
+
+```text
+Whats API
+→ HMAC event
+→ n8n
+→ route by type
+→ Dominus EventIngress
+→ validation
+→ idempotency
+→ EventRouter
+→ handler
+→ persistence/realtime
+```
+
+O n8n roteia pelo `type`; ele não reconstrói arbitrariamente a semântica.
+
+Regra crítica:
+
+```text
+message.status.updated
+≠
+message.created
+```
+
+Status/read/delivered/played/reaction não podem produzir notificação de nova mensagem.
+
+## 4. Realtime para frontend
+
+Eventos recebidos pelo Dominus devem ser publicados para uma camada realtime global da aplicação autenticada.
+
+Target:
+
+```text
+Authenticated App
+└── RealtimeProvider
+    ├── event routing
+    ├── deduplication
+    ├── Sound Engine
+    └── Notification Engine
+```
+
+O realtime não pertence ao lifecycle do `OmnichannelView`.
+
+## 5. Mídia
+
+A Whats API é proprietária do lifecycle de mídia.
+
+Target:
+
+```text
+pending → downloading → ready | failed
+```
+
+Persistência:
+
+```text
+/app/data/media/{tenant}/{session}/...
+```
+
+O Dominus atua como intermediário autorizado para o frontend. O frontend não deve depender de URL temporária do WhatsApp.
+
+## 6. Boas práticas obrigatórias
+
+- timeout explícito em chamadas externas;
+- retries apenas quando explícitos, limitados e da mesma operação;
+- nenhum fallback que altere semântica;
+- `X-Request-ID` é correlação, não autorização;
+- erros não expõem tokens, chaves ou payloads sensíveis;
+- mudanças destrutivas exigem busca de consumidores;
+- distinguir sempre CURRENT RUNTIME de TARGET ARCHITECTURE;
+- alterações de crypto, scope ou trust boundary exigem mudança coordenada entre os serviços.
+
+## Referências
+
+- `docs/architecture.md`
+- `docs/refoundation/GOAL.md`
+- `docs/refoundation/CONTRACTS.md`
+- `docs/refoundation/EVT_CATALOG.md`
+- `docs/refoundation/N8N_ROUTER_SPEC.md`
+- `docs/wa-api.md`
+- `IDC_Dominuslabs/README.md`
+- `api_whatsapp_v1.2/README.md`
