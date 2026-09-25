@@ -1,353 +1,348 @@
 # DominusLabs — Refoundation Task Backlog
 
-> Gerado: 23/09/2026 — Dominus Product & Architecture Refoundation
-> Substitui backlog anterior. Documentos: docs/refoundation/GOAL.md, PLAN.md, CONTRACTS.md
-> Nenhuma task será executada sem visto positivo do usuário.
-
----
+> **Status:** CANONICAL — Execution Backlog  
+> **Master Plan:** `docs/refoundation/PLAN.md`  
+> **Atualizado para o estado do branch `refactor/dominus-refoundation`.**
 
 ## Legenda
 
-- 🔴 Crítico / Bloqueante
-- 🟡 Importante
-- 🟢 Melhoria
-- ✅ Concluído
+- ✅ Concluído com evidência no branch
 - 🚧 Em progresso
 - ⬜ Pendente
+- 🔴 Crítico / bloqueante
+- 🟡 Importante
+- 🟢 Melhoria
 
----
+# FASE 0 — BASELINE
 
-# FASE 0 — INVENTÁRIO E BASELINE
+## ✅ ARCH-000 — Congelar estado atual
+🔴
 
-## 🚧 ARCH-000 — Congelar estado atual
-🔴 Crítico | Sequencial: primeira tarefa
+Evidência: `docs/refoundation/BASELINE.md`.
 
-**Objetivo**: Documentar baseline antes de qualquer alteração estrutural.
+# FASE 1 — FALLBACKS / FAIL-CLOSED
 
-**Repositórios**: Dominuslabs, IDC_Dominuslabs, api-whatsapp-service
+## ✅ ARCH-001 — Inventário de fallbacks
+🔴  
+Evidência: `docs/refoundation/FALLBACK_AUDIT.md`.
 
-**Subtarefas**:
-1. Registrar commit SHA dos 3 repos
-2. Listar workflows n8n envolvidos (IDs e nomes)
-3. Registrar variáveis de ambiente necessárias (sem valores)
-4. Registrar endpoints atualmente utilizados (backend + WA API)
-5. Registrar eventos emitidos (WA API → n8n → Dominus)
-6. Registrar eventos consumidos (SSE, webhooks)
-7. Executar suites existentes e registrar resultados
-8. Registrar problemas já reproduzidos (16 itens do baseline)
+## ✅ ARCH-002 — Configuração obrigatória
+🔴
 
-**Aceite**: Baseline documentado em `docs/refoundation/BASELINE.md`.
+## ✅ ARCH-003 — Remover defaults sensíveis
+🔴
 
----
+## ✅ ARCH-004 — Auditoria do .env
+🔴
 
-# FASE 1 — AUDITORIA DE FALLBACKS E FAIL-CLOSED
+Evidência consolidada: `docs/refoundation/CHECKPOINT_ARCH.md`.
 
-## ⬜ ARCH-001 — Inventário de fallbacks
-🔴 Crítico | Sequencial: após ARCH-000
+# FASE 2 — INTEGRIDADE DOS DADOS
 
-**Objetivo**: Auditar os 3 repos + n8n buscando padrões de fallback.
+## ✅ DATA-001 — Corrigir Pedidos Hoje
+🟡
 
-**Padrões a buscar**: `||`, `??`, ternários, `DEFAULT_`, `default=`, `os.getenv(..., "valor")`, `process.env.X || "valor"`, catch vazio, `except: pass`, mock value, hardcoded tenant/credential/endpoint.
+## ✅ DATA-002 — Remover métricas inventadas
+🟡
 
-**Classificação**: SAFE_UI_DEFAULT, SAFE_FORMATTING_DEFAULT, RETRY, DANGEROUS_FALLBACK, SECURITY_FALLBACK, DATA_INTEGRITY_FALLBACK, SESSION_FALLBACK, CONFIG_FALLBACK, LEGACY_COMPATIBILITY.
+## ✅ DATA-003 — Períodos reais + timezone do tenant
+🟡
 
-**Aceite**: Relatório classificado antes de remoção.
+## ✅ DATA-004 — Pedidos do período respeitam filtro
+🟡
 
-## ⬜ ARCH-002 — Configuração obrigatória
-🔴 Crítico | Paralelo com: ARCH-001
+Evidência: `docs/refoundation/CHECKPOINT_DATA.md` e commits DATA correspondentes.
 
-**Objetivo**: Criar schemas de environment por aplicação. Startup falha sem config necessária.
+# FASE 3 — EVENT CONTRACT
 
-## ⬜ ARCH-003 — Remover defaults sensíveis
-🔴 Crítico | Sequencial: após ARCH-001
+## ✅ EVT-001 — Catalogar eventos atuais
+🔴  
+Evidência: `EVT_CATALOG.md`.
 
-**Objetivo**: Eliminar defaults como admin123, secrets previsíveis, URLs reais em Docker Compose/source.
+## ✅ EVT-002 — Schema SystemEvent
+🔴
 
-## ⬜ ARCH-004 — Auditoria do .env versionado
-🔴 Crítico | Paralelo com: ARCH-003
+## ✅ EVT-003 — Tipos canônicos
+🔴
 
-**Objetivo**: Verificar se .env no Git contém/conteve credenciais. Rotacionar, remover do tracking.
+## ✅ EVT-004 — Event Ingress
+🔴
 
-**Aceite Fase 1**: Nenhum secret tem fallback funcional; startup falha sem config; inventário produzido.
+## ✅ EVT-005 — Event Router
+🔴
 
----
+## ✅ EVT-006 — Regra de status de mensagem
+🔴
 
-# FASE 2 — CORREÇÃO DA INTEGRIDADE DOS DADOS
+## ✅ EVT-007 — n8n router specification
+🟡
 
-## ⬜ DATA-001 — Corrigir "Pedidos Hoje"
-🟡 Importante | Sequencial: após Fase 1
+## ✅ EVT-008 — Deprecação/consumer audit dos endpoints antigos
+🟡
 
-**Arquivo**: `src/pages/DashboardOperationalView.tsx`, backend analytics endpoints
+Evidência: commits EVT do branch e documentos `CHECKPOINT_EVENTS.md`, `N8N_ROUTER_SPEC.md`, `EVT_DEPRECATION.md`.
 
-**Problema**: `todayList.length > 0 ? todayList : rawList` — histórico como fallback.
-
-**Aceite**: Hoje sem pedidos → 0.
-
-## ⬜ DATA-002 — Remover métricas inventadas
-🟡 Importante | Paralelo com: DATA-001
-
-**Problema**: `iaCount || 14`, `pctIa > 0 ? pctIa : 88`
-
-**Aceite**: Sem dado → "—" ou "Dados ainda não disponíveis" ou 0.
-
-## ⬜ DATA-003 — Período real de métricas
-🟡 Importante | Sequencial: após DATA-001
-
-**Objetivo**: Backend analítico `GET /analytics/overview?period=today|7d|30d` com timezone do tenant.
-
-## ⬜ DATA-004 — Pedidos recentes respeitam filtro
-🟡 Importante | Sequencial: após DATA-003
-
-**Aceite**: Lista reflete período selecionado ou declara independência clara.
-
----
-
-# FASE 3 — CONTRATO ÚNICO DE EVENTOS
-
-## ⬜ EVT-001 — Catalogar eventos atuais
-🔴 Crítico | Sequencial: após Fase 2
-
-**Objetivo**: Mapear eventos em WA API, n8n Switch/IFs, Dominus endpoints. Identificar duplicações semânticas.
-
-## ⬜ EVT-002 — Schema SystemEvent
-🔴 Crítico | Sequencial: após EVT-001
-
-**Objetivo**: Contrato versionado com event_id, type, tenant_id, session_id, occurred_at, payload.
-
-## ⬜ EVT-003 — Tipos canônicos
-🔴 Crítico | Paralelo com: EVT-002
-
-**Tipos**: message.created, message.status.updated, message.reaction.updated, conversation.updated, media.*, session.*, order.*
-
-## ⬜ EVT-004 — Event Ingress único
-🔴 Crítico | Sequencial: após EVT-002 + EVT-003
-
-**Objetivo**: `POST /webhooks/events` — ponto único de entrada com signature validation, idempotency, routing.
-
-## ⬜ EVT-005 — Event Router
-🟡 Importante | Sequencial: após EVT-004
-
-**Objetivo**: `app/events/` com schemas, registry, router, handlers por tipo.
-
-## ⬜ EVT-006 — Regra fundamental de mensagem
-🔴 Crítico | Paralelo com: EVT-005
-
-**Regra**: message.status.updated NUNCA incrementa unread, cria mensagem, toca som ou emite notification.
-
-## ⬜ EVT-007 — n8n como router
-🟡 Importante | Sequencial: após EVT-004
-
-**Objetivo**: Switch n8n usa `type` diretamente, não reconstrói tipo.
-
-## ⬜ EVT-008 — Deprecar endpoints antigos
-🟡 Importante | Sequencial: após migração completa de EVT-004..007
-
----
+> Nota: “concluído no branch” não significa que todos os workflows externos já foram promovidos/deployados em produção. Documentação CURRENT/TARGET deve preservar essa distinção.
 
 # FASE 4 — MÍDIA
 
-## ⬜ MEDIA-001 — Media state machine na WA API
-🟡 Importante | Sequencial: após Fase 3
+## ⬜ MEDIA-001 — Extrair/consolidar domínio de mídia na Whats API
+🔴
 
-**Objetivo**: pending → downloading → ready → failed. Persistência em `/app/data/media/{tenant}/{session}/`.
+## ⬜ MEDIA-002 — State machine pending/downloading/ready/failed
+🔴
 
-## ⬜ MEDIA-002 — Frontend usa URLs internas
-🟡 Importante | Sequencial: após MEDIA-001
+## ⬜ MEDIA-003 — Storage `/app/data/media/{tenant}/{session}`
+🔴
 
-**Objetivo**: Frontend nunca depende de pps.whatsapp.net/fbcdn.net.
+## ⬜ MEDIA-004 — GET somente de mídia persistida
+🔴
 
----
+## ⬜ MEDIA-005 — Retry explícito e observável
+🟡
+
+## ⬜ MEDIA-006 — media.processing/ready/failed
+🟡
 
 # FASE 5 — PAGINAÇÃO
 
-## ⬜ PAG-001 — Cursor pagination conversas
-🟡 Importante | Sequencial: após Fase 4
+## ⬜ PAG-001 — Cursor pagination de conversas
+🟡
 
-## ⬜ PAG-002 — Cursor pagination mensagens
-🟡 Importante | Paralelo com: PAG-001
+## ⬜ PAG-002 — Cursor pagination de mensagens
+🟡
 
----
+## ⬜ PAG-003 — Dedupe e scroll anchor
+🟡
 
 # FASE 6 — REALTIME GLOBAL
 
 ## ⬜ RT-001 — RealtimeProvider global
-🔴 Crítico | Sequencial: após Fase 5
+🔴
 
-**Objetivo**: SSE/realtime montado na app autenticada, não dentro do OmnichannelView.
+## ⬜ RT-002 — Router/dedupe frontend
+🔴
 
-## ⬜ RT-002 — Sound Engine + Notification Engine
-🟡 Importante | Sequencial: após RT-001
+## ⬜ RT-003 — Unificar infraestrutura realtime de WhatsApp e pedidos
+🟡
 
-**Regra**: Som somente para message.created AND incoming AND não processado.
+# FASE 7 — NOTIFICAÇÕES
 
----
+## ⬜ NOTIF-001 — Sound Engine
+🔴
 
-# FASE 7 — OMNICHANNEL
+## ⬜ NOTIF-002 — Browser Notification API
+🟡
 
-## ⬜ OMN-001 — Decomposição OmnichannelView.tsx (2725 linhas)
-🔴 Crítico | Sequencial: após Fase 6
+## ⬜ NOTIF-003 — Negative notification rules
+🔴
 
-## ⬜ OMN-002 — Media renderers específicos
-🟡 Importante | Paralelo com: OMN-001
+# FASE 8 — OMNICHANNEL
 
-## ⬜ OMN-003 — MediaViewer global (image zoom/pan, video fullscreen, sticker)
-🟡 Importante | Sequencial: após OMN-002
+## ⬜ OMN-001 — Decompor OmnichannelView
+🔴
 
-## ⬜ OMN-004 — ConversationAvatar unificado
-🟡 Importante | Paralelo com: OMN-001
+## ⬜ OMN-002 — Seleção determinística de sessão
+🔴
 
----
+## ⬜ OMN-003 — ConversationAvatar autenticado/lazy/cache
+🟡
 
-# FASE 8 — ERROR UX
+## ⬜ OMN-004 — Media renderers específicos
+🟡
 
-## ⬜ ERR-001 — Contrato AppError
-🟡 Importante | Sequencial: após Fase 7
+## ⬜ OMN-005 — MediaViewer
+🟡
 
-## ⬜ ERR-002 — Eliminar .catch(() => {})
-🟡 Importante | Paralelo com: ERR-001
+## ⬜ OMN-006 — Estados loading/empty/error/disconnected
+🟡
 
----
+# FASE 9 — ERROR UX
 
-# FASE 9 — APP SHELL + MOBILE
+## ⬜ ERR-001 — AppError
+🟡
 
-## ⬜ SHELL-001 — Mobile shell com bottom navigation
-🟡 Importante | Sequencial: após Fase 8
+## ⬜ ERR-002 — Toast/inline/banner/blocking rules
+🟡
 
-## ⬜ SHELL-002 — Desktop shell + menu renomeado
-🟡 Importante | Paralelo com: SHELL-001
+## ⬜ ERR-003 — Eliminar catches silenciosos relevantes
+🟡
 
-## ⬜ SHELL-003 — Browser Notifications
-🟡 Importante | Sequencial: após RT-002
+# FASE 10 — APP SHELL
 
----
+## ⬜ SHELL-001 — Navegação tenant
+🟡
 
-# FASE 10 — ORDER MANAGER + DASHBOARD + MINHA EMPRESA
+## ⬜ SHELL-002 — Linguagem do produto
+🟡
 
-## ⬜ OM-001 — OrderManagerView.tsx refactor (1353 linhas)
-🟡 Importante | Sequencial: após Fase 9
+# FASE 11 — MOBILE
 
-## ⬜ DASH-001 — Dashboard métricas reais
-🟡 Importante | Paralelo com: OM-001
+## ⬜ MOBILE-001 — Bottom navigation
+🔴
 
-## ⬜ EMP-001 — CompanySettingsView.tsx refactor (1297 linhas) → "Minha Empresa"
-🟡 Importante | Paralelo com: OM-001
+## ⬜ MOBILE-002 — Omnichannel como telas lista/chat
+🔴
 
----
+## ⬜ MOBILE-003 — Zero overflow/overlap
+🔴
 
-# FASE 11 — FUNCIONÁRIO DIGITAL + PERFIL
+# FASE 12 — MINHA EMPRESA
 
-## ⬜ FD-001 — Conceito "Funcionário Digital" substitui IA
-🟢 Melhoria | Sequencial: após Fase 10
+## ⬜ EMP-001 — Reestruturar Company Settings
+🟡
 
-## ⬜ PERF-001 — Página "Meu Perfil"
-🟢 Melhoria | Paralelo com: FD-001
+## ⬜ EMP-002 — ScrollableTabs desktop + navegação mobile
+🟡
 
----
+# FASE 13 — FUNCIONÁRIO DIGITAL
 
-# FASE 12 — DECOMPOSIÇÃO FINAL
+## ⬜ FD-001 — Conceito de Funcionário Digital
+🟡
 
-## ⬜ DEC-001 — session.manager.js decomposição (2347 linhas)
-🟡 Importante | Sequencial: após Fase 11
+## ⬜ FD-002 — Métricas de trabalho real
+🟡
 
-## ⬜ DEC-002 — webhooks.py decomposição (1178 linhas)
-🟡 Importante | Paralelo com: DEC-001
+## ⬜ FD-003 — Configuração operacional
+🟡
 
-## ⬜ DEC-003 — n8n_service.py decomposição (1524 linhas)
-🟡 Importante | Paralelo com: DEC-001
+# FASE 14 — ORDER MANAGER
 
----
+## ⬜ OM-001 — Board operacional por estado
+🟡
 
-# FASE 13 — E2E / REGRESSÃO
+## ⬜ OM-002 — Cards operacionais compactos
+🟡
 
-## ⬜ E2E-001 — Suite Playwright completa
-🔴 Crítico | Sequencial: após Fase 12
+## ⬜ OM-003 — Métricas operacionais
+🟡
 
-**Breakpoints**: 375x812, 390x844, 414x896, 768x1024, 1366x768, 1440x900, 1920x1080
+# FASE 15 — DASHBOARD
 
----
+## ⬜ DASH-001 — Visão operacional usando dados reais
+🟡
 
-# FASE 14 — DESIGN SYSTEM SKILL
+# FASE 16 — PERFIL
 
-## ⬜ SKILL-001 — Criar dominus-frontend SKILL.md
-🟢 Melhoria | Paralelo com: qualquer fase
+## ⬜ PROFILE-001 — Meu Perfil separado de Minha Empresa
+🟢
 
----
+## ⬜ PROFILE-002 — Preferências suportadas
+🟢
 
-## Grafo de Dependências
+# FASE 17 — BACKEND DOMINUS
 
+## ⬜ DEC-BE-001 — Decompor webhooks.py
+🟡
+
+## ⬜ DEC-BE-002 — Decompor n8n_service.py
+🟡
+
+## ⬜ DEC-BE-003 — Correlation IDs
+🟡
+
+# FASE 18 — WHATS API
+
+## ⬜ DEC-WA-001 — Decompor session.manager.js
+🟡
+
+## ⬜ DEC-WA-002 — Cleanup legacy com consumer proof
+🟡
+
+# FASE 19 — DESIGN SYSTEM / SKILL
+
+## ⬜ SKILL-001 — dominus-frontend SKILL.md
+🟢
+
+# FASE 20 — PERFORMANCE
+
+## ⬜ PERF-OPT-001 — Conversas/mensagens
+🟢
+
+## ⬜ PERF-OPT-002 — Avatar/mídia
+🟢
+
+# FASE 21 — PWA
+
+## ⬜ PWA-001 — Manifest/installability
+🟢
+
+## ⬜ PWA-002 — Service Worker + Web Push
+🟢
+
+# FASE 22 — TESTES DE CONTRATO
+
+## ⬜ TEST-001 — Events
+🔴
+
+## ⬜ TEST-002 — Media
+🔴
+
+## ⬜ TEST-003 — Pagination
+🟡
+
+## ⬜ TEST-004 — Notification rules
+🔴
+
+# FASE 23 — E2E / REGRESSÃO
+
+## ⬜ E2E-001 — Playwright nos breakpoints definidos
+🔴
+
+# FASE 24 — ACESSIBILIDADE
+
+## ⬜ A11Y-001 — Keyboard/focus/labels/touch targets
+🟡
+
+# FASE 25 — OBSERVABILIDADE
+
+## ⬜ OBS-001 — Event/request/media correlation
+🟡
+
+## ⬜ OBS-002 — Sanitização de logs
+🔴
+
+# FASE 26 — LEGACY CLEANUP
+
+## ⬜ LEGACY-001 — Reauditar compatibilidade residual
+🟡
+
+## ⬜ LEGACY-002 — Remover somente após consumer proof
+🔴
+
+# FASE 27 — DOCUMENTAÇÃO FINAL
+
+## 🚧 DOC-001 — Saneamento documental
+🟡
+
+Escopo atual: alinhar documentos canônicos, remover contradições e sanitizar artefatos históricos.
+
+## ⬜ DOC-002 — Auditoria documental final pós-Refoundation
+🟢
+
+# Dependências principais
+
+```text
+ARCH → DATA → EVT → MEDIA → PAG → RT → NOTIF → OMN
+                                      ↓
+                                    ERROR UX
+                                      ↓
+                                  SHELL/MOBILE
+                                      ↓
+                         PRODUCT AREAS / DECOMPOSITION
+                                      ↓
+                         PERFORMANCE / PWA / A11Y / OBS
+                                      ↓
+                              E2E / LEGACY / DOCS
 ```
-ARCH-000
-  ↓
-ARCH-001 ←→ ARCH-002
-  ↓            ↓
-ARCH-003 ←→ ARCH-004
-  ↓
-DATA-001 ←→ DATA-002
-  ↓
-DATA-003 → DATA-004
-  ↓
-EVT-001 → EVT-002 ←→ EVT-003
-                ↓
-           EVT-004 → EVT-005
-                ↓        ↓
-           EVT-006    EVT-007
-                ↓
-           EVT-008
-  ↓
-MEDIA-001 → MEDIA-002
-  ↓
-PAG-001 ←→ PAG-002
-  ↓
-RT-001 → RT-002
-  ↓
-OMN-001 ←→ OMN-002 ←→ OMN-004
-              ↓
-           OMN-003
-  ↓
-ERR-001 ←→ ERR-002
-  ↓
-SHELL-001 ←→ SHELL-002
-  ↓
-OM-001 ←→ DASH-001 ←→ EMP-001
-  ↓
-FD-001 ←→ PERF-001
-  ↓
-DEC-001 ←→ DEC-002 ←→ DEC-003
-  ↓
-E2E-001
-```
 
----
+# Regra para agentes
 
-## Referências Rápidas
+Não iniciar task visual conveniente se uma dependência estrutural anterior estiver pendente.
 
-### Containers
-- **DominusLabs backend**: `sjrweu7rw8e3nywm5stef2ri-*` (app 38)
-- **WA API**: `hkossco0sggwwwss0cwk4w0s-*` (app 32)
-- **Coolify DB**: `coolify-db`
-- **VPS**: `ssh -p 2222 root@72.60.247.157`
+Exemplos:
 
-### Repositórios
-- Frontend + Backend: `/home/eliezer/Escritorio/dominuslabs`
-- WA API: `/home/eliezer/Escritorio/api-whatsapp-service`
-- IDC: `/home/eliezer/Escritorio/idc-dominuslabs`
-
-### n8n
-- URL: `https://myn8n.seommerce.shop`
-- Dominus AI: `YqDBFFzJ1L4FRAvz`
-- Dominus AI Buffer: `4ANz4lSb80pCuAT4`
-- dominuslabs_respostas_leads: `SpQwyDZsOo3ozXuE`
-- dominuslabs_crm: `WJ37gGiodnAJVkBN`
-
-### Volumes WA API (bind mounts persistentes)
-- `/app/sessions` — credenciais Baileys
-- `/app/data` — mídia, mensagens, conversas
-- `/app/keys` — chaves criptográficas
-
----
-
-## Histórico de Conclusões
-
-| Data | ID | Descrição |
-|---|---|---|
-| 23/09/2026 | — | Backlog refeito para Refoundation. Antigo backlog (T1-T12) absorvido nas fases macro. |
+- não implementar PWA antes de realtime global/notificações;
+- não criar MediaViewer dependendo de contrato de mídia temporário;
+- não redesenhar Omnichannel preservando fallback de sessão;
+- não remover endpoint legado antes do consumer proof.
