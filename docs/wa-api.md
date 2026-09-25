@@ -84,8 +84,6 @@ A Whats API não assina esse JWT.
 | Enviar mensagem/mídia | `whatsapp:messages:send` |
 | Avatar e mídia persistida | `whatsapp:sessions:read` |
 
-Não documentar `whatsapp:media:read` como scope vigente sem uma mudança coordenada de contrato.
-
 ## Headers e criptografia
 
 Chamadas protegidas utilizam:
