@@ -1,5 +1,8 @@
 # EXECUTION CONTRACTS — Primeiras 5 Tarefas
 
+> **Status:** HISTORICAL / EXECUTION ARTIFACT
+> Estes contratos foram congelados para tarefas iniciais específicas. Não são autoridade para a arquitetura atual; use `GOAL.md`, `CONTRACTS.md` e `PLAN.md`.
+
 > Congelado em: 2026-09-24
 > Escopo: ARCH-000, ARCH-001, ARCH-002, DATA-001, DATA-002
 > Estes contratos são IMUTÁVEIS durante a execução destas 5 tarefas.
