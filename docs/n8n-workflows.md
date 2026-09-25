@@ -2,6 +2,7 @@
 
 > **Status:** CURRENT_RUNTIME_ONLY — Este documento descreve o comportamento atual.
 > Para a arquitetura planejada, consulte `docs/refoundation/GOAL.md` e `docs/architecture.md`.
+> **Authority note:** este arquivo descreve workflows e migração; não substitui `CONTRACTS.md`.
 
 ---
 
@@ -24,7 +25,7 @@ Whats API
 
 ```
 Whats API
-  → POST /webhook/events (Event Ingress)
+  → POST /api/v1/webhooks/events (Event Ingress)
   → Dominus EventIngress
   → EventValidator
   → EventRouter
@@ -83,7 +84,7 @@ Atualmente, eventos usam nomes variados e endpoints múltiplos. O target introdu
 
 ### 2. Event Ingress no Dominus
 
-Novo endpoint: `POST /webhooks/events`
+Novo endpoint: `POST /api/v1/webhooks/events`
 
 Responsabilidades:
 - Signature validation
