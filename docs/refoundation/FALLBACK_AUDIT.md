@@ -1,6 +1,7 @@
 # FALLBACK AUDIT — ARCH-001
 
 > **Status:** HISTORICAL / AUDIT ARTIFACT
+> **Security note:** operational values in historical code excerpts are redacted; this preserves the finding without publishing deployment topology.
 > This document records the system at a specific point in time.
 > It is NOT the canonical target architecture.
 > Canonical sources:
@@ -193,7 +194,7 @@ WHATSAPP_API_URL: str = os.getenv("WHATSAPP_API_URL", "http://localhost:3000")
 ### CFG-002 — config.py:97
 **Arquivo:** `project-hub/backend/app/core/config.py:97`
 ```python
-WHATSAPP_PUBLIC_URL: str = os.getenv("WHATSAPP_PUBLIC_URL", "https://dominuslabs.online")
+WHATSAPP_PUBLIC_URL: str = os.getenv("WHATSAPP_PUBLIC_URL", "<production-public-url>")
 ```
 **Risco:** URL de produção hardcoded como default — pode expor URL real em ambientes errados.
 **Ação:** Remover default. Fail-closed via startup validator.
@@ -203,7 +204,7 @@ WHATSAPP_PUBLIC_URL: str = os.getenv("WHATSAPP_PUBLIC_URL", "https://dominuslabs
 ### CFG-003 — config.py:98
 **Arquivo:** `project-hub/backend/app/core/config.py:98`
 ```python
-IDENTITY_WORKER_URL: str = os.getenv("IDENTITY_WORKER_URL", "https://idc-dominuslabs.eliejosuevargas01.workers.dev")
+IDENTITY_WORKER_URL: str = os.getenv("IDENTITY_WORKER_URL", "<configured-idpw-url>")
 ```
 **Risco:** URL real do IDPW hardcoded como default — expõe infraestrutura em código público.
 **Ação:** Remover default. Fail-closed via startup validator.
