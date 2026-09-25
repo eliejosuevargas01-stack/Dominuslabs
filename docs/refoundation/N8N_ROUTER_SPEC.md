@@ -1,12 +1,8 @@
 # EVT-007 — n8n como Router
 
-> **Status:** HISTORICAL / AUDIT ARTIFACT
-> This document records the system at a specific point in time.
-> It is NOT the canonical target architecture.
-> Canonical sources:
-> - `docs/refoundation/GOAL.md`
-> - `docs/refoundation/CONTRACTS.md`
-> - `docs/architecture.md`
+> **Status:** MIGRATION SPEC — NON-CANONICAL
+> Este documento detalha a migração EVT-007. Ele não substitui os contratos canônicos.
+> Authority: `docs/refoundation/GOAL.md`, `CONTRACTS.md` e `docs/architecture.md`.
 
 ---
 
