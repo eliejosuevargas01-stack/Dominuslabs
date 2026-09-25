@@ -1,5 +1,15 @@
 # EVT-007 — n8n como Router
 
+> **Status:** HISTORICAL / AUDIT ARTIFACT
+> This document records the system at a specific point in time.
+> It is NOT the canonical target architecture.
+> Canonical sources:
+> - `docs/refoundation/GOAL.md`
+> - `docs/refoundation/CONTRACTS.md`
+> - `docs/architecture.md`
+
+---
+
 ## Visão Geral
 
 O n8n atua como **roteador inteligente** entre o WA API (WhatsApp) e o Dominus backend.

@@ -1,244 +1,179 @@
-# Deploy e Operacao
+# Deploy e Operação
 
-Documentacao completa de deploy, infraestrutura e operacao do DominusLabs.
+> **Status:** CANONICAL — Deployment Guide
+
+Este documento descreve conceitos genéricos de deployment. Detalhes específicos de infraestrutura são mantidos em runbooks privados.
 
 ---
 
-## 1. Visao Geral da Infraestrutura
+## Visão Geral da Infraestrutura
 
-A stack roda em um unico VPS com os seguintes componentes:
+### Componentes
 
-| Componente | Descricao |
+| Componente | Descrição |
 |------------|-----------|
-| VPS | 72.60.247.157 (SSH porta 2222, usuario root) |
-| Orquestrador | Coolify self-hosted (painel web) |
-| Proxy Reverso | Traefik (gerenciado pelo Coolify) |
-| Banco de Dados | PostgreSQL (container `coolify-db`) |
-| Aplicacoes | Containers Docker gerenciados pelo Coolify |
-| SSL | Let's Encrypt automatico via Traefik |
+| Orquestrador | Coolify self-hosted |
+| Proxy Reverso | Traefik |
+| Banco de Dados | PostgreSQL |
+| Aplicações | Containers Docker |
+| SSL | Let's Encrypt automático |
 
-Fluxo de requisicao:
+### Fluxo de Requisição
 
 ```
-Usuario -> DNS (dominuslabs.online / whats.dominuslabs.online)
-    -> Traefik (Coolify) -> Container da aplicacao
+Usuário → DNS → Traefik → Container da aplicação
 ```
 
 ---
 
-## 2. Aplicacoes
+## Aplicações
 
-| Nome | App ID | Git Repo | URL | Container Padrao |
-|------|--------|----------|-----|-----------------|
-| DominusLabs (backend + frontend) | 38 | `github.com:eliejosuevargas01-stack/Dominuslabs.git` (branch `main`) | https://dominuslabs.online | `sjrweu7rw8e3nywm5stef2ri-*` |
-| WA API | 32 | `github.com:eliejosuevargas01-stack/api_whatsapp_v1.2.git` (branch `main`) | https://whats.dominuslabs.online | `hkossco0sggwwwss0cwk4w0s-*` |
-
----
-
-## 3. Processo de Deploy Normal
-
-1. **Push no Git**
-   ```bash
-   git add .
-   git commit -m "feat: nova funcionalidade"
-   git push origin main
-   ```
-
-2. **Coolify detecta o push**
-   - Via webhook automatico do GitHub, ou
-   - Manualmente pelo painel Coolify
-
-3. **Build do container**
-   - Coolify executa o build conforme o Dockerfile do repositorio
-   - DominusLabs: `npm run build` (frontend) + `uvicorn` (backend)
-   - WA API: build do Node.js
-
-4. **Health check**
-   - Coolify aguarda o novo container responder ao health check
-   - Start period: 30s
-   - Se falhar, o deploy e marcado como falho
-
-5. **Troca de trafego**
-   - Container antigo e parado
-   - Proxy reverso roteia trafego para o novo container
+| Nome | Git Repo | Stack |
+|------|----------|-------|
+| Dominuslabs | Dominuslabs | FastAPI + React |
+| Whats API | api_whatsapp_v1.2 | Node.js + Baileys |
 
 ---
 
-## 4. Deploy via CLI
+## Processo de Deploy
 
-Quando o painel web nao esta disponivel ou para automatizacao.
+### Via Painel Web
 
-### App 38 — DominusLabs
+1. Acesse painel do orquestrador
+2. Selecione aplicação
+3. Clique em Deploy
+4. Acompanhe logs em tempo real
 
-```bash
-ID=$(ssh -p 2222 root@72.60.247.157 "docker exec coolify-db psql -U coolify -d coolify -t -A -c \"INSERT INTO application_deployment_queues (application_id, deployment_uuid, status, is_webhook, created_at, updated_at) VALUES ('38', gen_random_uuid()::text, 'in_progress', false, now(), now()) RETURNING id\"")
-ssh -p 2222 root@72.60.247.157 "docker exec coolify php artisan tinker --execute='dispatch(new App\\\\Jobs\\\\ApplicationDeploymentJob($ID));'"
-```
+### Via Git Push
 
-### App 32 — WA API
-
-```bash
-ID=$(ssh -p 2222 root@72.60.247.157 "docker exec coolify-db psql -U coolify -d coolify -t -A -c \"INSERT INTO application_deployment_queues (application_id, deployment_uuid, status, is_webhook, created_at, updated_at) VALUES ('32', gen_random_uuid()::text, 'in_progress', false, now(), now()) RETURNING id\"")
-ssh -p 2222 root@72.60.247.157 "docker exec coolify php artisan tinker --execute='dispatch(new App\\\\Jobs\\\\ApplicationDeploymentJob($ID));'"
-```
+Push para branch principal dispara build automático (webhook).
 
 ---
 
-## 5. Volumes Persistentes
+## Variáveis de Ambiente
 
-| App | Path no Host | Path no Container | Conteudo |
-|-----|-------------|-------------------|----------|
-| WA API (32) | `coolify_volumes/hkossco0sggwwwss0cwk4w0s/sessions` | `/app/sessions` | Credenciais Baileys por sessao (sessoes WhatsApp) |
-| WA API (32) | `coolify_volumes/hkossco0sggwwwss0cwk4w0s/data` | `/app/data` | Midia, mensagens e conversas |
-| WA API (32) | `coolify_volumes/hkossco0sggwwwss0cwk4w0s/keys` | `/app/keys` | Chaves JWT para autenticacao da API |
+### Dominuslabs (Backend)
 
-> **Nota:** DominusLabs (App 38) nao utiliza volumes persistentes customizados. Todo estado res no banco de dados PostgreSQL.
-
----
-
-## 6. Variaveis de Ambiente Criticas
-
-### Backend — DominusLabs (App 38)
-
-| Variavel | Descricao |
+| Variável | Descrição |
 |----------|-----------|
-| `DATABASE_URL` | URI de conexao com PostgreSQL (`postgresql://user:pass@host:5432/DOMINUS_DB`) |
-| `SECRET_KEY` | Chave JWT para autenticacao de usuarios |
-| `WHATSAPP_API_URL` | URL da WA API: `https://whats.dominuslabs.online` |
-| `WHATSAPP_API_PRIVATE_KEY_PATH` | Caminho da chave privada: `/app/keys/private.pem` |
-| `N8N_WEBHOOK_URL` | Webhook do n8n: `https://myn8n.seommerce.shop/webhook/lead_responses` |
+| `DATABASE_URL` | URI PostgreSQL |
+| `JWT_SECRET` | Chave JWT sessão humana |
+| `IDPW_URL` | URL do IDPW |
+| `IDPW_JWKS_URL` | URL JWKS |
+| `DOMINUS_PRIVATE_KEY` | Chave privada RSA |
+| `WHATSAPP_API_URL` | URL Whats API |
+| `WHATS_API_PUBLIC_KEY` | Chave pública Whats API |
+| `N8N_WEBHOOK_SECRET` | Segredo HMAC |
 
-### WA API (App 32)
+### Whats API
 
-| Variavel | Descricao |
+| Variável | Descrição |
 |----------|-----------|
-| `PG_CONNECTION_STRING` | URI de conexao com PostgreSQL (`postgresql://user:pass@host:5430/whats_api`) |
-| `PORT` | Porta da aplicacao (`3000`) |
-| `SESSIONS_DIR` | Diretorio de sessoes Baileys (`/app/sessions`) |
-| `DATA_DIR` | Diretorio de dados (`/app/data`) |
-| `MEDIA_DIR` | Diretorio de midia (`/app/data/media`) |
-| `KEYS_DIR` | Diretorio de chaves JWT (`/app/keys`) |
-| `AUTO_CONNECT` | Reconectar sessoes automaticamente (`true`) |
-| `N8N_WEBHOOK_URL` | Webhook do n8n: `https://myn8n.seommerce.shop/webhook/lead_responses` |
-| `N8N_WEBHOOK_SECRET` | Chave HMAC para validar webhooks do n8n |
-| `N8N_WEBHOOK_ENABLED` | Habilitar envio de webhooks (`true`) |
-| `TYPING_DELAY_ENABLED` | Simular digitacao antes de enviar mensagens (`true`) |
-| `LOG_LEVEL` | Nivel de logs (`info`) |
+| `PG_CONNECTION_STRING` | URI PostgreSQL |
+| `JWT_ISSUER` | Issuer IDPW |
+| `IDPW_JWKS_URL` | URL JWKS |
+| `WHATS_API_PRIVATE_KEY` | Chave privada |
+| `DOMINUS_PUBLIC_KEY` | Chave pública Dominus |
+| `SESSIONS_DIR` | Diretório sessões |
+| `MEDIA_DIR` | Diretório mídia |
+| `WEBHOOK_SECRET` | Segredo HMAC |
 
 ---
 
-## 7. Health Checks
+## Health Checks
 
-| App | Endpoint | Metodo | Resposta Esperada | Configuracao |
-|-----|----------|--------|-------------------|--------------|
-| DominusLabs (38) | `/api/v1/openapi.json` | GET | `200 OK` | Interval: 10s, Timeout: 5s, Retries: 3, Start Period: 30s |
-| WA API (32) | `/api/health` | GET | `200 OK` com `{status: "ok"}` | Interval: 10s, Timeout: 5s, Retries: 3, Start Period: 30s |
+| App | Endpoint | Resposta |
+|-----|----------|----------|
+| Dominuslabs | `/api/v1/openapi.json` | 200 OK |
+| Whats API | `/api/health` | 200 OK + `{status: "ok"}` |
 
-**Comportamento:**
-- O health check decide quando o container esta pronto para receber trafego
-- Se falhar 3 vezes consecutivas, o deploy e considerado falho
-- Durante o `start_period` de 30s, falhas sao ignoradas (tempo de warm-up)
-- Container nao saludavel nao recebe trafego do proxy
+### Configuração
 
----
-
-## 8. Rollback
-
-### Via Painel Coolify
-
-1. Acesse o painel Coolify
-2. Selecione a aplicacao
-3. V para a aba **Deployments**
-4. Selecione o deploy anterior desejado
-5. Clique em **Redeploy**
-
-### Via CLI
-
-Alterar `force_rebuild=false` e apontar para o commit anterior. Exemplo:
-
-```bash
-# Listar deploys anteriores
-ssh -p 2222 root@72.60.247.157 "docker exec coolify-db psql -U coolify -d coolify -c \"SELECT deployment_uuid, status, created_at FROM application_deployment_queues WHERE application_id = '38' ORDER BY created_at DESC LIMIT 5\""
-
-# Redeploy de um commit anterior (substituir COMMIT_HASH)
-ssh -p 2222 root@72.60.247.157 "docker exec coolify-db psql -U coolify -d coolify -c \"UPDATE applications SET git_commit = 'COMMIT_HASH' WHERE id = '38'\""
-```
-
-> Coolify mantem as imagens Docker dos containers anteriores, permitindo rollback rapido.
+- Interval: 10s
+- Timeout: 5s
+- Retries: 3
+- Start Period: 30s
 
 ---
 
-## 9. Banco de Dados
+## Rollback
 
-### Acesso
+### Via Painel
 
-O PostgreSQL roda dentro do container `coolify-db` e e usado por todas as aplicacoes.
+1. Acessar painel do orquestrador
+2. Selecionar aplicação
+3. Ir para Deployments
+4. Selecionar deploy anterior
+5. Clique em Redeploy
 
-```bash
-# Acessar PostgreSQL via SSH
-ssh -p 2222 root@72.60.247.157 "docker exec coolify-db psql -U coolify -d coolify"
-```
+---
+
+## Banco de Dados
 
 ### Migrations
 
 | App | Ferramenta | Comando |
 |-----|-----------|---------|
-| DominusLabs (backend) | Alembic | `alembic upgrade head` (executado automaticamente no build) |
-| WA API | db.js (scripts SQL) | Verificar scripts no repositorio da API |
+| Dominuslabs | Alembic | `alembic upgrade head` |
+| Whats API | PostgreSQL scripts | Verificar scripts no repo |
 
 ### Backup
 
-> **PENDENTE:** Backup automatico nao esta configurado.
-
-```bash
-# Backup manual (exemplo)
-ssh -p 2222 root@72.60.247.157 "docker exec coolify-db pg_dump -U coolify -d coolify > /tmp/coolify-backup-$(date +%F).sql"
-```
+> **Nota:** Backup automático deve ser configurado. Verificar runbook privado.
 
 ---
 
-## 10. SSH no VPS
+## Volumes Persistentes
 
-### Acesso
+| App | Path Container | Conteúdo |
+|-----|---------------|----------|
+| Whats API | `/app/sessions` | Credenciais Baileys |
+| Whats API | `/app/data` | Mídia, mensagens |
+| Whats API | `/app/keys` | Chaves JWT |
 
-```bash
-ssh -p 2222 root@72.60.247.157
-```
-
-### Comandos Uteis
-
-```bash
-# Listar containers em execucao
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-
-# Logs de um container em tempo real
-docker logs -f <container_name>
-
-# Executar comando dentro de um container
-docker exec -it <container_name> sh
-
-# Restart de um container
-docker restart <container_name>
-
-# Info do container da App 38
-docker ps --filter "name=sjrweu7rw8e3nywm5stef2ri"
-
-# Info do container da App 32
-docker ps --filter "name=hkossco0sggwwwss0cwk4w0s"
-
-# Verificar health check via curl (de dentro do VPS)
-docker exec <app_container> curl -f http://localhost:PORT/endpoint
-
-# Acessar banco diretamente
-docker exec -it coolify-db psql -U coolify -d coolify
-
-# Espaco em disco
-df -h
-
-# Uso de recursos dos containers
-docker stats --no-stream
-```
+> **Nota:** Dominus Labs não utiliza volumes persistentes customizados. Todo estado reside no banco de dados PostgreSQL.
 
 ---
 
-*Ultima atualizacao: 2026-09-22*
+## Segurança
+
+### Princípios
+
+1. **Sem dados sensíveis em repositórios públicos**
+   - IPs, ports, SSH users
+   - Container IDs, App IDs
+   - URLs operacionais privadas
+   - Tokens, secrets
+
+2. **Secrets por Secret Manager**
+   - Nunca em código
+   - Nunca em Dockerfile
+   - Nunca em logs
+
+3. **Network Isolation**
+   - Containers não expõem portas no host
+   - Proxy é o único ponto de entrada
+
+---
+
+## Runbooks Privados
+
+Informação operacional específica é mantida em runbooks privados:
+
+- IPs e ports reais
+- SSH access
+- Container names específicos
+- Comandos de administração
+- URLs internas
+- Credenciais específicas
+- Procedimentos de disaster recovery
+
+Consulte a equipe de DevOps para acesso.
+
+---
+
+## Referências
+
+- `docs/architecture.md` — Arquitetura geral
+- `docs/refoundation/GOAL.md` — Princípios
+- `INTEGRATION_GUIDE.md` — Integração M2M

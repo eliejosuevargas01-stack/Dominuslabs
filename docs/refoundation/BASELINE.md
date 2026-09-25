@@ -1,5 +1,15 @@
 # BASELINE — Dominus Product & Architecture Refoundation
 
+> **Status:** HISTORICAL / AUDIT ARTIFACT
+> This document records the system at a specific point in time.
+> It is NOT the canonical target architecture.
+> Canonical sources:
+> - `docs/refoundation/GOAL.md`
+> - `docs/refoundation/CONTRACTS.md`
+> - `docs/architecture.md`
+
+---
+
 > Capturado em: 2026-09-24
 > Capturado por: ARCH-000 (Orchestrator)
 > Este documento é o ponto de referência para medir progresso. Não alterar após commit.

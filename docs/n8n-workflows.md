@@ -1,204 +1,214 @@
-# Workflows n8n — DominusLabs
+# n8n Workflows — Dominus
 
-Este documento descreve os workflows executados no n8n da instância `myn8n.seommerce.shop`, seu papel na arquitetura e os fluxos de dados entre WhatsApp, banco de dados, backend e agente de IA.
-
----
-
-## 1. Visão Geral
-
-O n8n atua como **orquestrador de eventos** no meio do fluxo de mensagens do DominusLabs:
-
-1. Recebe webhooks da **WA API** (mensagens enviadas/recebidas via WhatsApp).
-2. Valida segurança via **HMAC**.
-3. Persiste dados no **PostgreSQL** (tabelas `contacts`, `messages`, `conversations`).
-4. Notifica o **backend** em tempo real via SSE (`/api/v1/webhooks/crm/update-chat`).
-5. Encaminha mensagens recebidas de clientes para o agente **Dominus AI**, que processa e responde automaticamente.
+> **Status:** CURRENT_RUNTIME_ONLY — Este documento descreve o comportamento atual.
+> Para a arquitetura planejada, consulte `docs/refoundation/GOAL.md` e `docs/architecture.md`.
 
 ---
 
-## 2. Workflows
+## Visão Geral
 
-| ID | Nome | Status | Função |
-|---|---|---|---|
-| `SpQwyDZsOo3ozXuE` | `dominuslabs_respostas_leads` | Ativo | Recebe webhook do WA API, valida HMAC, salva mensagem no banco, notifica frontend e encaminha para Dominus AI |
-| `WJ37gGiodnAJVkBN` | `dominuslabs_crm` | Ativo | Legado — função a ser verificada. Pode conter lógica antiga do CRM que será consolidada ou removida. |
-| `YqDBFFzJ1L4FRAvz` | `Dominus AI` | Ativo | Agente de IA que processa mensagens recebidas e gera respostas automáticas via WhatsApp |
-| `4ANz4lSb80pCuAT4` | `Dominus AI Buffer` | Ativo | Buffer / fila para o workflow `Dominus AI`, gerenciando concorrência e taxa de requisições |
+O n8n atua como **orquestrador de eventos** no meio do fluxo de mensagens do Dominus.
 
----
-
-## 3. Fluxo Detalhado: `dominuslabs_respostas_leads`
-
-Passo a passo de cada nó do workflow ativo de recebimento de mensagens:
-
-| Ordem | Nó | Tipo | Descrição |
-|---|---|---|---|
-| 1 | Webhook Trigger | Webhook | Recebe POST da WA API no endpoint `/webhook/lead_responses` |
-| 2 | Validar HMAC | Code / Function | Verifica assinatura `X-Webhook-Signature` usando o HMAC secret configurado por sessão |
-| 3 | criar contato | Postgres | Faz **upsert** na tabela `contacts` (insere ou atualiza o contato pelo `contact_jid`) |
-| 4 | salva mensagem1 | Postgres | Faz **upsert** na tabela `messages` com os dados da mensagem recebida |
-| 5 | update preview | Postgres | Faz **upsert** na tabela `conversations`, atualizando `last_message_preview` e timestamp |
-| 6 | Wait | Wait | Aguarda breve intervalo antes de notificar o backend |
-| 7 | Code in JavaScript1 | Code Node | Gera assinatura HMAC para o backend DominusLabs |
-| 8 | notifica dominuslabs1 | HTTP Request | Faz POST para `/api/v1/webhooks/crm/update-chat` com payload da mensagem |
-| 9 | If | IF | Verifica condições (ex: mensagem não é `fromMe`) |
-| 10 | HTTP Request4 | HTTP Request | Se a condição do `If` for satisfeita, encaminha mensagem para o workflow **Dominus AI** |
-
----
-
-## 4. Segurança: Validação HMAC
-
-A comunicação entre WA API, n8n e backend utiliza **HMAC-SHA256** para garantir autenticidade dos payloads.
-
-### 4.1 WA API → n8n
-- A WA API envia o header `X-Webhook-Signature` com o HMAC do payload.
-- O nó **Validar HMAC** recalcula a assinatura usando o `secret` configurado na sessão e compara com o header recebido.
-- Se inválido, a execução é interrompida.
-
-### 4.2 n8n → Backend
-- O nó **Code in JavaScript1** gera uma nova assinatura HMAC para o payload enviado ao backend.
-- O backend valida essa assinatura ao receber a requisição em `/api/v1/webhooks/crm/update-chat`.
-
-> **Importante:** O HMAC secret é configurado por sessão de WhatsApp e deve ser idêntico tanto na WA API quanto no n8n.
-
----
-
-## 5. Banco de Dados
-
-O workflow `dominuslabs_respostas_leads` escreve nas seguintes tabelas do PostgreSQL (banco `DOMINUS_DB`):
-
-### 5.1 `messages`
-| Campo | Descrição |
-|---|---|
-| `message_id` | ID único da mensagem (vindo da WA API) |
-| `contact_jid` | Identificador JID do contato |
-| `session_id` | ID da sessão de WhatsApp |
-| `content` | Texto da mensagem |
-| `is_from_me` | Booleano — `true` se a mensagem foi enviada pelo número do DominusLabs |
-| `media_url` | URL do arquivo de mídia, caso exista |
-| `status` | Status da mensagem (ex: `sent`, `delivered`, `read`) |
-| `message_timestamp` | Timestamp de recebimento/envio |
-| `tenant_id` | ID do tenant (multi-tenant) |
-
-### 5.2 `conversations`
-| Campo | Descrição |
-|---|---|
-| `contact_jid` | Identificador JID do contato (chave primária / única por sessão) |
-| `session_id` | ID da sessão de WhatsApp |
-| `last_message_preview` | Prévia do texto da última mensagem (para lista de chats) |
-| `last_message_timestamp` | Timestamp da última mensagem |
-| `unread_count` | Contador de mensagens não lidas |
-| `tenant_id` | ID do tenant |
-
-### 5.3 `contacts`
-| Campo | Descrição |
-|---|---|
-| `contact_jid` | Identificador JID do contato |
-| `push_name` | Nome de exibição vindo do WhatsApp |
-| `display_phone` | Número de telefone formatado |
-| `profile_pic_url` | URL da foto de perfil, se disponível |
-| `tenant_id` | ID do tenant |
-
----
-
-## 6. Fluxo de Encaminhamento para Dominus AI
-
-Quando uma mensagem recebida **não é do próprio sistema** (`fromMe = false`), o workflow a encaminha para processamento automático:
+### CURRENT RUNTIME
 
 ```
-WhatsApp (cliente)
-    ↓
-Baileys / WA API
-    ↓
-POST /webhook/lead_responses  →  n8n (dominuslabs_respostas_leads)
-    ↓ (se fromMe = false)
-POST para Dominus AI (workflow YqDBFFzJ1L4FRAvz)
-    ↓
-Dominus AI processa e decide resposta
-    ↓
-POST /api/v1/webhooks/outbound/whatsapp/send
-    ↓
-Mensagem enviada ao cliente via WhatsApp
+Whats API
+  → POST /webhook/lead_responses
+  → n8n valida HMAC
+  → n8n upsert PostgreSQL
+  → n8n chama /api/v1/webhooks/crm/update-chat
+  → Backend emite SSE
 ```
 
-O workflow **Dominus AI Buffer** (`4ANz4lSb80pCuAT4`) atua como fila intermediária para evitar sobrecarga do modelo de IA e garantir que as respostas sejam enviadas na ordem correta.
+### TARGET ARCHITECTURE
+
+```
+Whats API
+  → POST /webhook/events (Event Ingress)
+  → Dominus EventIngress
+  → EventValidator
+  → EventRouter
+  → Handler específico
+```
 
 ---
 
-## 7. Configuração de Webhook na WA API
+## CURRENT RUNTIME — Detalhes
 
-Para que as mensagens cheguem ao n8n, cada sessão de WhatsApp deve ter o seguinte webhook configurado na WA API:
-
-| Parâmetro | Valor |
-|---|---|
-| **URL** | `https://myn8n.seommerce.shop/webhook/lead_responses` |
-| **Evento** | `message.created` |
-| **HMAC Secret** | Configurado por sessão (deve corresponder ao usado no nó de validação do n8n) |
-| **Habilitado** | `enabled = true` (obrigatório) |
-| **Filtros** | Descarta mensagens de `@broadcast` e `@newsletter` |
-
-> **Nota:** O descarte de `@broadcast` e `@newsletter` evita que mensagens de status e canais poluam o CRM e disparem respostas automáticas da IA.
-
----
-
-## 8. Nota sobre `dominuslabs_crm`
-
-O workflow `dominuslabs_crm` (`WJ37gGiodnAJVkBN`) está **ativo** mas sua função atual é **desconhecida**. Ele pode conter lógica legada do CRM que já foi migrada para o fluxo principal `dominuslabs_respostas_leads`.
-
-**Recomendação:**
-- Revisar os nós e execuções recentes deste workflow.
-- Determinar se ainda é necessário ou pode ser desativado.
-- Documentar a função real após auditoria.
-
----
-
-## 9. Variáveis e Credenciais Necessárias no n8n
-
-### 9.1 Credenciais de Banco de Dados
-| Credencial | Tipo | Uso |
-|---|---|---|
-| `DOMINUS_DB` | PostgreSQL | Conexão com o banco de dados principal para upserts nas tabelas `contacts`, `messages` e `conversations` |
-
-### 9.2 Variáveis / Segredos por Sessão
-| Variável | Descrição |
-|---|---|
-| `HMAC_SECRET` | Chave secreta usada para validar a assinatura do webhook vindo da WA API e para assinar requisições ao backend |
-
-### 9.3 Parâmetros de Acesso ao Backend
-| Parâmetro | Valor / Descrição |
-|---|---|
-| URL do backend | `https://<dominio>/api/v1/webhooks/crm/update-chat` |
-| Método | `POST` |
-| Headers | `X-Webhook-Signature` (gerado pelo nó de código JavaScript) |
-
-### 9.4 Variáveis do Workflow Dominus AI
-| Parâmetro | Descrição |
-|---|---|
-| URL do workflow Dominus AI | Endpoint interno ou webhook do workflow `YqDBFFzJ1L4FRAvz` |
-| Token / Chave de API | Se necessário para autenticar entre workflows n8n |
-
----
-
-## 10. Resumo do Fluxo Completo de Mensagem Recebida
+### Fluxo de Mensagem Recebida
 
 ```
 WhatsApp (mensagem do cliente)
     ↓
-Baileys
+Baileys / Whats API
     ↓
-WA API (evento message.created)
+POST /webhook/lead_responses (n8n)
     ↓
-POST https://myn8n.seommerce.shop/webhook/lead_responses
+n8n valida HMAC
     ↓
-n8n: dominuslabs_respostas_leads
-  ├── Valida HMAC
-  ├── Upsert PostgreSQL (contacts, messages, conversations)
-  ├── Notifica backend via /api/v1/webhooks/crm/update-chat (SSE)
-  └── Se não fromMe → encaminha para Dominus AI
+n8n upsert PostgreSQL (contacts, messages, conversations)
     ↓
-Dominus AI → gera resposta
+n8n notifica backend via /api/v1/webhooks/crm/update-chat
     ↓
-POST /api/v1/webhooks/outbound/whatsapp/send
+Backend emite SSE
     ↓
-Mensagem enviada ao cliente
+Frontend recebe atualização em tempo real
 ```
+
+### Segurança
+
+- HMAC-SHA256 entre Whats API ↔ n8n
+- HMAC-SHA256 entre n8n ↔ Backend
+- Headers: `X-Webhook-Signature`, `X-Webhook-Timestamp`, `X-Webhook-Event-ID`
+
+---
+
+## TARGET ARCHITECTURE — Mudanças Planejadas
+
+### 1. Event Contract Unificado
+
+Atualmente, eventos usam nomes variados e endpoints múltiplos. O target introduz um contrato único:
+
+```json
+{
+  "version": 1,
+  "event_id": "uuid",
+  "type": "message.created",
+  "tenant_id": "tenant",
+  "session_id": "session",
+  "occurred_at": "ISO-8601",
+  "payload": {}
+}
+```
+
+### 2. Event Ingress no Dominus
+
+Novo endpoint: `POST /webhooks/events`
+
+Responsabilidades:
+- Signature validation
+- Timestamp validation
+- Event ID deduplication
+- Idempotency
+- Tenant validation
+- Schema validation
+- Routing
+
+### 3. n8n como Router, não Tradutor Semântico
+
+**CURRENT:** n8n modifica o tipo do evento durante o pipeline
+
+**TARGET:** n8n roteia por `type` sem alterar a semântica
+
+```
+type
+├── message.created
+├── message.status.updated
+├── media.ready
+├── session.connected
+└── ...
+```
+
+### 4. Regra Fundamental de Mensagem
+
+`message.status.updated`:
+- ✅ Pode: atualizar status, checks, timestamp
+- ❌ NÃO pode: incrementar unread, criar nova mensagem, tocar som, emitir browser notification
+
+---
+
+## Migração
+
+### Fases
+
+1. **EVT-001**: Catalogar eventos atuais ✅
+2. **EVT-002**: Criar schema SystemEvent (pendente)
+3. **EVT-003**: Definir tipos canônicos (pendente)
+4. **EVT-004**: Implementar Event Ingress (pendente)
+5. **EVT-005**: Criar Event Router (pendente)
+6. **EVT-006**: Migrar n8n para usar novos tipos (pendente)
+7. **EVT-007**: Deprecar endpoints antigos (pendente)
+
+### Verificação
+
+Antes de remover endpoints antigos:
+1. Descobrir todos os consumidores
+2. Migrá-los para o novo contrato
+3. Criar logs temporários para detectar chamadas restantes
+4. Remover endpoints sem consumidor
+
+---
+
+## Workflows Ativos
+
+> **Nota:** IDs e URLs específicos foram removidos por segurança.
+
+| Nome | Status | Função |
+|------|--------|--------|
+| Respostas Leads | Ativo | Recebe webhook, valida HMAC, salva mensagem, notifica backend |
+| Dominus AI | Ativo | Agente conversacional, processa mensagens recebidas |
+| Dominus AI Buffer | Ativo | Buffer/fila para gerenciar concorrência |
+
+---
+
+## Banco de Dados
+
+O n8n escreve nas seguintes tabelas:
+
+### messages
+
+| Campo | Descrição |
+|-------|-----------|
+| `message_id` | ID único |
+| `contact_jid` | Identificador JID |
+| `session_id` | ID da sessão WhatsApp |
+| `content` | Texto |
+| `is_from_me` | Se foi enviada pelo sistema |
+| `media_url` | URL do arquivo (TARGET: state machine) |
+| `status` | Status da mensagem |
+| `tenant_id` | ID do tenant |
+
+### conversations
+
+| Campo | Descrição |
+|-------|-----------|
+| `contact_jid` | Identificador JID |
+| `session_id` | ID da sessão |
+| `last_message_preview` | Prévia do texto |
+| `last_message_timestamp` | Timestamp |
+| `unread_count` | Contador |
+| `tenant_id` | ID do tenant |
+
+### contacts
+
+| Campo | Descrição |
+|-------|-----------|
+| `contact_jid` | Identificador JID |
+| `push_name` | Nome de exibição |
+| `display_phone` | Número formatado |
+| `profile_pic_url` | URL da foto |
+| `tenant_id` | ID do tenant |
+
+---
+
+## Configuração
+
+### Credenciais Necessárias
+
+| Tipo | Uso |
+|------|-----|
+| PostgreSQL | Conexão com banco Dominus |
+| HMAC Secret | Validação de websockets |
+
+### Variáveis
+
+- `WEBHOOK_SECRET` — Chave HMAC para validação
+- URLs dos endpoints backend
+
+---
+
+## Referências
+
+- `docs/architecture.md` — Arquitetura geral
+- `docs/refoundation/GOAL.md` — Princípios do Refoundation
+- `docs/refoundation/EVT_CATALOG.md` — Catálogo de eventos (HISTORICAL)

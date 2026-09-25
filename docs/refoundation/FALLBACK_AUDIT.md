@@ -1,5 +1,15 @@
 # FALLBACK AUDIT — ARCH-001
 
+> **Status:** HISTORICAL / AUDIT ARTIFACT
+> This document records the system at a specific point in time.
+> It is NOT the canonical target architecture.
+> Canonical sources:
+> - `docs/refoundation/GOAL.md`
+> - `docs/refoundation/CONTRACTS.md`
+> - `docs/architecture.md`
+
+---
+
 > Data: 2026-09-24
 > Escopo: dominuslabs backend + frontend, api-whatsapp-service, idc-dominuslabs
 > Tipo: Read-only audit — nenhum código modificado

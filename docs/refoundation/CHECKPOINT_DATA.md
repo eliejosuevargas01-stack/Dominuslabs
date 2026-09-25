@@ -1,5 +1,15 @@
 # CHECKPOINT DATA-001/002/003 — 2026-09-24
 
+> **Status:** HISTORICAL / AUDIT ARTIFACT
+> This document records the system at a specific point in time.
+> It is NOT the canonical target architecture.
+> Canonical sources:
+> - `docs/refoundation/GOAL.md`
+> - `docs/refoundation/CONTRACTS.md`
+> - `docs/architecture.md`
+
+---
+
 ## DATA-001 — Pedidos Hoje: eliminar fallback para rawList
 
 **PARENT PLAN:** DATA-001 (PLAN §Integridade de Dados)

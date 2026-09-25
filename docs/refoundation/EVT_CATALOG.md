@@ -1,5 +1,15 @@
 # EVT-001 — Catálogo de Eventos Atuais
 
+> **Status:** HISTORICAL / AUDIT ARTIFACT
+> This document records the system at a specific point in time.
+> It is NOT the canonical target architecture.
+> Canonical sources:
+> - `docs/refoundation/GOAL.md`
+> - `docs/refoundation/CONTRACTS.md`
+> - `docs/architecture.md`
+
+---
+
 ## Dominus Backend (FastAPI)
 
 ### Endpoints de Eventos (SSE)

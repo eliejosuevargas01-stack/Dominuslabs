@@ -1,97 +1,163 @@
 # Pipeline de Mídia
 
+> **Status:** CURRENT_RUNTIME_ONLY — Este documento descreve o comportamento atual.
+> Para a arquitetura planejada, consulte `docs/architecture.md`.
+
+---
+
 ## Visão Geral
 
+A Whats API é proprietária do lifecycle da mídia do WhatsApp.
+
+### Ownership
+
+- **Whats API** baixa, processa, persiste e serve mídia
+- **Dominus** consome mídia via endpoint autenticado
+- **Frontend** nunca depende de URLs temporárias do WhatsApp
+
+---
+
+## CURRENT RUNTIME
+
+### Fluxo
+
 ```
-┌─────────────┐    ┌───────────┐    ┌─────────────┐    ┌────────────┐    ┌──────────────┐
-│  WhatsApp   │───▶│ Download  │───▶│   Disco     │───▶│ Webhook    │───▶│   n8n        │
-└─────────────┘    └───────────┘    └─────────────┘    └────────────┘    └──────────────┘
-                                                                 ▲
-                                                                 │
-                                                                 │
-                                                       ┌─────────┴─────────┐
-                                                       │   Banco de Dados  │
-                                                       └───────────────────┘
-                                                                 ▲
-                                                                 │
-                                                                 │
-                                                       ┌─────────┴─────────┐
-                                                       │   Frontend        │
-                                                       └───────────────────┘
+WhatsApp (mensagem com mídia)
+    ↓
+Baileys / Whats API
+    ↓
+downloadMediaMessage()
+    ↓
+Persistência em /app/data/media/{session}/
+    ↓
+Webhook para n8n com media.url
+    ↓
+n8n salva no banco
+    ↓
+Frontend carrega via Dominus → Whats API
 ```
 
-## Fluxo de Recebimento
+### Estrutura de Diretórios
 
-1. **Recebimento**: O Baileys processa a mensagem com mídia usando `media.download`
-2. **Processamento**: `handleMessagesUpsert` detecta `storedMessage.media.download`
-3. **Download**: A função `resolveMessageMedia` chama `downloadMediaMessage` (Baileys) para obter o buffer
-4. **Armazenamento**: `cacheMediaBuffer` salva no diretório `/app/data/media/SESSIONID/FILENAME`
-5. **Caminho**: `message.media.cachePath` aponta para o caminho relativo do arquivo salvo
-
-## Formato do Nome de Arquivo
-
-Formato: `JIDCLEAN_TIMESTAMP.ext`
-
-Exemplo:
-- JID: `178189703839815@lid`
-- Timestamp: `1790113823`
-- Arquivo gerado: `178189703839815_lid_1790113823.jpg`
-
-> JIDCLEAN é o JID com `@` substituído por `_`, `:` por `_`, `.` por `_`, etc.
-
-## Volume Persistente
-
-Estrutura de diretórios:
+**CURRENT:**
 ```
 /app/data/media/
 ├── SESSIONID1/
 │   ├── FILENAME1.ext
 │   └── ...
 └── SESSIONID2/
-    ├── FILENAME2.ext
     └── ...
 ```
 
-## Endpoint de Serviço de Mídia
+### Formato do Nome de Arquivo
 
-Endpoint: `GET /api/sessions/SESSIONID/media?messageId=MESSAGEID`
+Formato: `JIDCLEAN_TIMESTAMP.ext`
 
-Validações de segurança:
-- Validação do `cachePath` dentro do diretório do tenant
-- Streaming do arquivo com o `Content-Type` correto
-- Proteção contra navegação fora do diretório permitido
+Exemplo:
+- JID: `178189703839815@lid`
+- Timestamp: `1790113823`
+- Arquivo: `178189703839815_lid_1790113823.jpg`
 
-## Campo `media.url` no Payload do Webhook
+---
 
-O campo `media.url` no payload do webhook contém o endpoint de acesso à mídia:
-`/api/sessions/SESSIONID/media?messageId=MESSAGEID`
+## TARGET ARCHITECTURE
 
-## Problemas Atuais
+### Estrutura Tenant-Aware
 
-### T2 - n8n salva JSON ao invés de URL
+```
+/app/data/media/
+├── {tenant}/
+│   ├── {session}/
+│   │   ├── FILENAME1.ext
+│   │   └── ...
+│   └── ...
+└── ...
+```
 
-**Problema:** O n8n salva o resultado de `JSON.stringify(media)` em vez de apenas `media.url`
+### State Machine
 
-**Solução Prevista:** Ajustar o fluxo do n8n para extrair apenas o `media.url` antes de salvar
+```
+pending → downloading → ready | failed
+```
 
-### T3 - Frontend utiliza media_url incorretamente
+| Estado | Descrição |
+|--------|-----------|
+| `pending` | Mensagem recebida, mídia não processada |
+| `downloading` | Download em andamento |
+| `ready` | Arquivo disponível |
+| `failed` | Falha no processamento |
 
-**Problema:** Frontend espera URL em `messages.media_url` mas recebe JSON String
+---
 
-**Solução Prevista:** Alterar o frontend para fazer `JSON.parse(messages.media_url)` antes de usar
+## Endpoint
 
-## Como o Frontend Exibe Mídias
+### Acesso
 
-O frontend utiliza o campo `media_url` como uma URL válida para carregar a mídia. No entanto, atualmente está recebendo um JSON string, o que impede o carregamento correto.
+```http
+GET /api/sessions/{sessionId}/media?messageId={messageId}
+Authorization: Bearer <JWT_M2M>
+```
+
+### Validações
+
+1. JWT válido via IDPW JWKS
+2. Sessão pertence ao tenant
+3. Mensagem pertence à sessão
+4. `cachePath` dentro do diretório permitido
+
+### Response
+
+- Streaming do arquivo
+- `Content-Type` correto
+- Cache headers
+
+---
 
 ## Tipos Suportados
 
-- image (imagem)
-- video (vídeo)
-- audio (áudio)
-- document (documento)
-- sticker (adesivo)
+| Tipo | MIME | Extensões |
+|------|------|-----------|
+| image | image/jpeg, image/png | .jpg, .jpeg, .png |
+| video | video/mp4 | .mp4 |
+| audio | audio/ogg, audio/mp3 | .ogg, .mp3 |
+| document | application/pdf, etc. | .pdf, .doc, etc. |
+| sticker | image/webp | .webp |
 
-## Limites
+---
 
-- Tamanho máximo por arquivo: 15MB
+## Problemas Conhecidos
+
+### T2 — n8n Salva JSON ao Invés de URL
+
+**Problema:** n8n salva `JSON.stringify(media)` em vez de `media.url`
+
+**Solução (Target):** Extrair apenas `media.url` antes de salvar
+
+### T3 — Frontend Parse Incorreto
+
+**Problema:** Frontend espera URL em `messages.media_url` mas recebe JSON string
+
+**Solução (Target):** Contrato correto no webhook, sem necessidade de parse no frontend
+
+---
+
+## O que o Frontend NÃO Deve Depender
+
+- `pps.whatsapp.net`
+- `fbcdn.net`
+- `directPath`
+- URLs temporárias do WhatsApp
+
+---
+
+## Limite
+
+Tamanho máximo por arquivo: **15MB**
+
+---
+
+## Referências
+
+- `docs/architecture.md` — Arquitetura geral
+- `docs/wa-api.md` — Integração com Whats API
+- `api_whatsapp_v1.2/README.md` — Especificação da API

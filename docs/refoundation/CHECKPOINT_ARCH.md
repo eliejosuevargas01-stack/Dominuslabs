@@ -1,5 +1,15 @@
 # CHECKPOINT ARCH — 2026-09-24
 
+> **Status:** HISTORICAL / AUDIT ARTIFACT
+> This document records the system at a specific point in time.
+> It is NOT the canonical target architecture.
+> Canonical sources:
+> - `docs/refoundation/GOAL.md`
+> - `docs/refoundation/CONTRACTS.md`
+> - `docs/architecture.md`
+
+---
+
 ## ARCH-000 — Congelar estado atual
 
 **PARENT PLAN:** FASE 0 — INVENTÁRIO E BASELINE
