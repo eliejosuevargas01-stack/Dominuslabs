@@ -68,7 +68,7 @@ WA API → n8n → Dominus Event Ingress
 
 ### n8n Workflows
 
-#### Dominus AI (YqDBFFzJ1L4FRAvz)
+#### Dominus AI (<private-workflow-id>)
 
 **Função:** Processamento de mensagens com IA
 
@@ -78,7 +78,7 @@ WA API → n8n → Dominus Event Ingress
 3. Enviar para `POST /api/v1/webhooks/events`
 4. Remover chamadas diretas para endpoints legados
 
-#### Dominus AI Buffer (4ANz4lSb80pCuAT4)
+#### Dominus AI Buffer (<private-workflow-id>)
 
 **Função:** Buffer de mensagens
 
@@ -87,7 +87,7 @@ WA API → n8n → Dominus Event Ingress
 2. Enviar em lote para Event Ingress
 3. Manter ordenação por `occurred_at`
 
-#### dominuslabs_respostas_leads (SpQwyDZsOo3ozXuE)
+#### dominuslabs_respostas_leads (<private-workflow-id>)
 
 **Função:** Respostas automáticas a leads
 
@@ -96,7 +96,7 @@ WA API → n8n → Dominus Event Ingress
 2. Processar resposta
 3. Enviar resposta via WA API (não via webhook direto)
 
-#### dominuslabs_crm (WJ37gGiodnAJVkBN) — DESATIVADO
+#### dominuslabs_crm (<private-workflow-id>) — DESATIVADO
 
 **Função:** CRM
 
